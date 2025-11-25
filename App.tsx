@@ -23,7 +23,7 @@ import { PersonalInfoView } from './views/settings/PersonalInfoView';
 import { EmailPreferencesView } from './views/settings/EmailPreferencesView';
 import { SecurityView } from './views/settings/SecurityView';
 import { BudgetData, PeriodType, EventData } from './types';
-import { INITIAL_DATA } from './constants';
+import { INITIAL_DATA, SAMPLE_EVENTS } from './constants';
 import { generateId, calculateTotals, getNotifications, NotificationItem } from './utils/calculations';
 import { NewPeriodModal } from './components/ui/NewPeriodModal';
 import { NotificationPopup } from './components/ui/NotificationPopup';
@@ -81,7 +81,19 @@ const App: React.FC = () => {
     }
 
     if (savedEvents) {
-        try { setEvents(JSON.parse(savedEvents)); } catch (e) { console.error("Failed to parse events", e); }
+        try { 
+            const parsed = JSON.parse(savedEvents);
+            if (parsed && parsed.length > 0) {
+                setEvents(parsed);
+            } else {
+                setEvents(SAMPLE_EVENTS);
+            }
+        } catch (e) { 
+            console.error("Failed to parse events", e);
+            setEvents(SAMPLE_EVENTS);
+        }
+    } else {
+        setEvents(SAMPLE_EVENTS);
     }
 
     if (savedUser) {

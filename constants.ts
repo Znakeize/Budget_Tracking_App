@@ -1,5 +1,5 @@
 
-import { BudgetData } from './types';
+import { BudgetData, EventData } from './types';
 
 export const CURRENCY_SYMBOLS: Record<string, string> = {
   'USD': '$', 'EUR': '€', 'GBP': '£', 'CAD': '$',
@@ -69,3 +69,107 @@ export const INITIAL_DATA: BudgetData = {
   rollover: 0,
   created: Date.now()
 };
+
+export const SAMPLE_EVENTS: EventData[] = [
+    {
+        id: 'evt-wedding',
+        name: "Dream Wedding 2025",
+        type: "Wedding",
+        date: "2025-08-15",
+        location: "Crystal Lake Resort",
+        totalBudget: 45000,
+        currencySymbol: "$",
+        categories: [
+            { id: 'cat-venue', name: "Venue & Food", allocated: 20000, color: "#ec4899" },
+            { id: 'cat-attire', name: "Attire", allocated: 5000, color: "#8b5cf6" },
+            { id: 'cat-photo', name: "Photography", allocated: 3500, color: "#f59e0b" },
+            { id: 'cat-music', name: "Music", allocated: 2000, color: "#10b981" },
+            { id: 'cat-decor', name: "Decor", allocated: 4000, color: "#06b6d4" },
+            { id: 'cat-officiant', name: "Officiant", allocated: 500, color: "#6366f1" }
+        ],
+        expenses: [
+            { id: 'exp-venue-dep', name: "Venue Deposit", amount: 5000, category: "Venue & Food", date: new Date(Date.now() - 86400000 * 30).toISOString() },
+            { id: 'exp-dress-dep', name: "Wedding Dress Deposit", amount: 1500, category: "Attire", date: new Date(Date.now() - 86400000 * 15).toISOString() },
+            { id: 'exp-std', name: "Save the Dates", amount: 300, category: "Decor", date: new Date(Date.now() - 86400000 * 45).toISOString() }
+        ],
+        vendors: [
+            { id: 'ven-crystal', name: "Crystal Lake Events", service: "Venue", totalAmount: 20000, paidAmount: 5000, status: 'partial', dueDate: "2025-07-01", contact: "events@crystallake.com", paymentHistory: [{id: 'pay-1', date: new Date(Date.now() - 86400000 * 30).toISOString().split('T')[0], name: 'Advance Payment', amount: 5000}], advance: 5000 },
+            { id: 'ven-photo', name: "Captured Moments", service: "Photography", totalAmount: 3500, paidAmount: 0, status: 'pending', dueDate: "2025-06-15", contact: "mike@captured.com", paymentHistory: [] },
+            { id: 'ven-boutique', name: "Bridal Boutique", service: "Attire", totalAmount: 3000, paidAmount: 1500, status: 'partial', dueDate: "2025-05-01", paymentHistory: [{id: 'pay-2', date: new Date(Date.now() - 86400000 * 15).toISOString().split('T')[0], name: 'Advance Payment', amount: 1500}], advance: 1500 },
+            { id: 'ven-dj', name: "DJ Spin", service: "Music", totalAmount: 1800, paidAmount: 0, status: 'pending', dueDate: "2025-07-15", paymentHistory: [] }
+        ],
+        members: [
+            { id: "me", name: "You", role: "admin" },
+            { id: "partner", name: "Jamie", role: "editor" }
+        ],
+        notes: "Guest list finalized at 120. Need to choose cake flavor by next month.",
+        created: Date.now(),
+        theme: "pastel"
+    },
+    {
+        id: 'evt-birthday',
+        name: "Mom's 60th Birthday",
+        type: "Birthday",
+        date: "2025-10-20",
+        location: "Backyard Garden",
+        totalBudget: 5000,
+        currencySymbol: "$",
+        categories: [
+            { id: 'cat-food', name: "Food & Drinks", allocated: 2000, color: "#f59e0b" },
+            { id: 'cat-dec', name: "Decorations", allocated: 1000, color: "#ec4899" },
+            { id: 'cat-gift', name: "Gifts", allocated: 500, color: "#8b5cf6" },
+            { id: 'cat-ent', name: "Entertainment", allocated: 1000, color: "#10b981" },
+            { id: 'cat-cake', name: "Cake", allocated: 500, color: "#6366f1" }
+        ],
+        expenses: [],
+        vendors: [],
+        members: [{ id: 'me', name: 'You', role: 'admin' }],
+        notes: "Surprise party!",
+        created: Date.now(),
+        theme: "colorful"
+    },
+    {
+        id: 'evt-trip',
+        name: "Japan Trip 2026",
+        type: "Trip",
+        date: "2026-04-01",
+        location: "Tokyo, Kyoto, Osaka",
+        totalBudget: 8000,
+        currencySymbol: "$",
+        categories: [
+            { id: 'cat-fly', name: "Flights", allocated: 2000, color: "#3b82f6" },
+            { id: 'cat-stay', name: "Accommodation", allocated: 2500, color: "#8b5cf6" },
+            { id: 'cat-eat', name: "Food", allocated: 1500, color: "#f59e0b" },
+            { id: 'cat-act', name: "Activities", allocated: 1000, color: "#10b981" },
+            { id: 'cat-mv', name: "Transport", allocated: 1000, color: "#64748b" }
+        ],
+        expenses: [],
+        vendors: [],
+        members: [{ id: 'me', name: 'You', role: 'admin' }],
+        notes: "Cherry blossom season.",
+        created: Date.now(),
+        theme: "dark"
+    },
+    {
+        id: 'evt-corp',
+        name: "Q4 Strategy Retreat",
+        type: "Corporate",
+        date: "2025-12-10",
+        location: "Grand Hotel Conference Center",
+        totalBudget: 15000,
+        currencySymbol: "$",
+        categories: [
+            { id: 'cat-ven', name: "Venue", allocated: 5000, color: "#6366f1" },
+            { id: 'cat-cat', name: "Catering", allocated: 4000, color: "#f59e0b" },
+            { id: 'cat-spk', name: "Speakers", allocated: 3000, color: "#10b981" },
+            { id: 'cat-swg', name: "Swag", allocated: 2000, color: "#ec4899" },
+            { id: 'cat-av', name: "AV Equipment", allocated: 1000, color: "#64748b" }
+        ],
+        expenses: [],
+        vendors: [],
+        members: [{ id: 'me', name: 'You', role: 'admin' }],
+        notes: "Focus on next year's roadmap.",
+        created: Date.now(),
+        theme: "dark"
+    }
+];
