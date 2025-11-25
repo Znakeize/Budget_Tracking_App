@@ -1,8 +1,9 @@
+
 import React, { useState } from 'react';
 import { BudgetData } from '../types';
 import { Card } from '../components/ui/Card';
 import { analyzeBudgetWithAI } from '../utils/aiHelper';
-import { Sparkles, Bot, Loader2, Bell, BellRing, X, PieChart, ChevronRight, TrendingUp, Users, CalendarHeart, RefreshCcw } from 'lucide-react';
+import { Sparkles, Bot, Loader2, Bell, BellRing, X, PieChart, ChevronRight, TrendingUp, CalendarHeart, RefreshCcw, Users } from 'lucide-react';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
 
 interface AIViewProps {
@@ -12,9 +13,9 @@ interface AIViewProps {
   onToggleNotifications: () => void;
   onViewAnalysis: () => void;
   onViewInvestments: () => void;
-  onViewSocial: () => void;
   onViewEvents: () => void;
   onViewSimulator: () => void;
+  onViewSocial: () => void;
   eventNotificationCount?: number;
   onProfileClick: () => void;
 }
@@ -26,9 +27,9 @@ export const AIView: React.FC<AIViewProps> = ({
   onToggleNotifications,
   onViewAnalysis,
   onViewInvestments,
-  onViewSocial,
   onViewEvents,
   onViewSimulator,
+  onViewSocial,
   eventNotificationCount = 0,
   onProfileClick
 }) => {
@@ -152,16 +153,6 @@ export const AIView: React.FC<AIViewProps> = ({
                 </Card>
             </button>
 
-            <button onClick={onViewSocial} className="text-left group">
-                <Card className="p-4 h-full border border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors">
-                    <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400 mb-3 group-hover:scale-110 transition-transform duration-300">
-                        <Users size={20} />
-                    </div>
-                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">Collaborative</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Shared budgets, splits & social groups.</p>
-                </Card>
-            </button>
-
             <button onClick={onViewEvents} className="text-left group relative">
                 <Card className="p-4 h-full border border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors">
                     <div className="w-10 h-10 rounded-full bg-fuchsia-100 dark:bg-fuchsia-900/30 flex items-center justify-center text-fuchsia-600 dark:text-fuchsia-400 mb-3 group-hover:scale-110 transition-transform duration-300">
@@ -173,6 +164,16 @@ export const AIView: React.FC<AIViewProps> = ({
                 {eventNotificationCount > 0 && (
                      <div className="absolute top-3 right-3 w-3 h-3 bg-red-500 rounded-full border-2 border-white dark:border-slate-900 animate-pulse"></div>
                 )}
+            </button>
+
+            <button onClick={onViewSocial} className="text-left group relative">
+                <Card className="p-4 h-full border border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors">
+                    <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400 mb-3 group-hover:scale-110 transition-transform duration-300">
+                        <Users size={20} />
+                    </div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">Collaboration</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Shared budgets & group splits.</p>
+                </Card>
             </button>
         </div>
       </div>

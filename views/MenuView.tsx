@@ -2,9 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { Card } from '../components/ui/Card';
 import { 
-  History, Wrench, Users, CalendarHeart, Settings, 
+  History, Wrench, CalendarHeart, Settings, 
   LifeBuoy, FileText, MessageSquare, ChevronRight, 
-  Bell, BellRing, UserCircle 
+  Bell, BellRing, UserCircle, Users 
 } from 'lucide-react';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
 
@@ -37,8 +37,8 @@ export const MenuView: React.FC<MenuViewProps> = ({ onNavigate, notificationCoun
   const menuItems = [
     { id: 'history', label: 'History', icon: History, color: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400', desc: 'Past Budgets' },
     { id: 'tools', label: 'Tools', icon: Wrench, color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400', desc: 'Export & Data' },
-    { id: 'collaborative', label: 'Community', icon: Users, color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400', desc: 'Groups' },
     { id: 'events', label: 'Events', icon: CalendarHeart, color: 'bg-fuchsia-100 dark:bg-fuchsia-900/30 text-fuchsia-600 dark:text-fuchsia-400', desc: 'Planner' },
+    { id: 'community-links', label: 'Connect', icon: Users, color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400', desc: 'Join Us' },
   ];
 
   const listItems = [
@@ -140,7 +140,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ onNavigate, notificationCoun
         </div>
 
         <div className="text-center text-[10px] text-slate-400 dark:text-slate-600 pt-4">
-            BudgetFlow Mobile v1.0.0
+            Budget Tracker Mobile v1.0.0
         </div>
       
       </div>

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { BudgetData } from '../types';
 import { calculateTotals, formatCurrency } from '../utils/calculations';
@@ -203,15 +204,17 @@ export const DashboardView: React.FC<DashboardProps> = ({ data, setTab, notifica
                 </div>
                 <div className="flex justify-between">
                     <span className="text-slate-500 dark:text-slate-400">Bills Paid</span>
-                    <span className="text-slate-900 dark:text-white">{formatCurrency(totals.totalBills, data.currencySymbol)}</span>
+                    {/* Use actual bills paid for Cash Flow report */}
+                    <span className="text-slate-900 dark:text-white">{formatCurrency(totals.actualBills, data.currencySymbol)}</span>
                 </div>
                 <div className="flex justify-between">
                     <span className="text-slate-500 dark:text-slate-400">Debts Paid</span>
-                    <span className="text-orange-500 dark:text-orange-400">{formatCurrency(totals.totalDebts, data.currencySymbol)}</span>
+                    <span className="text-orange-500 dark:text-orange-400">{formatCurrency(totals.actualDebts, data.currencySymbol)}</span>
                 </div>
                 <div className="flex justify-between">
                     <span className="text-slate-500 dark:text-slate-400">Investments</span>
-                    <span className="text-violet-500 dark:text-violet-400">{formatCurrency(totals.totalInvestments, data.currencySymbol)}</span>
+                    {/* Use actual investment contributions */}
+                    <span className="text-violet-500 dark:text-violet-400">{formatCurrency(totals.actualInvestments, data.currencySymbol)}</span>
                 </div>
                 <div className="flex justify-between">
                     <span className="text-slate-500 dark:text-slate-400">Savings</span>

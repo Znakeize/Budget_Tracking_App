@@ -1,25 +1,41 @@
+
 import { BudgetData } from '../types';
 
 export const calculateTotals = (data: BudgetData) => {
   const totalIncome = data.income.reduce((sum, item) => sum + item.actual, 0);
   
-  // Expenses that affect "Left to Spend"
+  // Actual Spending (Money that has left the account)
   const totalExpenses = data.expenses.reduce((sum, item) => sum + item.spent, 0);
+  const totalSavings = data.savings.reduce((sum, item) => sum + item.amount, 0); // Amount accumulated this period
+  
+  const actualBills = data.bills.reduce((sum, item) => item.paid ? sum + item.amount : sum, 0);
+  const actualDebts = data.debts.reduce((sum, item) => item.paid ? sum + item.payment : sum, 0);
+  const actualGoals = data.goals.reduce((sum, item) => item.checked ? sum + item.monthly : sum, 0);
+  // Use monthly contribution if contributed, otherwise 0. 
+  // Note: Investment item.amount is total value, item.monthly is the flow.
+  const actualInvestments = data.investments.reduce((sum, item) => item.contributed ? sum + (item.monthly || 0) : sum, 0);
+
+  // Obligations / Planned (For Budgeting "Left to Spend" logic)
   const totalBills = data.bills.reduce((sum, item) => sum + item.amount, 0);
   const totalDebts = data.debts.reduce((sum, item) => sum + item.payment, 0);
-  const totalSavings = data.savings.reduce((sum, item) => sum + item.amount, 0);
-  const totalInvestments = data.investments.reduce((sum, item) => sum + item.amount, 0);
   const totalGoals = data.goals.reduce((sum, item) => sum + item.monthly, 0);
+  const plannedInvestments = data.investments.reduce((sum, item) => sum + (item.monthly || 0), 0);
   
-  // Budgeted (Planned) amounts
+  // Portfolio Value (Asset Stock)
+  const totalPortfolioValue = data.investments.reduce((sum, item) => sum + item.amount, 0);
+
+  // Budgeted (Planned) amounts from Budget View
   const plannedIncome = data.income.reduce((sum, item) => sum + item.planned, 0);
   const budgetedExpenses = data.expenses.reduce((sum, item) => sum + item.budgeted, 0);
   const plannedSavings = data.savings.reduce((sum, item) => sum + item.planned, 0);
 
-  const totalOut = totalExpenses + totalBills + totalDebts + totalSavings + totalInvestments + totalGoals;
+  // Total Out for "Left to Spend"
+  // Represents Total Expenses (Actual) + Obligations (Bills/Debt/Goals/Inv) + Savings (Actual)
+  // We use Obligations even if not paid yet to reserve that money.
+  const totalOut = totalExpenses + totalBills + totalDebts + totalSavings + plannedInvestments + totalGoals;
   
   const leftToSpend = (data.rollover || 0) + totalIncome - totalOut;
-  const availableToBudget = (data.rollover || 0) + totalIncome - budgetedExpenses - totalBills - totalDebts - totalSavings - totalInvestments - totalGoals;
+  const availableToBudget = (data.rollover || 0) + totalIncome - budgetedExpenses - totalBills - totalDebts - totalSavings - plannedInvestments - totalGoals;
 
   return {
     totalIncome,
@@ -27,14 +43,21 @@ export const calculateTotals = (data: BudgetData) => {
     totalBills,
     totalDebts,
     totalSavings,
-    totalInvestments,
+    totalInvestments: plannedInvestments, // Used for Cash Flow planning
     totalGoals,
     totalOut,
     leftToSpend,
     availableToBudget,
     plannedIncome,
     budgetedExpenses,
-    plannedSavings
+    plannedSavings,
+    
+    // New Actuals for Charts
+    actualBills,
+    actualDebts,
+    actualGoals,
+    actualInvestments,
+    totalPortfolioValue
   };
 };
 
@@ -154,7 +177,7 @@ export const getNotifications = (data: BudgetData, history: BudgetData[] = []): 
   // 4. Savings Progress (e.g., "Saved more this period")
   if (history.length > 0) {
       const currentTotals = calculateTotals(data);
-      const currentSavings = currentTotals.totalSavings + currentTotals.totalInvestments;
+      const currentSavings = currentTotals.totalSavings + currentTotals.actualInvestments;
       
       // Compare to previous period
       const sortedHistory = [...history].sort((a, b) => b.created - a.created);
@@ -162,7 +185,7 @@ export const getNotifications = (data: BudgetData, history: BudgetData[] = []): 
       
       if (prevData) {
           const prevTotals = calculateTotals(prevData);
-          const prevSavings = prevTotals.totalSavings + prevTotals.totalInvestments;
+          const prevSavings = prevTotals.totalSavings + prevTotals.actualInvestments;
           
           const diff = currentSavings - prevSavings;
           if (diff > 0 && currentSavings > 0) {

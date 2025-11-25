@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { BudgetData } from '../types';
 import { calculateTotals, formatCurrency, generateId } from '../utils/calculations';
@@ -8,7 +9,7 @@ import {
   Plane, TrendingUp, AlertTriangle, CheckCircle, Sliders, 
   ArrowRight, Heart, DollarSign, Calendar, RefreshCcw, ShieldAlert,
   Stethoscope, Globe, UserMinus, ChevronRight, HelpCircle,
-  Timer, Wallet, PlayCircle, Sparkles, X, Loader2
+  Timer, Wallet, PlayCircle, Sparkles, X, Loader2, Rocket
 } from 'lucide-react';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { generateStrategyPlan } from '../utils/aiHelper';
@@ -24,7 +25,7 @@ interface LifeSimulatorViewProps {
   onProfileClick: () => void;
 }
 
-type EventType = 'baby' | 'house' | 'car' | 'marriage' | 'education' | 'business' | 'medical' | 'relocation' | 'retirement';
+type EventType = 'baby' | 'house' | 'car' | 'marriage' | 'education' | 'business' | 'medical' | 'relocation' | 'retirement' | 'startup';
 
 // --- Configuration Types ---
 type QuestionType = 'date' | 'currency' | 'number' | 'select';
@@ -37,6 +38,19 @@ interface Question {
   options?: { label: string, value: any }[];
   defaultValue?: any;
 }
+
+const EVENT_DESCRIPTIONS: Record<string, string> = {
+    baby: "Plan for nursery setup, baby gear, and monthly childcare expenses.",
+    house: "Calculate down payment, mortgage rates, and closing costs.",
+    car: "Estimate monthly payments, insurance, and trade-in value.",
+    marriage: "Budget for venue, catering, attire, and honeymoon planning.",
+    education: "Project tuition fees, books, and student living expenses.",
+    business: "Simulate income changes, startup costs, or career switches.",
+    medical: "Plan for procedures, insurance deductibles, and recovery time.",
+    relocation: "Budget for movers, housing deposits, and travel costs.",
+    retirement: "Forecast pension income, savings withdrawal, and lifestyle.",
+    startup: "Plan seed capital, monthly burn rate, and revenue projections."
+};
 
 const EVENT_CONFIGS: Record<string, Question[]> = {
   baby: [
@@ -76,6 +90,12 @@ const EVENT_CONFIGS: Record<string, Question[]> = {
       { id: 'date', text: 'Target Retirement Date?', type: 'date' },
       { id: 'monthlyNeed', text: 'Desired Monthly Income?', type: 'currency', defaultValue: 4000 },
       { id: 'pension', text: 'Guaranteed Pension/SS?', type: 'currency', defaultValue: 1500 }
+  ],
+  startup: [
+      { id: 'date', text: 'Target Launch Date?', type: 'date' },
+      { id: 'initialCost', text: 'Initial Investment?', subtext: 'Equipment, licenses, inventory', type: 'currency', defaultValue: 5000 },
+      { id: 'monthlyCost', text: 'Monthly Operating Cost?', subtext: 'Rent, software, marketing', type: 'currency', defaultValue: 500 },
+      { id: 'incomeChange', text: 'Projected Monthly Profit?', subtext: 'Conservative estimate after break-even', type: 'currency', defaultValue: 1000 }
   ]
 };
 
@@ -297,22 +317,99 @@ export const LifeSimulatorView: React.FC<LifeSimulatorViewProps> = ({ currentDat
       };
   }, [selectedEvent, wizardData, baseSurplus, liquidAssets]);
 
-  // --- Render Steps ---
-
-  const renderEventButton = (icon: any, label: string, type: EventType, color: string) => (
-      <button 
-          onClick={() => handleEventSelect(type)}
-          className="flex flex-col items-center justify-center p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 transition-all group active:scale-95 h-28 w-full"
-      >
-          <div className={`w-10 h-10 rounded-full bg-slate-50 dark:bg-slate-900 flex items-center justify-center ${color} group-hover:scale-110 transition-transform mb-3`}>
-              {React.createElement(icon, { size: 20 })}
-          </div>
-          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 text-center leading-tight">{label}</span>
-      </button>
-  );
+  // --- New Event Card Component ---
+  const EventCard = ({ icon: Icon, label, type, colorClass }: { icon: any, label: string, type: EventType, colorClass: string }) => {
+      const bgColorClass = colorClass.replace('text-', 'bg-').replace('500', '100');
+      
+      return (
+        <div className="card-wrapper" onClick={() => handleEventSelect(type)}>
+            <div className="card">
+                <div className="header">
+                    <div className={`image ${bgColorClass} dark:bg-slate-800`}>
+                        <Icon size={24} className={colorClass} strokeWidth={2} />
+                    </div>
+                    <div>
+                        <p className="name">{label}</p>
+                    </div>
+                </div>
+                <p className="message">
+                    {EVENT_DESCRIPTIONS[type]}
+                </p>
+            </div>
+        </div>
+      );
+  };
 
   return (
     <div className="flex flex-col h-full relative bg-slate-50 dark:bg-slate-900">
+       {/* Embedded CSS for Card */}
+       <style>{`
+        .card {
+            background-color: rgba(243, 244, 246, 1);
+            padding: 1.5rem;
+            max-width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 20px 30px -20px rgba(5, 5, 5, 0.24);
+            cursor: pointer;
+            transition: transform 0.2s;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .dark .card {
+            background-color: #1e293b;
+            box-shadow: 0 20px 30px -20px rgba(0, 0, 0, 0.5);
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            grid-gap: 1rem;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .header .image {
+            height: 3.5rem;
+            width: 3.5rem;
+            border-radius: 9999px;
+            object-fit: cover;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .name {
+            font-size: 1.125rem;
+            line-height: 1.25rem;
+            font-weight: 600;
+            color: rgba(55, 65, 81, 1);
+        }
+        
+        .dark .name {
+            color: #fff;
+        }
+
+        .message {
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 3;
+            color: rgba(107, 114, 128, 1);
+            font-size: 0.875rem;
+            line-height: 1.4;
+        }
+        
+        .dark .message {
+            color: #94a3b8;
+        }
+       `}</style>
+
        {/* Header */}
        <div className="flex-none pt-6 px-4 pb-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl z-20 border-b border-slate-200 dark:border-white/5">
             <div className="flex justify-between items-end">
@@ -356,16 +453,17 @@ export const LifeSimulatorView: React.FC<LifeSimulatorViewProps> = ({ currentDat
 
                    <div>
                        <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase mb-3 px-1">Choose an Event</h3>
-                       <div className="grid grid-cols-3 gap-3">
-                           {renderEventButton(Baby, "New Baby", 'baby', "text-pink-500")}
-                           {renderEventButton(Home, "Buy Home", 'house', "text-emerald-500")}
-                           {renderEventButton(Car, "Buy Car", 'car', "text-blue-500")}
-                           {renderEventButton(Heart, "Marriage", 'marriage', "text-rose-500")}
-                           {renderEventButton(GraduationCap, "Education", 'education', "text-amber-500")}
-                           {renderEventButton(Briefcase, "Career", 'business', "text-indigo-500")}
-                           {renderEventButton(Stethoscope, "Medical", 'medical', "text-red-500")}
-                           {renderEventButton(Globe, "Move", 'relocation', "text-cyan-500")}
-                           {renderEventButton(Plane, "Retire", 'retirement', "text-orange-500")}
+                       <div className="grid grid-cols-2 gap-3">
+                           <EventCard icon={Rocket} label="Business Startup" type="startup" colorClass="text-purple-500" />
+                           <EventCard icon={Baby} label="New Baby" type="baby" colorClass="text-pink-500" />
+                           <EventCard icon={Home} label="Buy Home" type="house" colorClass="text-emerald-500" />
+                           <EventCard icon={Car} label="Buy Car" type="car" colorClass="text-blue-500" />
+                           <EventCard icon={Heart} label="Marriage" type="marriage" colorClass="text-rose-500" />
+                           <EventCard icon={GraduationCap} label="Education" type="education" colorClass="text-amber-500" />
+                           <EventCard icon={Briefcase} label="Career" type="business" colorClass="text-indigo-500" />
+                           <EventCard icon={Stethoscope} label="Medical" type="medical" colorClass="text-red-500" />
+                           <EventCard icon={Globe} label="Relocation" type="relocation" colorClass="text-cyan-500" />
+                           <EventCard icon={Plane} label="Retirement" type="retirement" colorClass="text-orange-500" />
                        </div>
                    </div>
                </div>

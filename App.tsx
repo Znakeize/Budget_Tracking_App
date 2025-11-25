@@ -12,7 +12,6 @@ import { ProfileView } from './views/ProfileView';
 import { AuthView } from './views/AuthView';
 import { MenuView } from './views/MenuView';
 import { ToolsView } from './views/ToolsView';
-import { SocialView } from './views/SocialView';
 import { CollaborativeView } from './views/CollaborativeView';
 import { SupportView } from './views/SupportView';
 import { LegalView } from './views/LegalView';
@@ -22,6 +21,7 @@ import { LifeSimulatorView } from './views/LifeSimulatorView';
 import { PersonalInfoView } from './views/settings/PersonalInfoView';
 import { EmailPreferencesView } from './views/settings/EmailPreferencesView';
 import { SecurityView } from './views/settings/SecurityView';
+import { CommunityLinksView } from './views/CommunityLinksView';
 import { BudgetData, PeriodType, EventData } from './types';
 import { INITIAL_DATA, SAMPLE_EVENTS } from './constants';
 import { generateId, calculateTotals, getNotifications, NotificationItem } from './utils/calculations';
@@ -290,7 +290,7 @@ const App: React.FC = () => {
 
   if (!loaded) return <div className="h-screen bg-slate-900 text-white flex items-center justify-center">Loading...</div>;
 
-  const isMenuSubView = ['history', 'tools', 'settings', 'support', 'legal', 'feedback', 'collaborative', 'profile', 'personal-info', 'email-prefs', 'security'].includes(activeTab);
+  const isMenuSubView = ['history', 'tools', 'settings', 'support', 'legal', 'feedback', 'collaborative', 'community-links', 'profile', 'personal-info', 'email-prefs', 'security'].includes(activeTab);
 
   return (
     <Layout>
@@ -323,7 +323,7 @@ const App: React.FC = () => {
                 history={history} currencySymbol={budgetData.currencySymbol} notificationCount={notifications.length}
                 onToggleNotifications={() => setShowNotifications(!showNotifications)}
                 onViewAnalysis={() => setActiveTab('analysis')} onViewInvestments={() => setActiveTab('investments')}
-                onViewSocial={() => setActiveTab('social')} onViewEvents={() => setActiveTab('events')}
+                onViewEvents={() => setActiveTab('events')} onViewSocial={() => setActiveTab('social')}
                 onViewSimulator={() => setActiveTab('simulator')} eventNotificationCount={eventNotifications.length}
                 onProfileClick={handleProfileClick}
             />
@@ -342,10 +342,13 @@ const App: React.FC = () => {
             />
         )}
         {activeTab === 'social' && (
-            <SocialView currencySymbol={budgetData.currencySymbol} onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick} />
+            <CollaborativeView onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick} />
         )}
         {activeTab === 'collaborative' && (
             <CollaborativeView onBack={() => setActiveTab('menu')} onProfileClick={handleProfileClick} />
+        )}
+        {activeTab === 'community-links' && (
+            <CommunityLinksView onBack={() => setActiveTab('menu')} />
         )}
         {activeTab === 'events' && (
             <EventsView 

@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { BudgetData } from '../types';
 import { Card } from '../components/ui/Card';
@@ -90,7 +91,8 @@ export const InvestmentAnalysisView: React.FC<InvestmentAnalysisViewProps> = ({ 
   // 4. History Trend Chart Data
   const trendData = useMemo(() => {
     const labels = sortedHistory.map(d => `${d.period === 'monthly' ? MONTH_NAMES[d.month].substring(0,3) : 'Pd'} ${d.year.toString().substring(2)}`);
-    const values = sortedHistory.map(d => calculateTotals(d).totalInvestments);
+    // Use totalPortfolioValue instead of totalInvestments (which now tracks flow)
+    const values = sortedHistory.map(d => calculateTotals(d).totalPortfolioValue);
 
     return {
       labels,

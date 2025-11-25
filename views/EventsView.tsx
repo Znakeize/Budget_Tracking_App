@@ -1,14 +1,15 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Card } from '../components/ui/Card';
-import { EventData, EventCategory, EventExpense, EventVendor } from '../types';
+import { EventData, EventCategory, EventExpense, EventVendor, EventMember } from '../types';
 import { formatCurrency, generateId } from '../utils/calculations';
 import { analyzeEventWithAI } from '../utils/aiHelper';
 import { 
   Calendar, MapPin, Plus, ChevronLeft, Wallet, PieChart, Users, 
   ShoppingBag, CheckCircle, Clock, FileText, Send, Sparkles, 
   Trash2, TrendingUp, AlertCircle, Camera, Download, Share2,
-  Pencil, Edit2, X, Bell, BellRing, Briefcase, Layers, Receipt
+  Pencil, Edit2, X, Bell, BellRing, Briefcase, Layers, Receipt,
+  ArrowRight, DollarSign
 } from 'lucide-react';
 import { Doughnut } from 'react-chartjs-2';
 import { jsPDF } from 'jspdf';
@@ -391,7 +392,7 @@ const EventDetailView: React.FC<{ event: EventData, onUpdate: (e: EventData) => 
            {activeTab === 'dashboard' && <EventDashboardTab event={event} totalSpent={totalSpent} remaining={remaining} currencySymbol={currencySymbol} />}
            {activeTab === 'budget' && <EventBudgetTab event={event} onUpdate={onUpdate} currencySymbol={currencySymbol} focusItemId={focusItemId} />}
            {activeTab === 'vendors' && <EventVendorsTab event={event} onUpdate={onUpdate} currencySymbol={currencySymbol} focusItemId={focusItemId} />}
-           {activeTab === 'team' && <EventTeamTab event={event} onUpdate={onUpdate} />}
+           {activeTab === 'team' && <EventTeamTab event={event} onUpdate={onUpdate} currencySymbol={currencySymbol} />}
            {activeTab === 'ai' && <EventAITab event={event} />}
        </div>
 
@@ -922,13 +923,35 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
     );
 };
 
-const EventTeamTab = ({ event, onUpdate }: any) => {
+const EventTeamTab = ({ event, onUpdate, currencySymbol }: any) => {
+    const [isInviteOpen, setIsInviteOpen] = useState(false);
+    const [isSplitOpen, setIsSplitOpen] = useState(false);
+
+    const handleInvite = (memberData: { name: string, role: string }) => {
+        const newMember: EventMember = {
+            id: generateId(),
+            name: memberData.name,
+            role: memberData.role as any,
+        };
+        onUpdate({ ...event, members: [...event.members, newMember] });
+        setIsInviteOpen(false);
+    };
+
+    const handleRemoveMember = (id: string) => {
+        if(confirm('Remove this member?')) {
+            onUpdate({ ...event, members: event.members.filter((m: any) => m.id !== id) });
+        }
+    };
+
     return (
         <div className="space-y-4 animate-in fade-in slide-in-from-right-2">
             <Card className="p-4 bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-none">
                 <h3 className="font-bold flex items-center gap-2 mb-2"><Users size={18} /> Team Collaboration</h3>
                 <p className="text-xs opacity-90 mb-4">Invite others to help plan this event. You can split expenses and assign tasks.</p>
-                <button className="w-full py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors">
+                <button 
+                    onClick={() => setIsInviteOpen(true)}
+                    className="w-full py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors"
+                >
                     <Plus size={16} /> Invite Member
                 </button>
             </Card>
@@ -946,7 +969,7 @@ const EventTeamTab = ({ event, onUpdate }: any) => {
                             </div>
                         </div>
                         {member.role !== 'admin' && (
-                             <button className="text-xs text-red-500 font-bold hover:underline">Remove</button>
+                             <button onClick={() => handleRemoveMember(member.id)} className="text-xs text-red-500 font-bold hover:underline">Remove</button>
                         )}
                     </Card>
                 ))}
@@ -955,10 +978,26 @@ const EventTeamTab = ({ event, onUpdate }: any) => {
             <Card className="p-4 mt-4">
                 <h3 className="font-bold text-sm text-slate-900 dark:text-white mb-2">Expense Splitter</h3>
                 <p className="text-xs text-slate-500 mb-4">Automatically calculate who owes what based on expenses paid by team members.</p>
-                <button className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold">
+                <button 
+                    onClick={() => setIsSplitOpen(true)}
+                    className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                >
                     Calculate Splits
                 </button>
             </Card>
+
+            <EventInviteModal 
+                isOpen={isInviteOpen}
+                onClose={() => setIsInviteOpen(false)}
+                onConfirm={handleInvite}
+            />
+
+            <EventSplitModal 
+                isOpen={isSplitOpen}
+                onClose={() => setIsSplitOpen(false)}
+                event={event}
+                currencySymbol={currencySymbol}
+            />
         </div>
     );
 };
@@ -1471,6 +1510,113 @@ const EditVendorModal = ({ isOpen, onClose, onConfirm, onDelete, vendor, currenc
                         <button onClick={() => onDelete(vendor.id)} className="flex-1 py-3 bg-red-500/10 text-red-600 dark:text-red-400 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-red-500/20"><Trash2 size={16}/> Delete</button>
                         <button onClick={handleSubmit} className="flex-[2] py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700">Update</button>
                     </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const EventInviteModal = ({ isOpen, onClose, onConfirm }: any) => {
+    const [name, setName] = useState('');
+    const [role, setRole] = useState('Viewer');
+
+    useEffect(() => {
+        if (isOpen) {
+            setName('');
+            setRole('Viewer');
+        }
+    }, [isOpen]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Invite Member</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={20}/></button>
+                </div>
+                <div className="space-y-3">
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Name</label>
+                        <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Role</label>
+                        <select className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={role} onChange={e => setRole(e.target.value)}>
+                            <option value="Viewer">Viewer</option>
+                            <option value="Editor">Editor</option>
+                            <option value="Admin">Admin</option>
+                        </select>
+                    </div>
+                    <button onClick={() => onConfirm({ name, role })} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Send Invite</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const EventSplitModal = ({ isOpen, onClose, event, currencySymbol }: any) => {
+    if (!isOpen) return null;
+
+    const totalExpenses = event.expenses.reduce((sum: number, e: any) => sum + e.amount, 0);
+    const perPerson = event.members.length > 0 ? totalExpenses / event.members.length : 0;
+
+    const balances = event.members.map((m: EventMember) => {
+        // Sum expenses paid by this member. If member ID is 'me', assume they paid expenses marked 'paidBy'='me' or missing paidBy
+        const paid = event.expenses
+            .filter((e: any) => e.paidBy === m.id || (m.id === 'me' && (!e.paidBy || e.paidBy === 'me')))
+            .reduce((sum: number, e: any) => sum + e.amount, 0);
+        
+        return {
+            ...m,
+            paid,
+            balance: paid - perPerson
+        };
+    });
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[85vh] overflow-y-auto custom-scrollbar">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Expense Split</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={20}/></button>
+                </div>
+
+                <div className="bg-slate-100 dark:bg-slate-800 rounded-xl p-4 mb-4 text-center">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Total Expenses</p>
+                    <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(totalExpenses, currencySymbol)}</p>
+                    <p className="text-xs text-slate-500 mt-1">~ {formatCurrency(perPerson, currencySymbol)} per person</p>
+                </div>
+
+                <div className="space-y-3">
+                    {balances.map((b: any) => (
+                        <div key={b.id} className="flex justify-between items-center p-3 border border-slate-100 dark:border-slate-800 rounded-xl">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300">
+                                    {b.name.charAt(0)}
+                                </div>
+                                <div>
+                                    <div className="font-bold text-sm text-slate-900 dark:text-white">{b.name}</div>
+                                    <div className="text-[10px] text-slate-500">Paid: {formatCurrency(b.paid, currencySymbol)}</div>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <div className={`font-bold text-sm ${b.balance >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                    {b.balance >= 0 ? '+' : ''}{formatCurrency(b.balance, currencySymbol)}
+                                </div>
+                                <div className="text-[10px] text-slate-400">
+                                    {b.balance > 0 ? 'Gets back' : 'Owes'}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                
+                <div className="mt-4 text-center text-[10px] text-slate-400">
+                    * Simplified split. Assumes equal sharing among all members.
                 </div>
             </div>
         </div>

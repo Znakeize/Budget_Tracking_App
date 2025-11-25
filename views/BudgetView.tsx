@@ -1,9 +1,10 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { BudgetData } from '../types';
 import { formatCurrency, generateId } from '../utils/calculations';
 import { 
   Plus, Trash2, ChevronDown, ChevronRight, Calendar, Bell, BellRing, 
-  RotateCcw, RotateCw, ArrowRight, Wallet, Target, Receipt, 
+  ArrowRight, Wallet, Target, Receipt, 
   CreditCard, PiggyBank, Landmark, TrendingUp, ChevronLeft 
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
@@ -318,23 +319,6 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
             </div>
             
             <div className="flex items-center gap-1.5 pb-1">
-                <button 
-                    onClick={onUndo}
-                    disabled={!canUndo}
-                    className={`p-1.5 rounded-lg transition-colors ${canUndo ? 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 active:scale-95' : 'text-slate-300 dark:text-slate-700 cursor-not-allowed'}`}
-                    title="Undo"
-                >
-                    <RotateCcw size={18} />
-                </button>
-                <button 
-                    onClick={onRedo}
-                    disabled={!canRedo}
-                    className={`p-1.5 rounded-lg transition-colors ${canRedo ? 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 active:scale-95' : 'text-slate-300 dark:text-slate-700 cursor-not-allowed'}`}
-                    title="Redo"
-                >
-                    <RotateCw size={18} />
-                </button>
-                <div className="w-px h-5 bg-slate-300 dark:bg-slate-700 mx-1"></div>
                 <button 
                     onClick={onToggleNotifications}
                     className="relative p-1.5 focus:outline-none active:scale-95 transition-transform"
