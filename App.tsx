@@ -93,42 +93,112 @@ const App: React.FC = () => {
         }
     } else {
         // Sample Event Initialization if none exists
-        const sampleEvent: EventData = {
-                id: generateId(),
-                name: "Dream Wedding 2025",
-                type: "Wedding",
-                date: "2025-08-15",
-                location: "Crystal Lake Resort",
-                totalBudget: 45000,
-                currencySymbol: "$",
-                categories: [
-                    { id: generateId(), name: "Venue & Food", allocated: 20000, color: "#ec4899" },
-                    { id: generateId(), name: "Attire", allocated: 5000, color: "#8b5cf6" },
-                    { id: generateId(), name: "Photography", allocated: 3500, color: "#f59e0b" },
-                    { id: generateId(), name: "Music", allocated: 2000, color: "#10b981" },
-                    { id: generateId(), name: "Decor", allocated: 4000, color: "#06b6d4" },
-                    { id: generateId(), name: "Officiant", allocated: 500, color: "#6366f1" }
-                ],
-                expenses: [
-                     { id: generateId(), name: "Venue Deposit", amount: 5000, category: "Venue & Food", date: new Date(Date.now() - 86400000 * 30).toISOString() },
-                     { id: generateId(), name: "Wedding Dress Deposit", amount: 1500, category: "Attire", date: new Date(Date.now() - 86400000 * 15).toISOString() },
-                     { id: generateId(), name: "Save the Dates", amount: 300, category: "Decor", date: new Date(Date.now() - 86400000 * 45).toISOString() }
-                ],
-                vendors: [
-                    { id: generateId(), name: "Crystal Lake Events", service: "Venue", totalAmount: 20000, paidAmount: 5000, status: 'partial', dueDate: "2025-07-01", contact: "events@crystallake.com" },
-                    { id: generateId(), name: "Captured Moments", service: "Photography", totalAmount: 3500, paidAmount: 0, status: 'pending', dueDate: "2025-06-15", contact: "mike@captured.com" },
-                    { id: generateId(), name: "Bridal Boutique", service: "Attire", totalAmount: 3000, paidAmount: 1500, status: 'partial', dueDate: "2025-05-01" },
-                    { id: generateId(), name: "DJ Spin", service: "Music", totalAmount: 1800, paidAmount: 0, status: 'pending', dueDate: "2025-07-15" }
-                ],
-                members: [
-                    { id: "me", name: "You", role: "admin", avatar: "" },
-                    { id: "partner", name: "Jamie", role: "editor", avatar: "" }
-                ],
-                notes: "Guest list finalized at 120. Need to choose cake flavor by next month.",
-                created: Date.now(),
-                theme: "pastel"
-            };
-        setEvents([sampleEvent]);
+        const weddingEvent: EventData = {
+            id: generateId(),
+            name: "Dream Wedding 2025",
+            type: "Wedding",
+            date: "2025-08-15",
+            location: "Crystal Lake Resort",
+            totalBudget: 45000,
+            currencySymbol: "$",
+            categories: [
+                { id: generateId(), name: "Venue & Food", allocated: 20000, color: "#ec4899" },
+                { id: generateId(), name: "Attire", allocated: 5000, color: "#8b5cf6" },
+                { id: generateId(), name: "Photography", allocated: 3500, color: "#f59e0b" },
+                { id: generateId(), name: "Music", allocated: 2000, color: "#10b981" },
+                { id: generateId(), name: "Decor", allocated: 4000, color: "#06b6d4" },
+                { id: generateId(), name: "Officiant", allocated: 500, color: "#6366f1" }
+            ],
+            expenses: [
+                    { id: generateId(), name: "Venue Deposit", amount: 5000, category: "Venue & Food", date: new Date(Date.now() - 86400000 * 30).toISOString() },
+                    { id: generateId(), name: "Wedding Dress Deposit", amount: 1500, category: "Attire", date: new Date(Date.now() - 86400000 * 15).toISOString() },
+                    { id: generateId(), name: "Save the Dates", amount: 300, category: "Decor", date: new Date(Date.now() - 86400000 * 45).toISOString() }
+            ],
+            vendors: [
+                { id: generateId(), name: "Crystal Lake Events", service: "Venue", totalAmount: 20000, paidAmount: 5000, status: 'partial', dueDate: "2025-07-01", contact: "events@crystallake.com" },
+                { id: generateId(), name: "Captured Moments", service: "Photography", totalAmount: 3500, paidAmount: 0, status: 'pending', dueDate: "2025-06-15", contact: "mike@captured.com" },
+                { id: generateId(), name: "Bridal Boutique", service: "Attire", totalAmount: 3000, paidAmount: 1500, status: 'partial', dueDate: "2025-05-01" },
+                { id: generateId(), name: "DJ Spin", service: "Music", totalAmount: 1800, paidAmount: 0, status: 'pending', dueDate: "2025-07-15" }
+            ],
+            members: [
+                { id: "me", name: "You", role: "admin", avatar: "" },
+                { id: "partner", name: "Jamie", role: "editor", avatar: "" }
+            ],
+            notes: "Guest list finalized at 120. Need to choose cake flavor by next month.",
+            created: Date.now(),
+            theme: "pastel"
+        };
+
+        const birthdayEvent: EventData = {
+            id: generateId(),
+            name: "Mom's 60th Birthday",
+            type: "Birthday",
+            date: "2025-10-20",
+            location: "Backyard Garden",
+            totalBudget: 5000,
+            currencySymbol: "$",
+            categories: [
+                { id: generateId(), name: "Food & Drinks", allocated: 2000, color: "#f59e0b" },
+                { id: generateId(), name: "Decorations", allocated: 1000, color: "#ec4899" },
+                { id: generateId(), name: "Gifts", allocated: 500, color: "#8b5cf6" },
+                { id: generateId(), name: "Entertainment", allocated: 1000, color: "#10b981" },
+                { id: generateId(), name: "Cake", allocated: 500, color: "#6366f1" }
+            ],
+            expenses: [],
+            vendors: [],
+            members: [{ id: 'me', name: 'You', role: 'admin' }],
+            notes: "Surprise party!",
+            created: Date.now(),
+            theme: "colorful"
+        };
+
+        const tripEvent: EventData = {
+            id: generateId(),
+            name: "Japan Trip 2026",
+            type: "Trip",
+            date: "2026-04-01",
+            location: "Tokyo, Kyoto, Osaka",
+            totalBudget: 8000,
+            currencySymbol: "$",
+            categories: [
+                { id: generateId(), name: "Flights", allocated: 2000, color: "#3b82f6" },
+                { id: generateId(), name: "Accommodation", allocated: 2500, color: "#8b5cf6" },
+                { id: generateId(), name: "Food", allocated: 1500, color: "#f59e0b" },
+                { id: generateId(), name: "Activities", allocated: 1000, color: "#10b981" },
+                { id: generateId(), name: "Transport", allocated: 1000, color: "#64748b" }
+            ],
+            expenses: [],
+            vendors: [],
+            members: [{ id: 'me', name: 'You', role: 'admin' }],
+            notes: "Cherry blossom season.",
+            created: Date.now(),
+            theme: "dark"
+        };
+
+        const corporateEvent: EventData = {
+            id: generateId(),
+            name: "Q4 Strategy Retreat",
+            type: "Corporate",
+            date: "2025-12-10",
+            location: "Grand Hotel Conference Center",
+            totalBudget: 15000,
+            currencySymbol: "$",
+            categories: [
+                { id: generateId(), name: "Venue", allocated: 5000, color: "#6366f1" },
+                { id: generateId(), name: "Catering", allocated: 4000, color: "#f59e0b" },
+                { id: generateId(), name: "Speakers", allocated: 3000, color: "#10b981" },
+                { id: generateId(), name: "Swag", allocated: 2000, color: "#ec4899" },
+                { id: generateId(), name: "AV Equipment", allocated: 1000, color: "#64748b" }
+            ],
+            expenses: [],
+            vendors: [],
+            members: [{ id: 'me', name: 'You', role: 'admin' }],
+            notes: "Focus on next year's roadmap.",
+            created: Date.now(),
+            theme: "dark"
+        };
+
+        setEvents([weddingEvent, birthdayEvent, tripEvent, corporateEvent]);
     }
     
     if (savedTheme) {
@@ -242,13 +312,15 @@ const App: React.FC = () => {
             paid: false,
             dueDate: shiftDate(b.dueDate, data.month, data.year)
         })),
-        savings: budgetData.savings, 
+        goals: budgetData.goals.map(g => ({ ...g, checked: false })),
+        savings: budgetData.savings.map(s => ({ ...s, paid: false, amount: 0 })),
         debts: budgetData.debts.map(d => ({ 
             ...d, 
-            payment: 0,
+            paid: false,
+            payment: d.payment, // Keep payment amount for next month
             dueDate: d.dueDate ? shiftDate(d.dueDate, data.month, data.year) : undefined
         })),
-        investments: budgetData.investments, 
+        investments: budgetData.investments.map(i => ({ ...i, contributed: false })),
         rollover: data.rollover
     };
 

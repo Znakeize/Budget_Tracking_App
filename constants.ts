@@ -1,3 +1,4 @@
+
 import { BudgetData } from './types';
 
 export const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -47,10 +48,10 @@ export const INITIAL_DATA: BudgetData = {
     { id: '3', name: 'Save for vacation', target: 2000, current: 800, monthly: 400, timeframe: '3 months', checked: false }
   ],
   savings: [
-    { id: '1', name: 'Emergency Fund', planned: 300, amount: 300 },
-    { id: '2', name: 'House Repair', planned: 150, amount: 150 },
-    { id: '3', name: 'Vacation', planned: 250, amount: 200 },
-    { id: '4', name: 'Christmas Fund', planned: 100, amount: 150 }
+    { id: '1', name: 'Emergency Fund', planned: 300, amount: 300, balance: 5000, paid: true },
+    { id: '2', name: 'House Repair', planned: 150, amount: 0, balance: 1200, paid: false },
+    { id: '3', name: 'Vacation', planned: 250, amount: 200, balance: 800, paid: true },
+    { id: '4', name: 'Christmas Fund', planned: 100, amount: 0, balance: 300, paid: false }
   ],
   debts: [
     { id: '1', name: 'Credit Card 1', balance: 500, payment: 150, paid: true, dueDate: '2025-01-05' },
@@ -59,11 +60,11 @@ export const INITIAL_DATA: BudgetData = {
     { id: '4', name: 'Personal Loan', balance: 2500, payment: 200, paid: false, dueDate: '2025-01-25' }
   ],
   investments: [
-    { id: '1', name: '401(k) Contribution', amount: 500 },
-    { id: '2', name: 'Roth IRA', amount: 500 },
-    { id: '3', name: 'Stock Portfolio', amount: 300 },
-    { id: '4', name: 'Index Funds', amount: 200 },
-    { id: '5', name: 'Crypto', amount: 100 }
+    { id: '1', name: '401(k) Contribution', amount: 500, target: 20000, monthly: 500, contributed: true },
+    { id: '2', name: 'Roth IRA', amount: 500, target: 6500, monthly: 500, contributed: false },
+    { id: '3', name: 'Stock Portfolio', amount: 300, target: 10000, monthly: 150, contributed: false },
+    { id: '4', name: 'Index Funds', amount: 200, target: 5000, monthly: 100, contributed: true },
+    { id: '5', name: 'Crypto', amount: 100, target: 1000, monthly: 50, contributed: false }
   ],
   rollover: 0,
   created: Date.now()

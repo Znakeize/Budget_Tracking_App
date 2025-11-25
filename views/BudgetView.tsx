@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { BudgetData } from '../types';
 import { formatCurrency, generateId } from '../utils/calculations';
@@ -155,6 +156,47 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
     
     newDebts[index] = debt;
     newData.debts = newDebts;
+    updateData(newData);
+  };
+
+  const toggleSavingsPaid = (index: number, isPaid: boolean) => {
+    const newData = { ...data };
+    const newSavings = [...newData.savings];
+    const item = { ...newSavings[index] };
+    const contribution = item.planned || 0;
+
+    item.paid = isPaid;
+    if (isPaid) {
+        item.balance = (item.balance || 0) + contribution;
+        item.amount = contribution; // Used for cash flow calc (this period's outflow)
+    } else {
+        // Revert balance
+        const newBalance = (item.balance || 0) - contribution;
+        item.balance = newBalance < 0 ? 0 : newBalance;
+        item.amount = 0;
+    }
+
+    newSavings[index] = item;
+    newData.savings = newSavings;
+    updateData(newData);
+  };
+
+  const toggleInvestmentContribution = (index: number, isContributed: boolean) => {
+    const newData = { ...data };
+    const newInvestments = [...newData.investments];
+    const item = { ...newInvestments[index] };
+    const contribution = item.monthly || 0;
+
+    item.contributed = isContributed;
+    if (isContributed) {
+        item.amount = (item.amount || 0) + contribution;
+    } else {
+        const newAmount = (item.amount || 0) - contribution;
+        item.amount = newAmount < 0 ? 0 : newAmount;
+    }
+
+    newInvestments[index] = item;
+    newData.investments = newInvestments;
     updateData(newData);
   };
 
@@ -522,12 +564,12 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                 {activeSection === 'savings' && (
                     <div className="space-y-3">
                         {data.savings.map((item, idx) => {
-                             const progress = item.planned > 0 ? (item.amount / item.planned) * 100 : 0;
                              return (
-                                <div key={item.id} id={item.id} className="bg-white dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm transition-all duration-300">
-                                    <div className="flex items-center justify-between mb-3">
+                                <div key={item.id} id={item.id} className={`bg-white dark:bg-slate-800/50 rounded-xl p-4 border shadow-sm transition-all duration-300 ${item.paid ? 'border-teal-500/30 opacity-80' : 'border-slate-200 dark:border-slate-700'}`}>
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <Checkbox checked={!!item.paid} onChange={(val) => toggleSavingsPaid(idx, val)} />
                                         <input 
-                                            className="bg-transparent font-bold text-lg text-slate-900 dark:text-white outline-none flex-1" 
+                                            className={`flex-1 min-w-0 bg-transparent font-bold text-lg outline-none ${item.paid ? 'line-through text-slate-500' : 'text-slate-900 dark:text-white'}`}
                                             value={item.name} 
                                             onChange={(e) => updateItem('savings', idx, 'name', e.target.value)} 
                                             placeholder="Fund Name"
@@ -535,27 +577,32 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                         <button onClick={() => deleteItem('savings', idx)} className="text-slate-300 hover:text-red-500 p-2 transition-colors"><Trash2 size={20} /></button>
                                     </div>
                                     
-                                    <div className="flex gap-3 mb-3">
-                                        <div className="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-800">
-                                            <span className="text-xs text-slate-400 uppercase font-bold block mb-1">Goal</span>
-                                            <div className="flex items-center">
-                                                <span className="text-slate-400 text-sm mr-1">{data.currencySymbol}</span>
-                                                <input type="number" className="bg-transparent w-full font-semibold outline-none text-slate-700 dark:text-slate-300 min-w-0" 
+                                    <div className="grid grid-cols-2 gap-3 pl-9">
+                                        <div className="bg-teal-50 dark:bg-teal-900/10 rounded-lg px-3 py-2 border border-teal-100 dark:border-teal-500/20">
+                                            <span className="text-[10px] text-teal-600 dark:text-teal-400 uppercase font-bold block mb-1">Total Fund</span>
+                                            <div className="flex items-center text-teal-700 dark:text-teal-300">
+                                                <span className="text-xs mr-1">{data.currencySymbol}</span>
+                                                <input type="number" className="bg-transparent w-full text-sm font-bold outline-none" 
+                                                    value={item.balance || 0} 
+                                                    // Manual update of balance logic could conflict with checkbox logic, but we allow editing total
+                                                    onChange={(e) => updateItem('savings', idx, 'balance', parseFloat(e.target.value) || 0)} 
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-200 dark:border-slate-700">
+                                            <span className="text-[10px] text-slate-500 uppercase font-bold block mb-1">Monthly Plan</span>
+                                            <div className="flex items-center text-slate-900 dark:text-white">
+                                                <span className="text-xs mr-1">{data.currencySymbol}</span>
+                                                <input type="number" className="bg-transparent w-full text-sm font-bold outline-none" 
                                                     value={item.planned || ''} onChange={(e) => updateItem('savings', idx, 'planned', parseFloat(e.target.value) || 0)} />
                                             </div>
                                         </div>
-                                        <div className="flex-1 bg-teal-50 dark:bg-teal-900/10 rounded-lg px-3 py-2 border border-teal-100 dark:border-teal-500/20">
-                                            <span className="text-xs text-teal-600 dark:text-teal-400 uppercase font-bold block mb-1">Saved</span>
-                                            <div className="flex items-center">
-                                                <span className="text-teal-600/70 text-sm mr-1">{data.currencySymbol}</span>
-                                                <input type="number" className="bg-transparent w-full font-bold outline-none text-teal-600 dark:text-teal-400 min-w-0" 
-                                                    value={item.amount || ''} onChange={(e) => updateItem('savings', idx, 'amount', parseFloat(e.target.value) || 0)} />
-                                            </div>
+                                    </div>
+                                    {item.paid && (
+                                        <div className="pl-9 mt-2 text-[10px] font-bold text-teal-500 flex items-center gap-1">
+                                            <Target size={12} /> {formatCurrency(item.amount, data.currencySymbol)} saved this month
                                         </div>
-                                    </div>
-                                    <div className="h-2 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                                        <div className="h-full bg-teal-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(progress, 100)}%` }}></div>
-                                    </div>
+                                    )}
                                 </div>
                             );
                         })}
@@ -615,70 +662,120 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                             <span className="text-3xl font-extrabold text-violet-900 dark:text-white">{formatCurrency(totals.investments, data.currencySymbol)}</span>
                         </div>
 
-                        {data.investments.map((item, idx) => (
-                            <div key={item.id} id={item.id} className="bg-white dark:bg-slate-800/50 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm transition-all duration-300">
-                                <div className="p-4 flex items-center gap-3">
-                                    <button 
-                                        onClick={() => setExpandedInvestmentId(expandedInvestmentId === item.id ? null : item.id)}
-                                        className={`p-2 rounded-lg transition-colors ${expandedInvestmentId === item.id ? 'bg-violet-100 text-violet-600 dark:bg-violet-900/50 dark:text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400'}`}
-                                    >
-                                        {expandedInvestmentId === item.id ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                                    </button>
-                                    <input 
-                                        className="bg-transparent font-bold text-lg text-slate-900 dark:text-white outline-none flex-1 min-w-0" 
-                                        value={item.name} 
-                                        onChange={(e) => updateItem('investments', idx, 'name', e.target.value)} 
-                                        placeholder="Asset Name"
-                                    />
-                                    <div className="flex items-center bg-violet-50 dark:bg-violet-900/10 border border-violet-100 dark:border-violet-500/20 rounded-lg px-3 py-1.5">
-                                        <span className="text-violet-500 mr-1 text-sm">$</span>
-                                        <input type="number" className="bg-transparent w-24 text-sm outline-none text-slate-900 dark:text-white font-bold text-right" 
-                                                value={item.amount || ''} onChange={(e) => updateItem('investments', idx, 'amount', parseFloat(e.target.value) || 0)} />
+                        {data.investments.map((item, idx) => {
+                            const progress = item.target && item.target > 0 ? (item.amount / item.target) * 100 : 0;
+                            return (
+                                <div key={item.id} id={item.id} className={`bg-white dark:bg-slate-800/50 rounded-xl p-4 border shadow-sm transition-all duration-300 ${item.contributed ? 'border-violet-500/30' : 'border-slate-200 dark:border-slate-700'}`}>
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <Checkbox 
+                                            checked={!!item.contributed} 
+                                            onChange={(val) => toggleInvestmentContribution(idx, val)} 
+                                        />
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <input 
+                                                    className={`bg-transparent font-bold text-lg outline-none flex-1 min-w-0 ${item.contributed ? 'text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-white'}`} 
+                                                    value={item.name} 
+                                                    onChange={(e) => updateItem('investments', idx, 'name', e.target.value)} 
+                                                    placeholder="Asset Name"
+                                                />
+                                                <button 
+                                                    onClick={() => setExpandedInvestmentId(expandedInvestmentId === item.id ? null : item.id)}
+                                                    className={`p-1.5 rounded-lg transition-colors ${expandedInvestmentId === item.id ? 'bg-violet-100 text-violet-600 dark:bg-violet-900/50 dark:text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400'}`}
+                                                >
+                                                    {expandedInvestmentId === item.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <button onClick={() => deleteItem('investments', idx)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={20} /></button>
                                     </div>
-                                    <button onClick={() => deleteItem('investments', idx)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={20} /></button>
-                                </div>
-                                
-                                <div className="px-4 pb-2">
-                                     <InvestmentSparkline amount={item.amount} history={item.history} />
-                                </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-3 mb-3 pl-9">
+                                        <div className="bg-violet-50 dark:bg-violet-900/10 rounded-lg px-3 py-2 border border-violet-100 dark:border-violet-500/20">
+                                            <span className="text-[10px] text-violet-600 dark:text-violet-400 uppercase font-bold block mb-1">Current Value</span>
+                                            <div className="flex items-center text-violet-700 dark:text-violet-300">
+                                                <span className="text-xs mr-1">{data.currencySymbol}</span>
+                                                <input type="number" className="bg-transparent w-full text-sm font-bold outline-none" 
+                                                    value={item.amount || 0} onChange={(e) => updateItem('investments', idx, 'amount', parseFloat(e.target.value) || 0)} />
+                                            </div>
+                                        </div>
+                                        <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-200 dark:border-slate-700">
+                                            <span className="text-[10px] text-slate-500 uppercase font-bold block mb-1">Target Value</span>
+                                            <div className="flex items-center text-slate-900 dark:text-white">
+                                                <span className="text-xs mr-1">{data.currencySymbol}</span>
+                                                <input type="number" className="bg-transparent w-full text-sm font-bold outline-none" 
+                                                    value={item.target || ''} onChange={(e) => updateItem('investments', idx, 'target', parseFloat(e.target.value) || 0)} />
+                                            </div>
+                                        </div>
+                                    </div>
 
-                                {expandedInvestmentId === item.id && (
-                                    <div className="bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 p-4 animate-in slide-in-from-top-2">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <h4 className="text-xs font-bold text-slate-500 uppercase">Value History</h4>
-                                            <button onClick={() => addInvestmentHistory(idx)} className="text-[10px] font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-md hover:bg-slate-50 shadow-sm flex items-center gap-1">
-                                                <Plus size={10} /> Add Entry
-                                            </button>
+                                    <div className="pl-9 mb-3">
+                                        <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                                            <span className="text-xs text-slate-500 font-medium">Monthly Contribution</span>
+                                            <div className="flex items-center text-slate-900 dark:text-white w-24">
+                                                <span className="text-xs mr-1">{data.currencySymbol}</span>
+                                                <input type="number" className="bg-transparent w-full text-sm font-bold outline-none text-right" 
+                                                    value={item.monthly || ''} onChange={(e) => updateItem('investments', idx, 'monthly', parseFloat(e.target.value) || 0)} />
+                                            </div>
                                         </div>
-                                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
-                                            {(!item.history || item.history.length === 0) && (
-                                                <p className="text-xs text-slate-400 italic text-center py-2">No history records found.</p>
-                                            )}
-                                            {item.history?.map((hist, hIdx) => (
-                                                <div key={hIdx} className="flex gap-2 items-center">
-                                                    <input 
-                                                        type="date" 
-                                                        className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 outline-none w-32"
-                                                        value={hist.date}
-                                                        onChange={(e) => updateInvestmentHistory(idx, hIdx, 'date', e.target.value)}
-                                                    />
-                                                    <div className="flex-1 flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1.5">
-                                                        <span className="text-xs text-slate-400 mr-1">$</span>
-                                                        <input 
-                                                            type="number" 
-                                                            className="bg-transparent w-full text-xs font-bold outline-none text-slate-700 dark:text-slate-200"
-                                                            value={hist.amount}
-                                                            onChange={(e) => updateInvestmentHistory(idx, hIdx, 'amount', parseFloat(e.target.value) || 0)}
-                                                        />
-                                                    </div>
-                                                    <button onClick={() => removeInvestmentHistory(idx, hIdx)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14} /></button>
-                                                </div>
-                                            ))}
-                                        </div>
+                                        {item.contributed && (
+                                            <div className="mt-1 text-[10px] font-bold text-violet-500 flex items-center gap-1 justify-end">
+                                                <TrendingUp size={10} /> Contributed this month
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                            </div>
-                        ))}
+
+                                    <div className="pl-9">
+                                        <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1.5">
+                                            <span>Progress</span>
+                                            <span>{progress.toFixed(1)}%</span>
+                                        </div>
+                                        <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mb-3">
+                                            <div className="h-full bg-violet-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(progress, 100)}%` }}></div>
+                                        </div>
+                                        
+                                        {/* Mini Sparkline always visible */}
+                                        <InvestmentSparkline amount={item.amount} history={item.history} />
+                                    </div>
+
+                                    {expandedInvestmentId === item.id && (
+                                        <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 animate-in slide-in-from-top-2 pl-9">
+                                            <div className="flex justify-between items-center mb-3">
+                                                <h4 className="text-[10px] font-bold text-slate-500 uppercase">Value History</h4>
+                                                <button onClick={() => addInvestmentHistory(idx)} className="text-[10px] font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-md hover:bg-slate-50 shadow-sm flex items-center gap-1">
+                                                    <Plus size={10} /> Add Entry
+                                                </button>
+                                            </div>
+                                            <div className="space-y-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                                                {(!item.history || item.history.length === 0) && (
+                                                    <p className="text-xs text-slate-400 italic text-center py-2">No history records found.</p>
+                                                )}
+                                                {item.history?.map((hist, hIdx) => (
+                                                    <div key={hIdx} className="flex gap-2 items-center">
+                                                        <input 
+                                                            type="date" 
+                                                            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 outline-none w-28"
+                                                            value={hist.date}
+                                                            onChange={(e) => updateInvestmentHistory(idx, hIdx, 'date', e.target.value)}
+                                                        />
+                                                        <div className="flex-1 flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1.5">
+                                                            <span className="text-xs text-slate-400 mr-1">$</span>
+                                                            <input 
+                                                                type="number" 
+                                                                className="bg-transparent w-full text-xs font-bold outline-none text-slate-700 dark:text-slate-200"
+                                                                value={hist.amount}
+                                                                onChange={(e) => updateInvestmentHistory(idx, hIdx, 'amount', parseFloat(e.target.value) || 0)}
+                                                            />
+                                                        </div>
+                                                        <button onClick={() => removeInvestmentHistory(idx, hIdx)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14} /></button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                      </div>
                 )}
             </div>
@@ -808,7 +905,7 @@ const InvestmentSparkline = ({ amount, history }: { amount: number, history?: { 
     };
 
     return (
-        <div className="w-full h-16 opacity-70">
+        <div className="w-full h-10 opacity-70">
             <Line data={chartData} options={options} />
         </div>
     );

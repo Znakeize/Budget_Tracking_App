@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Card } from '../components/ui/Card';
 import { EventData, EventCategory, EventExpense, EventVendor } from '../types';
@@ -7,7 +8,7 @@ import {
   Calendar, MapPin, Plus, ChevronLeft, Wallet, PieChart, Users, 
   ShoppingBag, CheckCircle, Clock, FileText, Send, Sparkles, 
   Trash2, TrendingUp, AlertCircle, Camera, Download, Share2,
-  Pencil, Edit2, X, Bell, BellRing, Briefcase
+  Pencil, Edit2, X, Bell, BellRing, Briefcase, Layers
 } from 'lucide-react';
 import { Doughnut } from 'react-chartjs-2';
 import { jsPDF } from 'jspdf';
@@ -480,6 +481,7 @@ const EventDashboardTab = ({ event, totalSpent, remaining, currencySymbol }: any
 
 const EventBudgetTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) => {
     const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
+    const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
     const [editingCategory, setEditingCategory] = useState<EventCategory | null>(null);
     const [editingExpense, setEditingExpense] = useState<EventExpense | null>(null);
 
@@ -513,6 +515,17 @@ const EventBudgetTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) =
         setIsAddExpenseOpen(false);
     };
 
+    const handleAddCategory = (catData: { name: string, allocated: number }) => {
+        const newCategory: EventCategory = {
+            id: generateId(),
+            name: catData.name,
+            allocated: catData.allocated,
+            color: ['#ec4899', '#8b5cf6', '#f59e0b', '#10b981', '#06b6d4', '#6366f1'][Math.floor(Math.random() * 6)]
+        };
+        onUpdate({ ...event, categories: [...event.categories, newCategory] });
+        setIsAddCategoryOpen(false);
+    };
+
     const handleUpdateCategory = (updatedCat: EventCategory) => {
         const updatedCategories = event.categories.map((c: any) => c.id === updatedCat.id ? updatedCat : c);
         onUpdate({ ...event, categories: updatedCategories });
@@ -535,12 +548,20 @@ const EventBudgetTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) =
 
     return (
         <div className="space-y-4 animate-in fade-in slide-in-from-right-2">
-            <button 
-                onClick={() => setIsAddExpenseOpen(true)}
-                className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 active:scale-95 transition-all"
-            >
-                <Plus size={18} /> Add Expense
-            </button>
+            <div className="flex gap-3">
+                <button 
+                    onClick={() => setIsAddExpenseOpen(true)}
+                    className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 active:scale-95 transition-all"
+                >
+                    <Plus size={18} /> Add Expense
+                </button>
+                <button 
+                    onClick={() => setIsAddCategoryOpen(true)}
+                    className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-slate-200 dark:hover:bg-slate-700"
+                >
+                    <Layers size={18} /> Add Category
+                </button>
+            </div>
             
             <div className="space-y-4">
                 {event.categories.map((cat: EventCategory) => {
@@ -598,6 +619,13 @@ const EventBudgetTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) =
                 onClose={() => setIsAddExpenseOpen(false)}
                 onConfirm={handleAddExpense}
                 categories={event.categories}
+                currencySymbol={currencySymbol}
+            />
+
+            <AddCategoryModal 
+                isOpen={isAddCategoryOpen}
+                onClose={() => setIsAddCategoryOpen(false)}
+                onConfirm={handleAddCategory}
                 currencySymbol={currencySymbol}
             />
 
@@ -1127,6 +1155,37 @@ const AddEventExpenseModal = ({ isOpen, onClose, onConfirm, categories, currency
                         {categories.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
                     </select>
                     <button onClick={() => onConfirm({ name, amount: parseFloat(amount), category })} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Save</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const AddCategoryModal = ({ isOpen, onClose, onConfirm, currencySymbol }: any) => {
+    const [name, setName] = useState('');
+    const [allocated, setAllocated] = useState('');
+
+    useEffect(() => {
+        if(isOpen) { setName(''); setAllocated(''); }
+    }, [isOpen]);
+
+    if(!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[85vh] overflow-y-auto custom-scrollbar">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">New Category</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={20}/></button>
+                </div>
+                <div className="space-y-3">
+                    <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Category Name" value={name} onChange={e => setName(e.target.value)} />
+                    <div className="relative">
+                        <span className="absolute left-3 top-3 text-slate-500">{currencySymbol}</span>
+                        <input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 pl-8 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Allocated Budget" value={allocated} onChange={e => setAllocated(e.target.value)} />
+                    </div>
+                    <button onClick={() => onConfirm({ name, allocated: parseFloat(allocated) || 0 })} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Create Category</button>
                 </div>
             </div>
         </div>

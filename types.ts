@@ -33,7 +33,9 @@ export interface GoalItem extends BaseItem {
 
 export interface SavingsItem extends BaseItem {
   planned: number;
-  amount: number; // Treated as 'spent' or 'saved'
+  amount: number; // Treated as 'spent' or 'saved' this period
+  balance?: number; // Total fund balance
+  paid?: boolean;
 }
 
 export interface DebtItem extends BaseItem {
@@ -45,6 +47,9 @@ export interface DebtItem extends BaseItem {
 
 export interface InvestmentItem extends BaseItem {
   amount: number;
+  target?: number;
+  monthly?: number;
+  contributed?: boolean;
   history?: {
     date: string;
     amount: number;

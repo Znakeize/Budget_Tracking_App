@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { BudgetData } from '../../types';
@@ -101,9 +102,11 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
       case 'investments':
          return {
           title: 'Add Investment',
-          nameLabel: 'Investment Name',
+          nameLabel: 'Asset Name',
           fields: [
-             { label: 'Amount Invested', value: val1, set: setVal1, type: 'number' }
+             { label: 'Current Value', value: val1, set: setVal1, type: 'number' },
+             { label: 'Target Value', value: val2, set: setVal2, type: 'number' },
+             { label: 'Monthly Contribution', value: val3, set: setVal3, type: 'number' },
           ]
         };
       default:
@@ -147,6 +150,9 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
         item.paid = false;
     } else if (collection === 'investments') {
         item.amount = num1;
+        item.target = num2;
+        item.monthly = num3;
+        item.contributed = false;
     }
 
     onConfirm(item);
