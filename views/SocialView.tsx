@@ -1,15 +1,16 @@
-
 import React, { useState } from 'react';
 import { Card } from '../components/ui/Card';
 import { Users, ChevronLeft, Plus, ArrowUpRight, ArrowDownLeft, CheckCircle2, Split, Wallet, Receipt, Share2 } from 'lucide-react';
 import { formatCurrency } from '../utils/calculations';
+import { HeaderProfile } from '../components/ui/HeaderProfile';
 
 interface SocialViewProps {
   currencySymbol: string;
   onBack: () => void;
+  onProfileClick: () => void;
 }
 
-export const SocialView: React.FC<SocialViewProps> = ({ currencySymbol, onBack }) => {
+export const SocialView: React.FC<SocialViewProps> = ({ currencySymbol, onBack, onProfileClick }) => {
   const [activeTab, setActiveTab] = useState<'shared' | 'split'>('shared');
 
   // Mock Data for Shared Budgets
@@ -60,6 +61,9 @@ export const SocialView: React.FC<SocialViewProps> = ({ currencySymbol, onBack }
                         <h2 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-0.5">Community</h2>
                         <h1 className="text-2xl font-bold leading-none tracking-tight text-slate-900 dark:text-white">Collaborative</h1>
                     </div>
+                </div>
+                <div className="pb-1">
+                    <HeaderProfile onClick={onProfileClick} />
                 </div>
             </div>
             

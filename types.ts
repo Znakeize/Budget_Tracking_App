@@ -96,6 +96,13 @@ export interface EventVendor {
   dueDate?: string;
   rating?: number;
   contact?: string;
+  advance?: number;
+  paymentHistory?: {
+    id: string;
+    date: string;
+    name: string;
+    amount: number;
+  }[];
 }
 
 export interface EventExpense {

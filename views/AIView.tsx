@@ -1,9 +1,9 @@
-
 import React, { useState } from 'react';
 import { BudgetData } from '../types';
 import { Card } from '../components/ui/Card';
 import { analyzeBudgetWithAI } from '../utils/aiHelper';
 import { Sparkles, Bot, Loader2, Bell, BellRing, X, PieChart, ChevronRight, TrendingUp, Users, CalendarHeart, RefreshCcw } from 'lucide-react';
+import { HeaderProfile } from '../components/ui/HeaderProfile';
 
 interface AIViewProps {
   history: BudgetData[];
@@ -16,6 +16,7 @@ interface AIViewProps {
   onViewEvents: () => void;
   onViewSimulator: () => void;
   eventNotificationCount?: number;
+  onProfileClick: () => void;
 }
 
 export const AIView: React.FC<AIViewProps> = ({ 
@@ -28,7 +29,8 @@ export const AIView: React.FC<AIViewProps> = ({
   onViewSocial,
   onViewEvents,
   onViewSimulator,
-  eventNotificationCount = 0
+  eventNotificationCount = 0,
+  onProfileClick
 }) => {
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -52,7 +54,7 @@ export const AIView: React.FC<AIViewProps> = ({
                         AI Advisor <Bot className="text-indigo-600 dark:text-indigo-400 h-6 w-6" />
                     </h1>
                 </div>
-                <div className="pb-1">
+                <div className="flex items-center gap-1 pb-1">
                     <button 
                         onClick={onToggleNotifications}
                         className="relative p-1.5 focus:outline-none active:scale-95 transition-transform"
@@ -66,6 +68,7 @@ export const AIView: React.FC<AIViewProps> = ({
                             <Bell size={20} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" />
                         )}
                     </button>
+                    <HeaderProfile onClick={onProfileClick} />
                 </div>
             </div>
        </div>

@@ -17,6 +17,7 @@ import {
 } from 'chart.js';
 import { TrendingUp, ChevronLeft, PieChart, Layers, DollarSign, ArrowUpRight } from 'lucide-react';
 import { MONTH_NAMES } from '../constants';
+import { HeaderProfile } from '../components/ui/HeaderProfile';
 
 ChartJS.register(
   CategoryScale,
@@ -34,9 +35,10 @@ interface InvestmentAnalysisViewProps {
   history: BudgetData[];
   currencySymbol: string;
   onBack: () => void;
+  onProfileClick: () => void;
 }
 
-export const InvestmentAnalysisView: React.FC<InvestmentAnalysisViewProps> = ({ history, currencySymbol, onBack }) => {
+export const InvestmentAnalysisView: React.FC<InvestmentAnalysisViewProps> = ({ history, currencySymbol, onBack, onProfileClick }) => {
   // 1. Get Current Data (Latest in history)
   const sortedHistory = useMemo(() => [...history].sort((a, b) => a.created - b.created), [history]);
   const currentData = sortedHistory[sortedHistory.length - 1];
@@ -160,7 +162,7 @@ export const InvestmentAnalysisView: React.FC<InvestmentAnalysisViewProps> = ({ 
     <div className="flex flex-col h-full relative">
        {/* Header */}
        <div className="flex-none pt-6 px-4 pb-4 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-xl z-20 border-b border-slate-200 dark:border-white/5 transition-colors duration-300">
-            <div className="flex items-end gap-3">
+            <div className="flex justify-between items-end">
                 <div className="flex items-center gap-3">
                     <button onClick={onBack} className="p-2 -ml-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
                         <ChevronLeft size={24} />
@@ -169,6 +171,9 @@ export const InvestmentAnalysisView: React.FC<InvestmentAnalysisViewProps> = ({ 
                         <h2 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-0.5">Wealth Tracking</h2>
                         <h1 className="text-2xl font-bold leading-none tracking-tight text-slate-900 dark:text-white">Investments</h1>
                     </div>
+                </div>
+                <div className="pb-1">
+                    <HeaderProfile onClick={onProfileClick} />
                 </div>
             </div>
        </div>

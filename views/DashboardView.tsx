@@ -5,15 +5,17 @@ import { Card } from '../components/ui/Card';
 import { ExpenseBreakdown } from '../components/charts/BudgetCharts';
 import { TrendingUp, TrendingDown, Wallet, AlertCircle, Bell, BellRing } from 'lucide-react';
 import { MONTH_NAMES } from '../constants';
+import { HeaderProfile } from '../components/ui/HeaderProfile';
 
 interface DashboardProps {
   data: BudgetData;
   setTab: (tab: string) => void;
   notificationCount: number;
   onToggleNotifications: () => void;
+  onProfileClick: () => void;
 }
 
-export const DashboardView: React.FC<DashboardProps> = ({ data, setTab, notificationCount, onToggleNotifications }) => {
+export const DashboardView: React.FC<DashboardProps> = ({ data, setTab, notificationCount, onToggleNotifications, onProfileClick }) => {
   const totals = calculateTotals(data);
   
   const percentSpent = totals.totalIncome > 0 
@@ -31,20 +33,23 @@ export const DashboardView: React.FC<DashboardProps> = ({ data, setTab, notifica
                 <h1 className="text-2xl font-bold leading-none tracking-tight text-slate-900 dark:text-white">{MONTH_NAMES[data.month]} {data.year}</h1>
             </div>
             
-            {/* Bell Icon for notifications */}
-            <button 
-                onClick={onToggleNotifications}
-                className="relative pb-1 focus:outline-none active:scale-95 transition-transform"
-            >
-                {notificationCount > 0 ? (
-                    <>
-                        <BellRing size={22} className="text-indigo-600 dark:text-indigo-400" />
-                        <span className="absolute top-0 right-0 -mt-1 -mr-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-50 dark:border-slate-900"></span>
-                    </>
-                ) : (
-                    <Bell size={22} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" />
-                )}
-            </button>
+            <div className="flex items-center gap-1 pb-1">
+                {/* Bell Icon for notifications */}
+                <button 
+                    onClick={onToggleNotifications}
+                    className="relative p-1.5 focus:outline-none active:scale-95 transition-transform"
+                >
+                    {notificationCount > 0 ? (
+                        <>
+                            <BellRing size={22} className="text-indigo-600 dark:text-indigo-400" />
+                            <span className="absolute top-1 right-1 -mt-0.5 -mr-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-50 dark:border-slate-900"></span>
+                        </>
+                    ) : (
+                        <Bell size={22} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" />
+                    )}
+                </button>
+                <HeaderProfile onClick={onProfileClick} />
+            </div>
           </div>
       </div>
 

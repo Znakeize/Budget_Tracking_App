@@ -18,6 +18,7 @@ import {
 } from 'chart.js';
 import { Filter, TrendingUp, TrendingDown, Lightbulb, Calendar, X, Bell, BellRing, ArrowUp, ArrowDown, Check, ChevronDown, ChevronUp, ChevronLeft, Trash2 } from 'lucide-react';
 import { MONTH_NAMES } from '../constants';
+import { HeaderProfile } from '../components/ui/HeaderProfile';
 
 ChartJS.register(
   CategoryScale,
@@ -38,11 +39,12 @@ interface AnalysisViewProps {
   notificationCount: number;
   onToggleNotifications: () => void;
   onBack: () => void;
+  onProfileClick: () => void;
 }
 
 type TimeRange = '3M' | '6M' | '1Y' | 'ALL' | 'CUSTOM';
 
-export const AnalysisView: React.FC<AnalysisViewProps> = ({ history, currencySymbol, notificationCount, onToggleNotifications, onBack }) => {
+export const AnalysisView: React.FC<AnalysisViewProps> = ({ history, currencySymbol, notificationCount, onToggleNotifications, onBack, onProfileClick }) => {
   // Filter State
   const [range, setRange] = useState<TimeRange>('6M');
   const [customStartDate, setCustomStartDate] = useState('');
@@ -558,7 +560,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ history, currencySym
                         <h1 className="text-2xl font-bold leading-none tracking-tight text-slate-900 dark:text-white">Analysis</h1>
                     </div>
                 </div>
-                <div className="pb-1">
+                <div className="flex items-center gap-1 pb-1">
                     <button 
                         onClick={onToggleNotifications}
                         className="relative p-1.5 focus:outline-none active:scale-95 transition-transform"
@@ -572,6 +574,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ history, currencySym
                             <Bell size={20} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" />
                         )}
                     </button>
+                    <HeaderProfile onClick={onProfileClick} />
                 </div>
             </div>
        </div>

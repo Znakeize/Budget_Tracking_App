@@ -1,13 +1,14 @@
-
 import React from 'react';
 import { Card } from '../components/ui/Card';
 import { ChevronLeft, Users, MessageCircle, Globe, ExternalLink, MessageSquare } from 'lucide-react';
+import { HeaderProfile } from '../components/ui/HeaderProfile';
 
 interface CollaborativeViewProps {
   onBack: () => void;
+  onProfileClick: () => void;
 }
 
-export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack }) => {
+export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, onProfileClick }) => {
   const channels = [
     { name: 'Facebook Group', icon: Users, description: 'Join 10k+ members sharing tips', color: 'bg-blue-600', link: '#' },
     { name: 'Telegram Channel', icon: MessageCircle, description: 'Daily updates & news', color: 'bg-sky-500', link: '#' },
@@ -28,6 +29,9 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack }) 
                         <h2 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-0.5">Community</h2>
                         <h1 className="text-2xl font-bold leading-none tracking-tight text-slate-900 dark:text-white">Official Channels</h1>
                     </div>
+                </div>
+                <div className="pb-1">
+                    <HeaderProfile onClick={onProfileClick} />
                 </div>
             </div>
        </div>

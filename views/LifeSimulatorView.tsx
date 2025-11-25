@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { BudgetData } from '../types';
 import { calculateTotals, formatCurrency, generateId } from '../utils/calculations';
@@ -13,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { generateStrategyPlan } from '../utils/aiHelper';
+import { HeaderProfile } from '../components/ui/HeaderProfile';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
 
@@ -21,6 +21,7 @@ interface LifeSimulatorViewProps {
   currencySymbol: string;
   onBack: () => void;
   onApplyScenario: (changes: Partial<BudgetData>) => void;
+  onProfileClick: () => void;
 }
 
 type EventType = 'baby' | 'house' | 'car' | 'marriage' | 'education' | 'business' | 'medical' | 'relocation' | 'retirement';
@@ -86,7 +87,7 @@ const GENERIC_QUESTIONS: Question[] = [
     { id: 'incomeChange', text: 'Monthly Income Change?', subtext: 'Positive for gain, Negative for loss', type: 'currency', defaultValue: 0 }
 ];
 
-export const LifeSimulatorView: React.FC<LifeSimulatorViewProps> = ({ currentData, currencySymbol, onBack, onApplyScenario }) => {
+export const LifeSimulatorView: React.FC<LifeSimulatorViewProps> = ({ currentData, currencySymbol, onBack, onApplyScenario, onProfileClick }) => {
   const [activeStep, setActiveStep] = useState<'select' | 'wizard' | 'results'>('select');
   const [selectedEvent, setSelectedEvent] = useState<EventType | null>(null);
   const [wizardData, setWizardData] = useState<Record<string, any>>({});
@@ -314,15 +315,20 @@ export const LifeSimulatorView: React.FC<LifeSimulatorViewProps> = ({ currentDat
     <div className="flex flex-col h-full relative bg-slate-50 dark:bg-slate-900">
        {/* Header */}
        <div className="flex-none pt-6 px-4 pb-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl z-20 border-b border-slate-200 dark:border-white/5">
-            <div className="flex items-center gap-3">
-                <button onClick={activeStep === 'select' ? onBack : () => setActiveStep('select')} className="p-2 -ml-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                    <ChevronLeft size={24} />
-                </button>
-                <div>
-                    <h2 className="text-xs font-bold text-fuchsia-600 dark:text-fuchsia-400 uppercase tracking-wider mb-0.5">AI Advisor</h2>
-                    <h1 className="text-xl font-bold leading-none text-slate-900 dark:text-white flex items-center gap-2">
-                        Life Simulator <RefreshCcw size={18} className="text-fuchsia-500"/>
-                    </h1>
+            <div className="flex justify-between items-end">
+                <div className="flex items-center gap-3">
+                    <button onClick={activeStep === 'select' ? onBack : () => setActiveStep('select')} className="p-2 -ml-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                        <ChevronLeft size={24} />
+                    </button>
+                    <div>
+                        <h2 className="text-xs font-bold text-fuchsia-600 dark:text-fuchsia-400 uppercase tracking-wider mb-0.5">AI Advisor</h2>
+                        <h1 className="text-xl font-bold leading-none text-slate-900 dark:text-white flex items-center gap-2">
+                            Life Simulator <RefreshCcw size={18} className="text-fuchsia-500"/>
+                        </h1>
+                    </div>
+                </div>
+                <div className="pb-1">
+                    <HeaderProfile onClick={onProfileClick} />
                 </div>
             </div>
        </div>
@@ -623,57 +629,43 @@ const StrategyModal: React.FC<StrategyModalProps> = ({ isOpen, onClose, onConfir
                 setLoading(false);
             });
         }
-    }, [isOpen, strategy]);
+    }, [isOpen, strategy, eventType, monthlyCost, currencySymbol, currentExpenses]);
 
     if (!isOpen) return null;
-
-    const titles = {
-        cut: 'Strict Budget Plan',
-        earn: 'Income Boost Plan',
-        save: 'Saving Practice Plan'
-    };
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[85vh] overflow-hidden flex flex-col">
-                <div className="flex justify-between items-center mb-4 shrink-0">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <Sparkles size={18} className="text-indigo-500" /> {titles[strategy]}
-                    </h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors"><X size={20}/></button>
+            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+                <div className="flex justify-between items-start mb-4">
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <Sparkles size={18} className="text-fuchsia-500" /> AI Strategic Plan
+                        </h3>
+                        <p className="text-xs text-slate-500 uppercase tracking-wider mt-1 font-bold">{strategy === 'cut' ? 'Cost Cutting' : strategy === 'earn' ? 'Income Growth' : 'Saving Strategy'}</p>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={20}/></button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
-                    {loading ? (
-                        <div className="py-10 flex flex-col items-center justify-center text-slate-500">
-                            <Loader2 size={32} className="animate-spin mb-2 text-indigo-500" />
-                            <p className="text-xs">AI is generating your custom plan...</p>
-                        </div>
-                    ) : (
-                        <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700">
-                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
-                                {plan}
-                            </p>
-                        </div>
-                    )}
-                </div>
+                {loading ? (
+                    <div className="flex flex-col items-center justify-center py-8">
+                        <Loader2 size={32} className="text-fuchsia-500 animate-spin mb-3" />
+                        <p className="text-xs text-slate-500">Consulting Gemini AI...</p>
+                    </div>
+                ) : (
+                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-700 mb-4 max-h-64 overflow-y-auto custom-scrollbar">
+                        <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+                            {plan}
+                        </p>
+                    </div>
+                )}
 
-                <div className="mt-6 flex gap-3 shrink-0">
-                    <button 
-                        onClick={onClose}
-                        className="flex-1 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button 
-                        onClick={onConfirm}
-                        disabled={loading}
-                        className="flex-[2] py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
-                    >
-                        Apply Plan
-                    </button>
-                </div>
+                <button 
+                    onClick={onConfirm}
+                    className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                    <CheckCircle size={18} /> Apply Strategy to Budget
+                </button>
             </div>
         </div>
     );

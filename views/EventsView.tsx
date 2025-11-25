@@ -1,14 +1,14 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Card } from '../components/ui/Card';
 import { EventData, EventCategory, EventExpense, EventVendor } from '../types';
 import { formatCurrency, generateId } from '../utils/calculations';
 import { analyzeEventWithAI } from '../utils/aiHelper';
+import { HeaderProfile } from '../components/ui/HeaderProfile';
 import { 
   Calendar, MapPin, Plus, ChevronLeft, Wallet, PieChart, Users, 
   ShoppingBag, CheckCircle, Clock, FileText, Send, Sparkles, 
   Trash2, TrendingUp, AlertCircle, Camera, Download, Share2,
-  Pencil, Edit2, X, Bell, BellRing, Briefcase, Layers
+  Pencil, Edit2, X, Bell, BellRing, Briefcase, Layers, Receipt, Bot
 } from 'lucide-react';
 import { Doughnut } from 'react-chartjs-2';
 import { jsPDF } from 'jspdf';
@@ -18,6 +18,7 @@ interface EventsViewProps {
   onUpdateEvents: (events: EventData[]) => void;
   currencySymbol: string;
   onBack: () => void;
+  onProfileClick: () => void;
 }
 
 // Internal Notification Type
@@ -120,7 +121,7 @@ export const getEventNotifications = (events: EventData[], currencySymbol: strin
   return notifs;
 };
 
-export const EventsView: React.FC<EventsViewProps> = ({ events, onUpdateEvents, currencySymbol, onBack }) => {
+export const EventsView: React.FC<EventsViewProps> = ({ events, onUpdateEvents, currencySymbol, onBack, onProfileClick }) => {
   const [activeEventParams, setActiveEventParams] = useState<{id: string, initialTab?: string, focusItemId?: string} | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -168,6 +169,7 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onUpdateEvents, 
         currencySymbol={activeEvent.currencySymbol || currencySymbol}
         initialTab={activeEventParams?.initialTab}
         focusItemId={activeEventParams?.focusItemId}
+        onProfileClick={onProfileClick}
       />
     );
   }
@@ -187,20 +189,23 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onUpdateEvents, 
                     </div>
                 </div>
                 
-                {/* Event Specific Notification Bell */}
-                <button 
-                    onClick={() => setShowNotifications(!showNotifications)}
-                    className="relative p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors active:scale-95"
-                >
-                    {notifications.length > 0 ? (
-                        <>
-                            <BellRing size={20} className="text-indigo-600 dark:text-indigo-400" />
-                            <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-50 dark:border-slate-900"></span>
-                        </>
-                    ) : (
-                        <Bell size={20} className="text-slate-400 dark:text-slate-500" />
-                    )}
-                </button>
+                <div className="flex items-center gap-1 pb-1">
+                    {/* Event Specific Notification Bell */}
+                    <button 
+                        onClick={() => setShowNotifications(!showNotifications)}
+                        className="relative p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors active:scale-95"
+                    >
+                        {notifications.length > 0 ? (
+                            <>
+                                <BellRing size={20} className="text-indigo-600 dark:text-indigo-400" />
+                                <span className="absolute top-1 right-1 -mt-0.5 -mr-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-50 dark:border-slate-900"></span>
+                            </>
+                        ) : (
+                            <Bell size={20} className="text-slate-400 dark:text-slate-500" />
+                        )}
+                    </button>
+                    <HeaderProfile onClick={onProfileClick} />
+                </div>
             </div>
        </div>
 
@@ -311,7 +316,7 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onUpdateEvents, 
 
 // --- Sub-View: Event Detail ---
 
-const EventDetailView: React.FC<{ event: EventData, onUpdate: (e: EventData) => void, onBack: () => void, currencySymbol: string, initialTab?: string, focusItemId?: string }> = ({ event, onUpdate, onBack, currencySymbol, initialTab, focusItemId }) => {
+const EventDetailView: React.FC<{ event: EventData, onUpdate: (e: EventData) => void, onBack: () => void, currencySymbol: string, initialTab?: string, focusItemId?: string, onProfileClick: () => void }> = ({ event, onUpdate, onBack, currencySymbol, initialTab, focusItemId, onProfileClick }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'budget' | 'vendors' | 'team' | 'ai'>((initialTab as any) || 'dashboard');
   const [isEditEventOpen, setIsEditEventOpen] = useState(false);
 
@@ -350,9 +355,12 @@ const EventDetailView: React.FC<{ event: EventData, onUpdate: (e: EventData) => 
                         </div>
                     </div>
                 </div>
-                <div className="text-right pl-2">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">Budget</div>
-                    <div className="font-bold text-slate-900 dark:text-white whitespace-nowrap">{formatCurrency(event.totalBudget, currencySymbol)}</div>
+                <div className="flex items-center gap-3">
+                    <div className="text-right">
+                        <div className="text-[10px] text-slate-400 uppercase font-bold">Budget</div>
+                        <div className="font-bold text-slate-900 dark:text-white whitespace-nowrap">{formatCurrency(event.totalBudget, currencySymbol)}</div>
+                    </div>
+                    <HeaderProfile onClick={onProfileClick} />
                 </div>
             </div>
 
@@ -653,6 +661,7 @@ const EventBudgetTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) =
 const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) => {
     const [isAddVendorOpen, setIsAddVendorOpen] = useState(false);
     const [editingVendor, setEditingVendor] = useState<EventVendor | null>(null);
+    const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
 
     // Deep Link Logic
     useEffect(() => {
@@ -671,11 +680,18 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
     }, [focusItemId]);
 
     const handleAddVendor = (vendor: any) => {
+        const adv = vendor.advance || 0;
         const newVendor: EventVendor = {
             id: generateId(),
             ...vendor,
-            paidAmount: 0,
-            status: 'pending'
+            paidAmount: adv, // Initialize paid amount with advance
+            status: adv > 0 ? (adv >= vendor.totalAmount ? 'paid' : 'partial') : 'pending',
+            paymentHistory: adv > 0 ? [{
+                id: generateId(),
+                date: new Date().toISOString().split('T')[0],
+                name: "Advance Payment",
+                amount: adv
+            }] : []
         };
         onUpdate({ ...event, vendors: [...event.vendors, newVendor] });
         setIsAddVendorOpen(false);
@@ -700,14 +716,45 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
         }
     };
 
-    const handleUpdatePayment = (id: string, amount: number) => {
+    const handleUpdatePayment = (id: string, amount: number, note: string = "Payment") => {
         const updatedVendors = event.vendors.map((v: EventVendor) => {
             if (v.id === id) {
                 const newPaid = Math.min(v.paidAmount + amount, v.totalAmount);
+                const historyItem = {
+                    id: generateId(),
+                    date: new Date().toISOString().split('T')[0],
+                    name: note,
+                    amount: amount
+                };
                 return { 
                     ...v, 
                     paidAmount: newPaid,
-                    status: newPaid >= v.totalAmount ? 'paid' : newPaid > 0 ? 'partial' : 'pending'
+                    status: newPaid >= v.totalAmount ? 'paid' : newPaid > 0 ? 'partial' : 'pending',
+                    paymentHistory: [...(v.paymentHistory || []), historyItem]
+                };
+            }
+            return v;
+        });
+        onUpdate({ ...event, vendors: updatedVendors });
+    };
+
+    const handleRemovePayment = (vendorId: string, paymentId: string, amount: number, isAdvance: boolean) => {
+        if(!confirm(isAdvance ? 'Remove advance payment? This will reset the advance record.' : 'Remove this payment record?')) return;
+
+        const updatedVendors = event.vendors.map((v: EventVendor) => {
+            if (v.id === vendorId) {
+                const newPaid = Math.max(0, v.paidAmount - amount);
+                
+                let newStatus = 'pending';
+                if (newPaid >= v.totalAmount) newStatus = 'paid';
+                else if (newPaid > 0) newStatus = 'partial';
+
+                return { 
+                    ...v, 
+                    paidAmount: newPaid,
+                    advance: isAdvance ? 0 : v.advance, // Reset advance if we delete the advance payment
+                    status: newStatus as 'pending' | 'partial' | 'paid',
+                    paymentHistory: (v.paymentHistory || []).filter((h: any) => h.id !== paymentId)
                 };
             }
             return v;
@@ -725,81 +772,96 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
             </button>
 
             <div className="space-y-3">
-                {event.vendors.map((vendor: EventVendor) => (
+                {event.vendors.map((vendor: EventVendor) => {
+                    const remaining = vendor.totalAmount - vendor.paidAmount;
+                    const customAmount = customAmounts[vendor.id] || '';
+
+                    return (
                     <div id={vendor.id} key={vendor.id}>
                         <Card className="p-4">
                             <div className="flex justify-between items-start mb-2">
                                 <div>
                                     <div className="flex items-center gap-2">
-                                        <h4 className="font-bold text-slate-900 dark:text-white text-lg">{vendor.name}</h4>
-                                        <button onClick={() => setEditingVendor(vendor)} className="text-slate-300 hover:text-indigo-500 transition-colors p-1">
-                                            <Pencil size={14} />
-                                        </button>
+                                        <h4 className="font-bold text-slate-900 dark:text-white">{vendor.name}</h4>
+                                        <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${vendor.status === 'paid' ? 'bg-emerald-100 text-emerald-600' : vendor.status === 'partial' ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500'}`}>
+                                            {vendor.status}
+                                        </span>
                                     </div>
-                                    <span className="text-xs text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">{vendor.service}</span>
+                                    <p className="text-xs text-slate-500">{vendor.service}</p>
                                 </div>
-                                <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
-                                    vendor.status === 'paid' ? 'bg-emerald-100 text-emerald-600' :
-                                    vendor.status === 'partial' ? 'bg-orange-100 text-orange-600' :
-                                    'bg-red-100 text-red-600'
-                                }`}>
-                                    {vendor.status}
+                                <button onClick={() => setEditingVendor(vendor)} className="p-1 text-slate-300 hover:text-indigo-500 transition-colors">
+                                    <Edit2 size={14} />
+                                </button>
+                            </div>
+                            
+                            {/* Progress Bar */}
+                            <div className="mb-3">
+                                <div className="flex justify-between text-xs font-bold mb-1">
+                                    <span>Paid: {formatCurrency(vendor.paidAmount, currencySymbol)}</span>
+                                    <span>Total: {formatCurrency(vendor.totalAmount, currencySymbol)}</span>
+                                </div>
+                                <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                                    <div 
+                                        className={`h-full ${vendor.status === 'paid' ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                                        style={{width: `${Math.min((vendor.paidAmount/vendor.totalAmount)*100, 100)}%`}}
+                                    ></div>
                                 </div>
                             </div>
 
-                            <div className="flex justify-between items-center text-sm mb-2">
-                                <span className="text-slate-500">Total: {formatCurrency(vendor.totalAmount, currencySymbol)}</span>
-                                <span className="font-bold text-emerald-600 dark:text-emerald-400">Paid: {formatCurrency(vendor.paidAmount, currencySymbol)}</span>
-                            </div>
-
-                            <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mb-3">
-                                <div 
-                                    className="h-full bg-emerald-500 rounded-full transition-all"
-                                    style={{width: `${vendor.totalAmount > 0 ? (vendor.paidAmount / vendor.totalAmount) * 100 : 0}%`}}
-                                ></div>
-                            </div>
-
-                            {vendor.status !== 'paid' && (
-                                <div className="flex gap-2">
+                            {/* Payment History & Actions */}
+                            {remaining > 0 && (
+                                <div className="flex gap-2 items-center mb-3">
+                                    <input 
+                                        type="number" 
+                                        placeholder="Amount" 
+                                        className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs w-24 outline-none"
+                                        value={customAmount}
+                                        onChange={(e) => setCustomAmounts({...customAmounts, [vendor.id]: e.target.value})}
+                                    />
                                     <button 
-                                        onClick={() => handleUpdatePayment(vendor.id, vendor.totalAmount - vendor.paidAmount)}
-                                        className="flex-1 py-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 font-bold text-xs rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+                                        onClick={() => {
+                                            const val = parseFloat(customAmount);
+                                            if(val > 0) {
+                                                handleUpdatePayment(vendor.id, val);
+                                                setCustomAmounts({...customAmounts, [vendor.id]: ''});
+                                            }
+                                        }}
+                                        className="bg-indigo-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors"
                                     >
-                                        Mark Paid
-                                    </button>
-                                    <button 
-                                        onClick={() => handleUpdatePayment(vendor.id, (vendor.totalAmount - vendor.paidAmount) / 2)}
-                                        className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-lg"
-                                    >
-                                        Pay Half
+                                        Pay
                                     </button>
                                 </div>
                             )}
-                            
-                            {vendor.dueDate && (
-                                <div className="mt-2 text-[10px] text-orange-500 font-bold flex items-center gap-1">
-                                    <AlertCircle size={10} /> Due: {vendor.dueDate}
+
+                            {vendor.paymentHistory && vendor.paymentHistory.length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">History</div>
+                                    <div className="space-y-1">
+                                        {vendor.paymentHistory.map((ph: any) => (
+                                            <div key={ph.id} className="flex justify-between text-xs">
+                                                <span className="text-slate-600 dark:text-slate-300">{ph.date} - {ph.name}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-emerald-600 dark:text-emerald-400">+{formatCurrency(ph.amount, currencySymbol)}</span>
+                                                    <button onClick={() => handleRemovePayment(vendor.id, ph.id, ph.amount, ph.name === "Advance Payment")} className="text-slate-300 hover:text-red-500"><X size={12}/></button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
                         </Card>
                     </div>
-                ))}
-                {event.vendors.length === 0 && (
-                    <div className="text-center py-8 text-slate-400">
-                        <ShoppingBag size={32} className="mx-auto mb-2 opacity-50" />
-                        <p className="text-xs">No vendors added</p>
-                    </div>
-                )}
+                    );
+                })}
             </div>
-            
-            <AddVendorModal 
+
+            <AddVendorModal
                 isOpen={isAddVendorOpen}
                 onClose={() => setIsAddVendorOpen(false)}
                 onConfirm={handleAddVendor}
                 currencySymbol={currencySymbol}
             />
-
-            <EditVendorModal 
+            <EditVendorModal
                 isOpen={!!editingVendor}
                 onClose={() => setEditingVendor(null)}
                 onConfirm={handleUpdateVendor}
@@ -814,39 +876,26 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
 const EventTeamTab = ({ event, onUpdate }: any) => {
     return (
         <div className="space-y-4 animate-in fade-in slide-in-from-right-2">
-            <Card className="p-4 bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-none">
-                <h3 className="font-bold flex items-center gap-2 mb-2"><Users size={18} /> Team Collaboration</h3>
-                <p className="text-xs opacity-90 mb-4">Invite others to help plan this event. You can split expenses and assign tasks.</p>
-                <button className="w-full py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors">
-                    <Plus size={16} /> Invite Member
-                </button>
-            </Card>
-
-            <div className="space-y-3">
-                {event.members.map((member: any) => (
-                    <Card key={member.id} className="p-3 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-slate-600 dark:text-slate-300">
-                                {member.name.charAt(0)}
-                            </div>
-                            <div>
-                                <h4 className="font-bold text-sm text-slate-900 dark:text-white">{member.name}</h4>
-                                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 uppercase">{member.role}</span>
+            <Card className="p-4">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-bold text-slate-900 dark:text-white">Collaborators</h3>
+                    <button className="text-xs bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded font-bold">Invite</button>
+                </div>
+                <div className="space-y-3">
+                    {event.members.map((member: any) => (
+                        <div key={member.id} className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-slate-600 dark:text-slate-300">
+                                    {member.name.charAt(0)}
+                                </div>
+                                <div>
+                                    <div className="text-sm font-bold text-slate-900 dark:text-white">{member.name}</div>
+                                    <div className="text-xs text-slate-500 capitalize">{member.role}</div>
+                                </div>
                             </div>
                         </div>
-                        {member.role !== 'admin' && (
-                             <button className="text-xs text-red-500 font-bold hover:underline">Remove</button>
-                        )}
-                    </Card>
-                ))}
-            </div>
-            
-            <Card className="p-4 mt-4">
-                <h3 className="font-bold text-sm text-slate-900 dark:text-white mb-2">Expense Splitter</h3>
-                <p className="text-xs text-slate-500 mb-4">Automatically calculate who owes what based on expenses paid by team members.</p>
-                <button className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold">
-                    Calculate Splits
-                </button>
+                    ))}
+                </div>
             </Card>
         </div>
     );
@@ -854,11 +903,11 @@ const EventTeamTab = ({ event, onUpdate }: any) => {
 
 const EventAITab = ({ event }: any) => {
     const [query, setQuery] = useState('');
-    const [response, setResponse] = useState<string | null>(null);
+    const [response, setResponse] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleAskAI = async () => {
-        if(!query) return;
+        if (!query.trim()) return;
         setLoading(true);
         const res = await analyzeEventWithAI(event, query);
         setResponse(res);
@@ -866,494 +915,308 @@ const EventAITab = ({ event }: any) => {
     };
 
     return (
-        <div className="space-y-4 animate-in fade-in slide-in-from-right-2 h-full flex flex-col">
-            <Card className="p-4 bg-gradient-to-br from-fuchsia-600 to-purple-600 text-white border-none shrink-0">
-                <div className="flex items-start gap-3">
-                    <Sparkles className="shrink-0 mt-1 text-yellow-300" />
-                    <div>
-                        <h3 className="font-bold text-lg">AI Event Planner</h3>
-                        <p className="text-xs opacity-90">Ask me about budget allocation, vendor suggestions, or cost cutting tips.</p>
-                    </div>
-                </div>
-            </Card>
-
-            <div className="flex-1 overflow-y-auto min-h-[150px] space-y-4">
-                 {response && (
-                     <div className="flex gap-3">
-                         <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
-                             <Sparkles size={16} className="text-indigo-600" />
-                         </div>
-                         <Card className="p-3 bg-white dark:bg-slate-800 border border-indigo-100 dark:border-indigo-500/20 rounded-tl-none">
-                             <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{response}</p>
-                         </Card>
-                     </div>
-                 )}
-                 {!response && !loading && (
-                     <div className="text-center py-10 text-slate-400 text-xs">
-                         <p>Try asking:</p>
-                         <p className="mt-2">"Create a budget breakdown for a {event.totalBudget} {event.type}"</p>
-                         <p className="mt-1">"What vendors do I need?"</p>
-                     </div>
-                 )}
-                 {loading && (
-                     <div className="flex gap-2 justify-center py-8">
-                         <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"></span>
-                         <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce delay-100"></span>
-                         <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce delay-200"></span>
-                     </div>
-                 )}
-            </div>
-
-            <div className="shrink-0 mt-auto pt-2">
-                <div className="relative">
+        <div className="space-y-4 animate-in fade-in slide-in-from-right-2">
+            <Card className="p-4">
+                <h3 className="font-bold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
+                    <Bot className="text-indigo-500" size={18} /> Event Assistant
+                </h3>
+                <p className="text-xs text-slate-500 mb-4">Ask for vendor suggestions, budget breakdowns, or timeline advice.</p>
+                
+                <div className="flex gap-2 mb-4">
                     <input 
-                        type="text" 
+                        className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm outline-none"
+                        placeholder="e.g. Suggest a timeline for the day..."
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Ask your AI planner..."
-                        className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-3 pl-4 pr-12 text-sm outline-none focus:border-indigo-500 transition-colors"
                         onKeyDown={(e) => e.key === 'Enter' && handleAskAI()}
                     />
                     <button 
                         onClick={handleAskAI}
-                        disabled={loading || !query}
-                        className="absolute right-2 top-2 p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                        disabled={loading}
+                        className="bg-indigo-600 text-white p-3 rounded-xl disabled:opacity-50"
                     >
-                        <Send size={16} />
+                        {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <Send size={18} />}
                     </button>
                 </div>
-            </div>
+
+                {response && (
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl text-sm leading-relaxed whitespace-pre-wrap animate-in fade-in">
+                        {response}
+                    </div>
+                )}
+            </Card>
         </div>
     );
 };
 
 // --- Modals ---
 
-const EventNotificationPopup = ({ notifications, onClose, onSelectNotification }: { notifications: EventNotification[], onClose: () => void, onSelectNotification: (notif: EventNotification) => void }) => {
-    return (
-        <>
-            <div 
-                className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[1px]" 
-                onClick={onClose}
-            ></div>
-            <div className="absolute top-[4.5rem] right-4 z-50 w-72 animate-in zoom-in-95 slide-in-from-top-2 duration-200">
-                <Card className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200 dark:border-white/10 shadow-2xl p-0 overflow-hidden ring-1 ring-black/5">
-                    {/* Header */}
-                    <div className="flex items-center justify-between p-3 border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/5">
-                        <h3 className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                            <Briefcase size={14} className="text-indigo-500" /> 
-                            Event Alerts
-                            {notifications.length > 0 && <span className="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full">{notifications.length}</span>}
-                        </h3>
-                        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors">
-                            <X size={14} />
-                        </button>
-                    </div>
-                    
-                    {/* Content */}
-                    <div className="max-h-64 overflow-y-auto p-2 space-y-1">
-                        {notifications.length > 0 ? (
-                            notifications.map((notif) => (
-                                <div 
-                                    key={notif.id} 
-                                    className="relative group flex flex-col gap-1 p-2 rounded-lg bg-slate-50 dark:bg-black/20 hover:bg-slate-100 dark:hover:bg-white/5 border border-transparent hover:border-slate-200 dark:hover:border-white/5 transition-all cursor-pointer"
-                                    onClick={() => onSelectNotification(notif)}
-                                >
-                                    <div className="flex items-start gap-2">
-                                        <div className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                                            notif.type === 'danger' ? 'bg-red-500' : 
-                                            notif.type === 'warning' ? 'bg-orange-500' : 
-                                            'bg-blue-500'
-                                        }`}></div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-[10px] font-bold text-slate-500 mb-0.5">{notif.eventName}</p>
-                                            <p className={`text-xs font-medium leading-snug ${
-                                                notif.type === 'danger' ? 'text-red-600 dark:text-red-400' : 
-                                                'text-slate-700 dark:text-slate-200'
-                                            }`}>
-                                                {notif.message}
-                                            </p>
-                                            {notif.date && <p className="text-[9px] text-slate-400 mt-0.5">{notif.date}</p>}
-                                        </div>
-                                    </div>
-                                </div>
-                            ))
-                        ) : (
-                            <div className="py-8 text-center">
-                                <Bell size={20} className="mx-auto text-slate-300 dark:text-slate-600 mb-2 opacity-50" />
-                                <p className="text-[10px] text-slate-400">No event alerts!</p>
-                            </div>
-                        )}
-                    </div>
-                </Card>
-            </div>
-        </>
-    );
-};
-
 const CreateEventModal = ({ isOpen, onClose, onConfirm, currencySymbol }: any) => {
-    const [name, setName] = useState('');
-    const [type, setType] = useState('General');
-    const [budget, setBudget] = useState('');
-    const [date, setDate] = useState('');
-    const [location, setLocation] = useState('');
-
-    if(!isOpen) return null;
-
-    const handleSubmit = () => {
-        const totalBudget = parseFloat(budget) || 0;
-        
-        let categories: EventCategory[] = [];
-        if (type === 'Wedding') {
-            categories = [
-                { id: generateId(), name: 'Venue', allocated: totalBudget * 0.4, color: '#ec4899' },
-                { id: generateId(), name: 'Catering', allocated: totalBudget * 0.3, color: '#f59e0b' },
-                { id: generateId(), name: 'Attire', allocated: totalBudget * 0.1, color: '#8b5cf6' },
-                { id: generateId(), name: 'Misc', allocated: totalBudget * 0.2, color: '#64748b' },
-            ];
-        } else {
-             categories = [
-                { id: generateId(), name: 'General', allocated: totalBudget, color: '#6366f1' },
-            ];
-        }
-
-        const newEvent: EventData = {
-            id: generateId(),
-            name, type, date, location, 
-            totalBudget, currencySymbol,
-            categories,
-            expenses: [], vendors: [], 
-            members: [{ id: 'me', name: 'You', role: 'admin' }],
-            notes: '', created: Date.now(),
-            theme: type === 'Wedding' ? 'pastel' : 'colorful'
-        };
-        onConfirm(newEvent);
-    };
-
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Plan New Event</h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={20}/></button>
-                </div>
-                <div className="space-y-3">
-                    <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Event Name" value={name} onChange={e => setName(e.target.value)} />
-                    <select className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={type} onChange={e => setType(e.target.value)}>
-                        <option>General</option>
-                        <option>Wedding</option>
-                        <option>Birthday</option>
-                        <option>Trip</option>
-                        <option>Corporate</option>
-                    </select>
-                    <div className="relative">
-                        <span className="absolute left-3 top-3 text-slate-500">{currencySymbol}</span>
-                        <input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 pl-8 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Total Budget" value={budget} onChange={e => setBudget(e.target.value)} />
-                    </div>
-                    <input type="date" className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={date} onChange={e => setDate(e.target.value)} />
-                    <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Location" value={location} onChange={e => setLocation(e.target.value)} />
-                    
-                    <button onClick={handleSubmit} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Start Planning</button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const EditEventModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol }: any) => {
-    const [name, setName] = useState(initialData.name);
-    const [type, setType] = useState(initialData.type);
-    const [budget, setBudget] = useState(initialData.totalBudget.toString());
-    const [date, setDate] = useState(initialData.date);
-    const [location, setLocation] = useState(initialData.location);
-
-    useEffect(() => {
-        if (isOpen) {
-            setName(initialData.name);
-            setType(initialData.type);
-            setBudget(initialData.totalBudget.toString());
-            setDate(initialData.date);
-            setLocation(initialData.location);
-        }
-    }, [isOpen, initialData]);
+    const [data, setData] = useState({ name: '', type: 'Wedding', date: '', location: '', totalBudget: '' });
 
     if (!isOpen) return null;
 
     const handleSubmit = () => {
+        if (!data.name || !data.date) return;
         onConfirm({
-            name, type, 
-            totalBudget: parseFloat(budget) || 0,
-            date, location
+            id: generateId(),
+            ...data,
+            totalBudget: parseFloat(data.totalBudget) || 0,
+            currencySymbol,
+            categories: [],
+            expenses: [],
+            vendors: [],
+            members: [{ id: 'me', name: 'You', role: 'admin' }],
+            created: Date.now(),
+            theme: 'colorful'
         });
     };
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Edit Event Details</h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={20}/></button>
-                </div>
+            <div className="relative bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+                <h3 className="text-lg font-bold text-white mb-4">New Event</h3>
                 <div className="space-y-3">
-                    <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Event Name" value={name} onChange={e => setName(e.target.value)} />
-                    <select className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={type} onChange={e => setType(e.target.value)}>
-                        <option>General</option>
-                        <option>Wedding</option>
-                        <option>Birthday</option>
-                        <option>Trip</option>
-                        <option>Corporate</option>
+                    <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white outline-none" placeholder="Event Name" value={data.name} onChange={e => setData({...data, name: e.target.value})} />
+                    <select className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white outline-none" value={data.type} onChange={e => setData({...data, type: e.target.value})}>
+                        <option value="Wedding">Wedding</option>
+                        <option value="Birthday">Birthday</option>
+                        <option value="Trip">Trip</option>
+                        <option value="Party">Party</option>
+                        <option value="Corporate">Corporate</option>
                     </select>
+                    <input type="date" className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white outline-none" value={data.date} onChange={e => setData({...data, date: e.target.value})} style={{colorScheme: 'dark'}} />
+                    <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white outline-none" placeholder="Location" value={data.location} onChange={e => setData({...data, location: e.target.value})} />
                     <div className="relative">
                         <span className="absolute left-3 top-3 text-slate-500">{currencySymbol}</span>
-                        <input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 pl-8 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Total Budget" value={budget} onChange={e => setBudget(e.target.value)} />
+                        <input type="number" className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 pl-8 text-white outline-none" placeholder="Total Budget" value={data.totalBudget} onChange={e => setData({...data, totalBudget: e.target.value})} />
                     </div>
-                    <input type="date" className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={date} onChange={e => setDate(e.target.value)} />
-                    <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Location" value={location} onChange={e => setLocation(e.target.value)} />
-                    
-                    <button onClick={handleSubmit} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Save Changes</button>
+                    <button onClick={handleSubmit} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Create Plan</button>
                 </div>
+                <button onClick={onClose} className="absolute top-4 right-4 text-slate-400"><X size={20}/></button>
+            </div>
+        </div>
+    );
+};
+
+const EditEventModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol }: any) => {
+    const [data, setData] = useState(initialData);
+    
+    useEffect(() => { setData(initialData); }, [initialData, isOpen]);
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+                <h3 className="text-lg font-bold text-white mb-4">Edit Event Details</h3>
+                <div className="space-y-3">
+                    <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white outline-none" placeholder="Event Name" value={data.name} onChange={e => setData({...data, name: e.target.value})} />
+                    <input type="date" className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white outline-none" value={data.date} onChange={e => setData({...data, date: e.target.value})} style={{colorScheme: 'dark'}} />
+                    <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white outline-none" placeholder="Location" value={data.location} onChange={e => setData({...data, location: e.target.value})} />
+                    <div className="relative">
+                        <span className="absolute left-3 top-3 text-slate-500">{currencySymbol}</span>
+                        <input type="number" className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 pl-8 text-white outline-none" placeholder="Total Budget" value={data.totalBudget} onChange={e => setData({...data, totalBudget: parseFloat(e.target.value) || 0})} />
+                    </div>
+                    <button onClick={() => onConfirm(data)} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Save Changes</button>
+                </div>
+                <button onClick={onClose} className="absolute top-4 right-4 text-slate-400"><X size={20}/></button>
             </div>
         </div>
     );
 };
 
 const AddEventExpenseModal = ({ isOpen, onClose, onConfirm, categories, currencySymbol }: any) => {
-    const [name, setName] = useState('');
-    const [amount, setAmount] = useState('');
-    const [category, setCategory] = useState(categories[0]?.name || '');
+    const [data, setData] = useState({ name: '', amount: '', category: categories[0]?.name || '' });
 
     useEffect(() => {
-        if(isOpen) {
-            setName('');
-            setAmount('');
-            setCategory(categories[0]?.name || '');
-        }
+        if(isOpen) setData({ name: '', amount: '', category: categories[0]?.name || '' });
     }, [isOpen, categories]);
 
-    if(!isOpen) return null;
+    if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Add Expense</h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={20}/></button>
-                </div>
+            <div className="relative bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+                <h3 className="text-lg font-bold text-white mb-4">Add Expense</h3>
                 <div className="space-y-3">
-                    <button className="w-full py-2 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl text-slate-500 text-xs font-bold flex items-center justify-center gap-2 mb-2">
-                        <Camera size={16} /> Scan Receipt (Simulated)
-                    </button>
-                    <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Description" value={name} onChange={e => setName(e.target.value)} />
+                    <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white outline-none" placeholder="Expense Name" value={data.name} onChange={e => setData({...data, name: e.target.value})} />
                     <div className="relative">
                         <span className="absolute left-3 top-3 text-slate-500">{currencySymbol}</span>
-                        <input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 pl-8 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Amount" value={amount} onChange={e => setAmount(e.target.value)} />
+                        <input type="number" className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 pl-8 text-white outline-none" placeholder="Amount" value={data.amount} onChange={e => setData({...data, amount: e.target.value})} />
                     </div>
-                    <select className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={category} onChange={e => setCategory(e.target.value)}>
+                    <select className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white outline-none" value={data.category} onChange={e => setData({...data, category: e.target.value})}>
                         {categories.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
                     </select>
-                    <button onClick={() => onConfirm({ name, amount: parseFloat(amount), category })} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Save</button>
+                    <button onClick={() => onConfirm({...data, amount: parseFloat(data.amount) || 0})} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Add Expense</button>
                 </div>
+                <button onClick={onClose} className="absolute top-4 right-4 text-slate-400"><X size={20}/></button>
             </div>
         </div>
     );
 };
 
 const AddCategoryModal = ({ isOpen, onClose, onConfirm, currencySymbol }: any) => {
-    const [name, setName] = useState('');
-    const [allocated, setAllocated] = useState('');
+    const [data, setData] = useState({ name: '', allocated: '' });
 
-    useEffect(() => {
-        if(isOpen) { setName(''); setAllocated(''); }
-    }, [isOpen]);
-
-    if(!isOpen) return null;
+    if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">New Category</h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={20}/></button>
-                </div>
+            <div className="relative bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+                <h3 className="text-lg font-bold text-white mb-4">New Category</h3>
                 <div className="space-y-3">
-                    <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Category Name" value={name} onChange={e => setName(e.target.value)} />
+                    <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white outline-none" placeholder="Category Name" value={data.name} onChange={e => setData({...data, name: e.target.value})} />
                     <div className="relative">
                         <span className="absolute left-3 top-3 text-slate-500">{currencySymbol}</span>
-                        <input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 pl-8 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Allocated Budget" value={allocated} onChange={e => setAllocated(e.target.value)} />
+                        <input type="number" className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 pl-8 text-white outline-none" placeholder="Allocated Budget" value={data.allocated} onChange={e => setData({...data, allocated: e.target.value})} />
                     </div>
-                    <button onClick={() => onConfirm({ name, allocated: parseFloat(allocated) || 0 })} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Create Category</button>
+                    <button onClick={() => onConfirm({...data, allocated: parseFloat(data.allocated) || 0})} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Create Category</button>
                 </div>
-            </div>
-        </div>
-    );
-};
-
-const EditExpenseModal = ({ isOpen, onClose, onConfirm, onDelete, expense, categories, currencySymbol }: any) => {
-    const [name, setName] = useState('');
-    const [amount, setAmount] = useState('');
-    const [category, setCategory] = useState('');
-
-    useEffect(() => {
-        if (isOpen && expense) {
-            setName(expense.name);
-            setAmount(expense.amount.toString());
-            setCategory(expense.category);
-        }
-    }, [isOpen, expense]);
-
-    if (!isOpen || !expense) return null;
-
-    const handleSubmit = () => {
-        onConfirm({ ...expense, name, amount: parseFloat(amount) || 0, category });
-    };
-
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Edit Expense</h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={20}/></button>
-                </div>
-                <div className="space-y-3">
-                    <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Description" value={name} onChange={e => setName(e.target.value)} />
-                    <div className="relative">
-                        <span className="absolute left-3 top-3 text-slate-500">{currencySymbol}</span>
-                        <input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 pl-8 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Amount" value={amount} onChange={e => setAmount(e.target.value)} />
-                    </div>
-                    <select className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={category} onChange={e => setCategory(e.target.value)}>
-                        {categories.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
-                    </select>
-                    
-                    <div className="flex gap-2 mt-2">
-                        <button onClick={() => onDelete(expense.id)} className="flex-1 py-3 bg-red-500/10 text-red-600 dark:text-red-400 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-red-500/20"><Trash2 size={16}/> Delete</button>
-                        <button onClick={handleSubmit} className="flex-[2] py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700">Update</button>
-                    </div>
-                </div>
+                <button onClick={onClose} className="absolute top-4 right-4 text-slate-400"><X size={20}/></button>
             </div>
         </div>
     );
 };
 
 const EditCategoryModal = ({ isOpen, onClose, onConfirm, category, currencySymbol }: any) => {
-    const [name, setName] = useState('');
-    const [allocated, setAllocated] = useState('');
-
-    useEffect(() => {
-        if (isOpen && category) {
-            setName(category.name);
-            setAllocated(category.allocated.toString());
-        }
-    }, [isOpen, category]);
-
-    if (!isOpen || !category) return null;
+    const [data, setData] = useState(category);
+    useEffect(() => { setData(category); }, [category, isOpen]);
+    if (!isOpen || !data) return null;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <div className="relative bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+                <h3 className="text-lg font-bold text-white mb-4">Edit Category</h3>
+                <div className="space-y-3">
+                    <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white outline-none" placeholder="Category Name" value={data.name} onChange={e => setData({...data, name: e.target.value})} />
+                    <div className="relative">
+                        <span className="absolute left-3 top-3 text-slate-500">{currencySymbol}</span>
+                        <input type="number" className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 pl-8 text-white outline-none" placeholder="Allocated Budget" value={data.allocated} onChange={e => setData({...data, allocated: parseFloat(e.target.value) || 0})} />
+                    </div>
+                    <button onClick={() => onConfirm(data)} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Save Changes</button>
+                </div>
+                <button onClick={onClose} className="absolute top-4 right-4 text-slate-400"><X size={20}/></button>
+            </div>
+        </div>
+    );
+};
+
+const EditExpenseModal = ({ isOpen, onClose, onConfirm, onDelete, expense, categories, currencySymbol }: any) => {
+    const [data, setData] = useState(expense);
+    useEffect(() => { setData(expense); }, [expense, isOpen]);
+    if (!isOpen || !data) return null;
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Edit Category</h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={20}/></button>
+                    <h3 className="text-lg font-bold text-white">Edit Expense</h3>
+                    <button onClick={() => onDelete(expense.id)} className="text-red-500 hover:text-red-400"><Trash2 size={20}/></button>
                 </div>
                 <div className="space-y-3">
-                    <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Category Name" value={name} onChange={e => setName(e.target.value)} />
+                    <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white outline-none" placeholder="Name" value={data.name} onChange={e => setData({...data, name: e.target.value})} />
                     <div className="relative">
-                         <span className="absolute left-3 top-3 text-slate-500">{currencySymbol}</span>
-                        <input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 pl-8 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Allocated Amount" value={allocated} onChange={e => setAllocated(e.target.value)} />
+                        <span className="absolute left-3 top-3 text-slate-500">{currencySymbol}</span>
+                        <input type="number" className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 pl-8 text-white outline-none" placeholder="Amount" value={data.amount} onChange={e => setData({...data, amount: parseFloat(e.target.value) || 0})} />
                     </div>
-                    <button onClick={() => onConfirm({ ...category, name, allocated: parseFloat(allocated) || 0 })} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Update Category</button>
+                    <select className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white outline-none" value={data.category} onChange={e => setData({...data, category: e.target.value})}>
+                        {categories.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
+                    <button onClick={() => onConfirm(data)} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Update</button>
                 </div>
+                <button onClick={onClose} className="absolute top-4 right-4 text-slate-400"><X size={20}/></button>
             </div>
         </div>
     );
 };
 
 const AddVendorModal = ({ isOpen, onClose, onConfirm, currencySymbol }: any) => {
-    const [name, setName] = useState('');
-    const [service, setService] = useState('');
-    const [total, setTotal] = useState('');
-    const [dueDate, setDueDate] = useState('');
-
-    useEffect(() => {
-        if(isOpen) {
-            setName(''); setService(''); setTotal(''); setDueDate('');
-        }
-    }, [isOpen]);
+    const [data, setData] = useState({ name: '', service: '', totalAmount: '', advance: '' });
 
     if(!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Add Vendor</h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={20}/></button>
-                </div>
+            <div className="relative bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+                <h3 className="text-lg font-bold text-white mb-4">Add Vendor</h3>
                 <div className="space-y-3">
-                    <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Vendor Name" value={name} onChange={e => setName(e.target.value)} />
-                    <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Service (e.g. Catering)" value={service} onChange={e => setService(e.target.value)} />
+                    <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white outline-none" placeholder="Vendor Name" value={data.name} onChange={e => setData({...data, name: e.target.value})} />
+                    <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white outline-none" placeholder="Service (e.g. Catering)" value={data.service} onChange={e => setData({...data, service: e.target.value})} />
                     <div className="relative">
                         <span className="absolute left-3 top-3 text-slate-500">{currencySymbol}</span>
-                        <input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 pl-8 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Total Cost" value={total} onChange={e => setTotal(e.target.value)} />
+                        <input type="number" className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 pl-8 text-white outline-none" placeholder="Total Cost" value={data.totalAmount} onChange={e => setData({...data, totalAmount: e.target.value})} />
                     </div>
-                    <input type="date" className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                    <button onClick={() => onConfirm({ name, service, totalAmount: parseFloat(total), dueDate })} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Add Vendor</button>
+                    <div className="relative">
+                        <span className="absolute left-3 top-3 text-slate-500">{currencySymbol}</span>
+                        <input type="number" className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 pl-8 text-white outline-none" placeholder="Advance Paid (Optional)" value={data.advance} onChange={e => setData({...data, advance: e.target.value})} />
+                    </div>
+                    <button onClick={() => onConfirm({...data, totalAmount: parseFloat(data.totalAmount)||0, advance: parseFloat(data.advance)||0})} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Add Vendor</button>
                 </div>
+                <button onClick={onClose} className="absolute top-4 right-4 text-slate-400"><X size={20}/></button>
             </div>
         </div>
     );
 };
 
 const EditVendorModal = ({ isOpen, onClose, onConfirm, onDelete, vendor, currencySymbol }: any) => {
-    const [name, setName] = useState('');
-    const [service, setService] = useState('');
-    const [total, setTotal] = useState('');
-    const [dueDate, setDueDate] = useState('');
-
-    useEffect(() => {
-        if (isOpen && vendor) {
-            setName(vendor.name);
-            setService(vendor.service);
-            setTotal(vendor.totalAmount.toString());
-            setDueDate(vendor.dueDate || '');
-        }
-    }, [isOpen, vendor]);
-
-    if (!isOpen || !vendor) return null;
-
-    const handleSubmit = () => {
-        onConfirm({ ...vendor, name, service, totalAmount: parseFloat(total) || 0, dueDate });
-    };
+    const [data, setData] = useState(vendor);
+    useEffect(() => { setData(vendor); }, [vendor, isOpen]);
+    if(!isOpen || !data) return null;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <div className="relative bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Edit Vendor</h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={20}/></button>
+                    <h3 className="text-lg font-bold text-white">Edit Vendor</h3>
+                    <button onClick={() => onDelete(vendor.id)} className="text-red-500 hover:text-red-400"><Trash2 size={20}/></button>
                 </div>
                 <div className="space-y-3">
-                    <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Vendor Name" value={name} onChange={e => setName(e.target.value)} />
-                    <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Service" value={service} onChange={e => setService(e.target.value)} />
+                    <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white outline-none" placeholder="Vendor Name" value={data.name} onChange={e => setData({...data, name: e.target.value})} />
+                    <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white outline-none" placeholder="Service" value={data.service} onChange={e => setData({...data, service: e.target.value})} />
                     <div className="relative">
                         <span className="absolute left-3 top-3 text-slate-500">{currencySymbol}</span>
-                        <input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 pl-8 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Total Cost" value={total} onChange={e => setTotal(e.target.value)} />
+                        <input type="number" className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 pl-8 text-white outline-none" placeholder="Total Cost" value={data.totalAmount} onChange={e => setData({...data, totalAmount: parseFloat(e.target.value)||0})} />
                     </div>
-                    <input type="date" className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                    
-                    <div className="flex gap-2 mt-2">
-                        <button onClick={() => onDelete(vendor.id)} className="flex-1 py-3 bg-red-500/10 text-red-600 dark:text-red-400 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-red-500/20"><Trash2 size={16}/> Delete</button>
-                        <button onClick={handleSubmit} className="flex-[2] py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700">Update</button>
-                    </div>
+                    <button onClick={() => onConfirm(data)} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Update Vendor</button>
                 </div>
+                <button onClick={onClose} className="absolute top-4 right-4 text-slate-400"><X size={20}/></button>
             </div>
         </div>
+    );
+};
+
+const EventNotificationPopup = ({ notifications, onClose, onSelectNotification }: any) => {
+    return (
+        <>
+            <div className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[1px]" onClick={onClose}></div>
+            <div className="absolute top-[4.5rem] right-4 z-50 w-72 animate-in zoom-in-95 slide-in-from-top-2 duration-200">
+                <Card className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200 dark:border-white/10 shadow-2xl p-0 overflow-hidden ring-1 ring-black/5">
+                    <div className="flex items-center justify-between p-3 border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/5">
+                        <h3 className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                            <AlertCircle size={14} className="text-indigo-500" /> Event Alerts
+                        </h3>
+                        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-white"><X size={14}/></button>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto p-2 space-y-1">
+                        {notifications.length > 0 ? notifications.map((n: any) => (
+                            <button key={n.id} onClick={() => onSelectNotification(n)} className="w-full text-left p-2 rounded-lg bg-slate-50 dark:bg-black/20 hover:bg-slate-100 dark:hover:bg-white/5 border border-transparent hover:border-slate-200 dark:hover:border-white/5 transition-all">
+                                <p className="text-xs font-bold text-slate-900 dark:text-white">{n.eventName}</p>
+                                <p className="text-xs text-slate-600 dark:text-slate-300">{n.message}</p>
+                            </button>
+                        )) : (
+                            <div className="py-8 text-center text-xs text-slate-400">No active alerts</div>
+                        )}
+                    </div>
+                </Card>
+            </div>
+        </>
     );
 };

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { BudgetData } from '../types';
 import { formatCurrency, generateId } from '../utils/calculations';
@@ -11,6 +10,7 @@ import { Card } from '../components/ui/Card';
 import { Checkbox } from '../components/ui/Checkbox';
 import { GoalActionModal } from '../components/ui/GoalActionModal';
 import { AddItemModal } from '../components/ui/AddItemModal';
+import { HeaderProfile } from '../components/ui/HeaderProfile';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -46,6 +46,7 @@ interface BudgetViewProps {
   canRedo: boolean;
   focusTarget?: { section: string, itemId: string } | null;
   clearFocusTarget?: () => void;
+  onProfileClick: () => void;
 }
 
 export const BudgetView: React.FC<BudgetViewProps> = ({ 
@@ -58,7 +59,8 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
   canUndo,
   canRedo,
   focusTarget,
-  clearFocusTarget
+  clearFocusTarget,
+  onProfileClick
 }) => {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [expandedInvestmentId, setExpandedInvestmentId] = useState<string | null>(null);
@@ -346,6 +348,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                         <Bell size={20} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" />
                     )}
                 </button>
+                <HeaderProfile onClick={onProfileClick} />
             </div>
         </div>
       </div>
