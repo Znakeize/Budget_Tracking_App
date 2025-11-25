@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>BudgetFlow Mobile</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+          }
+        }
+      }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #f8fafc; /* slate-50 */
+        overscroll-behavior-y: none; /* Prevent pull-to-refresh on mobile */
+      }
+      .dark body {
+        background-color: #0f172a; /* slate-900 */
+      }
+      /* Custom scrollbar for webkit */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.5); /* slate-400 */
+        border-radius: 3px;
+      }
+      .dark ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+      }
+      .glass-panel {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.5);
+      }
+      .dark .glass-panel {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .hide-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .hide-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+
+      /* Custom Animated Checkbox */
+      .custom-cb-wrapper {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .custom-cb-input {
+        display: none;
+      }
+      .custom-cb-label {
+        cursor: pointer;
+        position: relative;
+        width: 18px;
+        height: 18px;
+        -webkit-tap-highlight-color: transparent;
+        transform: translate3d(0, 0, 0);
+        display: block;
+      }
+      .custom-cb-label:before {
+        content: "";
+        position: absolute;
+        top: -15px;
+        left: -15px;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: rgba(34, 50, 84, 0.03);
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+      .dark .custom-cb-label:before {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .custom-cb-label svg {
+        position: relative;
+        z-index: 1;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke: #c8ccd4;
+        stroke-width: 1.5;
+        transform: translate3d(0, 0, 0);
+        transition: all 0.2s ease;
+        width: 18px;
+        height: 18px;
+      }
+      .dark .custom-cb-label svg {
+        stroke: #64748b;
+      }
+      .custom-cb-label svg path {
+        stroke-dasharray: 60;
+        stroke-dashoffset: 0;
+      }
+      .custom-cb-label svg polyline {
+        stroke-dasharray: 22;
+        stroke-dashoffset: 66;
+      }
+      .custom-cb-label:hover:before {
+        opacity: 1;
+      }
+      .custom-cb-label:hover svg {
+        stroke: #10b981;
+      }
+      .custom-cb-input:checked + .custom-cb-label svg {
+        stroke: #10b981;
+      }
+      .custom-cb-input:checked + .custom-cb-label svg path {
+        stroke-dashoffset: 60;
+        transition: all 0.3s linear;
+      }
+      .custom-cb-input:checked + .custom-cb-label svg polyline {
+        stroke-dashoffset: 42;
+        transition: all 0.2s linear;
+        transition-delay: 0.15s;
+      }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "chart.js": "https://aistudiocdn.com/chart.js@^4.5.1",
+    "jspdf": "https://aistudiocdn.com/jspdf@^3.0.4",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "xlsx": "https://aistudiocdn.com/xlsx@^0.18.5",
+    "vite": "https://aistudiocdn.com/vite@^7.2.4",
+    "react-chartjs-2": "https://aistudiocdn.com/react-chartjs-2@^5.3.1"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
