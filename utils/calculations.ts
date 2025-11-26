@@ -72,7 +72,7 @@ export interface NotificationItem {
   type: 'danger' | 'warning' | 'info' | 'success';
   message: string;
   date: string;
-  category: 'Bill' | 'Debt' | 'Budget' | 'Savings';
+  category: 'Bill' | 'Debt' | 'Budget' | 'Savings' | 'System' | 'Event';
 }
 
 export const getNotifications = (data: BudgetData, history: BudgetData[] = []): NotificationItem[] => {

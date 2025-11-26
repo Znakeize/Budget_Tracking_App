@@ -22,6 +22,9 @@ import { PersonalInfoView } from './views/settings/PersonalInfoView';
 import { EmailPreferencesView } from './views/settings/EmailPreferencesView';
 import { SecurityView } from './views/settings/SecurityView';
 import { CommunityLinksView } from './views/CommunityLinksView';
+import { ProMembershipView } from './views/ProMembershipView';
+import { MembershipManagementView } from './views/MembershipManagementView';
+import { FeatureSubscriptionView } from './views/FeatureSubscriptionView';
 import { BudgetData, PeriodType, EventData } from './types';
 import { INITIAL_DATA, SAMPLE_EVENTS } from './constants';
 import { generateId, calculateTotals, getNotifications, NotificationItem } from './utils/calculations';
@@ -42,7 +45,8 @@ const shiftDate = (dateStr: string, targetMonth: number, targetYear: number) => 
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [user, setUser] = useState<{name: string, email: string, joined: number} | null>(null);
+  const [user, setUser] = useState<{name: string, email: string, joined: number, isPro?: boolean, unlockedFeatures?: string[]} | null>(null);
+  const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
   
   // Budget State
   const [budgetData, setBudgetData] = useState<BudgetData>(INITIAL_DATA);
@@ -55,14 +59,55 @@ const App: React.FC = () => {
   const [undoStack, setUndoStack] = useState<BudgetData[]>([]);
   const [redoStack, setRedoStack] = useState<BudgetData[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  
+  // System Notifications State (Persistent)
+  const [systemNotifications, setSystemNotifications] = useState<NotificationItem[]>([]);
 
-  const notifications = useMemo(() => getNotifications(budgetData, history), [budgetData, history]);
-  const eventNotifications = useMemo(() => getEventNotifications(events, budgetData.currencySymbol), [events, budgetData.currencySymbol]);
-
+  // Deep Linking State
   const [budgetFocusTarget, setBudgetFocusTarget] = useState<{ section: string, itemId: string } | null>(null);
+  const [eventFocus, setEventFocus] = useState<{ id: string, tab?: string } | null>(null);
+
   const [isNewPeriodModalOpen, setIsNewPeriodModalOpen] = useState(false);
   const [calculatedRollover, setCalculatedRollover] = useState(0);
   const [nextPeriodDefaults, setNextPeriodDefaults] = useState({ month: 0, year: 0 });
+
+  // Combine persistent system notifications with calculated budget and event alerts
+  const notifications = useMemo(() => {
+      const budgetAlerts = getNotifications(budgetData, history);
+      const eventAlerts = getEventNotifications(events, budgetData.currencySymbol);
+      const allNotifications = [...systemNotifications, ...budgetAlerts, ...eventAlerts];
+      
+      // Priority sort
+      const priority = { danger: 0, warning: 1, success: 2, info: 3 };
+      return allNotifications.sort((a, b) => {
+          if (a.type !== b.type) return priority[a.type] - priority[b.type];
+          return b.date.localeCompare(a.date); // Newest date first
+      });
+  }, [budgetData, history, systemNotifications, events]);
+
+  const eventNotificationCount = useMemo(() => getEventNotifications(events, budgetData.currencySymbol).length, [events, budgetData.currencySymbol]);
+
+  // Helper to add system notification
+  const addSystemNotification = useCallback((message: string, type: 'success' | 'warning' | 'info' | 'danger') => {
+      const newNotif: NotificationItem = {
+          id: `sys-${Date.now()}`,
+          type,
+          message,
+          date: new Date().toISOString().split('T')[0],
+          category: 'System'
+      };
+      setSystemNotifications(prev => {
+          const updated = [newNotif, ...prev];
+          localStorage.setItem('systemNotifications', JSON.stringify(updated));
+          return updated;
+      });
+  }, []);
+
+  const removeSystemNotification = (id: string) => {
+      const updated = systemNotifications.filter(n => n.id !== id);
+      setSystemNotifications(updated);
+      localStorage.setItem('systemNotifications', JSON.stringify(updated));
+  };
 
   useEffect(() => {
     const savedHistory = localStorage.getItem('budgetHistory');
@@ -70,6 +115,7 @@ const App: React.FC = () => {
     const savedTheme = localStorage.getItem('theme');
     const savedEvents = localStorage.getItem('budgetEvents');
     const savedUser = localStorage.getItem('budget_user_session');
+    const savedSysNotifs = localStorage.getItem('systemNotifications');
 
     if (savedHistory) {
       try {
@@ -96,10 +142,44 @@ const App: React.FC = () => {
         setEvents(SAMPLE_EVENTS);
     }
 
+    if (savedSysNotifs) {
+        try {
+            setSystemNotifications(JSON.parse(savedSysNotifs));
+        } catch (e) { console.error("Failed to parse notifications", e); }
+    }
+
     if (savedUser) {
         try { 
-            setUser(JSON.parse(savedUser)); 
-            // User logged in, stay on dashboard or whatever default
+            const parsedUser = JSON.parse(savedUser);
+            setUser(parsedUser); 
+            
+            // Simulate Payment Reminder check on load
+            if (parsedUser.isPro) {
+                const today = new Date();
+                // Check if near end of month (reminder for 1st) or start of month
+                if (today.getDate() >= 25 || today.getDate() <= 5) {
+                    // Check if we already have a reminder for this month
+                    const reminderId = `renew-${today.getFullYear()}-${today.getMonth()}`;
+                    const existingNotifs = savedSysNotifs ? JSON.parse(savedSysNotifs) : [];
+                    const hasReminder = existingNotifs.some((n: NotificationItem) => n.id === reminderId);
+                    
+                    if (!hasReminder) {
+                        const newNotif: NotificationItem = {
+                            id: reminderId,
+                            type: 'info',
+                            message: "Upcoming subscription renewal on the 1st.",
+                            date: today.toISOString().split('T')[0],
+                            category: 'System'
+                        };
+                        // Use functional update to ensure we don't overwrite if other effect fired
+                        setSystemNotifications(prev => {
+                            const updated = [newNotif, ...prev];
+                            localStorage.setItem('systemNotifications', JSON.stringify(updated));
+                            return updated;
+                        });
+                    }
+                }
+            }
         } catch (e) { 
             console.error("Failed to parse user", e);
             setActiveTab('auth'); // Error parsing user, force re-auth
@@ -145,6 +225,53 @@ const App: React.FC = () => {
   const handleUpdateUser = (updatedUser: any) => {
       setUser(updatedUser);
       localStorage.setItem('budget_user_session', JSON.stringify(updatedUser));
+  };
+
+  const handleUpgradeUser = () => {
+      if (user) {
+          const upgradedUser = { ...user, isPro: true };
+          handleUpdateUser(upgradedUser);
+          addSystemNotification("Welcome to Pro! Premium features unlocked.", "success");
+      }
+  };
+
+  const handleCancelSubscription = () => {
+      if (user) {
+          const downgradedUser = { ...user, isPro: false };
+          handleUpdateUser(downgradedUser);
+          addSystemNotification("Subscription cancelled. You have access until the end of the billing period.", "warning");
+      }
+  };
+
+  const handleUnlockFeature = (featureId: string) => {
+      if (user) {
+          const currentUnlocks = user.unlockedFeatures || [];
+          if (!currentUnlocks.includes(featureId)) {
+              const updatedUser = { 
+                  ...user, 
+                  unlockedFeatures: [...currentUnlocks, featureId] 
+              };
+              handleUpdateUser(updatedUser);
+              addSystemNotification(`${featureId.charAt(0).toUpperCase() + featureId.slice(1)} module unlocked successfully!`, "success");
+          }
+      }
+  };
+
+  const handleViewFeature = (featureId: string) => {
+      setSelectedFeatureId(featureId);
+      setActiveTab('feature-subscription');
+  };
+
+  const handleOpenFeature = (featureId: string) => {
+      const map: Record<string, string> = {
+          'simulator': 'simulator',
+          'analysis': 'analysis',
+          'investments': 'investments',
+          'events': 'events',
+          'social': 'social'
+      };
+      const tab = map[featureId];
+      if (tab) setActiveTab(tab);
   };
 
   // --- Budget Handlers ---
@@ -262,11 +389,32 @@ const App: React.FC = () => {
   const handleReset = () => {
     localStorage.clear();
     setBudgetData(INITIAL_DATA); setHistory([INITIAL_DATA]); setEvents([]);
-    setUndoStack([]); setRedoStack([]); setUser(null);
+    setUndoStack([]); setRedoStack([]); setUser(null); setSystemNotifications([]);
     window.location.reload();
   };
 
   const handleNotificationClick = (notif: NotificationItem) => {
+      if (notif.category === 'System') {
+          removeSystemNotification(notif.id);
+          setActiveTab('membership-management');
+          setShowNotifications(false);
+          return;
+      }
+
+      if (notif.category === 'Event') {
+          const parts = notif.id.split('-');
+          const eventId = parts[1];
+          // Assuming IDs are like Event-{id}-budget-over
+          let initialTab = 'dashboard';
+          if (notif.id.includes('vendor')) initialTab = 'vendors';
+          if (notif.id.includes('budget')) initialTab = 'budget';
+          
+          setEventFocus({ id: eventId, tab: initialTab });
+          setActiveTab('events');
+          setShowNotifications(false);
+          return;
+      }
+
       setActiveTab('budget');
       let section = ''; let itemId = '';
       const parts = notif.id.split('-');
@@ -290,7 +438,7 @@ const App: React.FC = () => {
 
   if (!loaded) return <div className="h-screen bg-slate-900 text-white flex items-center justify-center">Loading...</div>;
 
-  const isMenuSubView = ['history', 'tools', 'settings', 'support', 'legal', 'feedback', 'collaborative', 'community-links', 'profile', 'personal-info', 'email-prefs', 'security'].includes(activeTab);
+  const isMenuSubView = ['history', 'tools', 'settings', 'support', 'legal', 'feedback', 'collaborative', 'community-links', 'profile', 'personal-info', 'email-prefs', 'security', 'pro-membership', 'membership-management', 'feature-subscription'].includes(activeTab);
 
   return (
     <Layout>
@@ -324,8 +472,11 @@ const App: React.FC = () => {
                 onToggleNotifications={() => setShowNotifications(!showNotifications)}
                 onViewAnalysis={() => setActiveTab('analysis')} onViewInvestments={() => setActiveTab('investments')}
                 onViewEvents={() => setActiveTab('events')} onViewSocial={() => setActiveTab('social')}
-                onViewSimulator={() => setActiveTab('simulator')} eventNotificationCount={eventNotifications.length}
+                onViewSimulator={() => setActiveTab('simulator')} eventNotificationCount={eventNotificationCount}
                 onProfileClick={handleProfileClick}
+                user={user}
+                onNavigate={setActiveTab}
+                onViewFeature={handleViewFeature}
             />
         )}
         {activeTab === 'analysis' && (
@@ -354,6 +505,10 @@ const App: React.FC = () => {
             <EventsView 
                 events={events} onUpdateEvents={handleUpdateEvents} currencySymbol={budgetData.currencySymbol}
                 onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick}
+                notificationCount={notifications.length}
+                onToggleNotifications={() => setShowNotifications(!showNotifications)}
+                focusEventId={eventFocus?.id}
+                focusTab={eventFocus?.tab}
             />
         )}
         {activeTab === 'simulator' && (
@@ -376,6 +531,34 @@ const App: React.FC = () => {
                 onNavigate={setActiveTab}
                 notificationCount={notifications.length}
                 onToggleNotifications={() => setShowNotifications(!showNotifications)}
+            />
+        )}
+        {activeTab === 'pro-membership' && (
+            <ProMembershipView 
+                onBack={() => setActiveTab('profile')}
+                onUpgrade={handleUpgradeUser}
+                onUnlockFeature={handleUnlockFeature}
+                onProfileClick={handleProfileClick}
+                user={user}
+                onViewFeature={handleViewFeature}
+            />
+        )}
+        {activeTab === 'membership-management' && (
+            <MembershipManagementView 
+                user={user}
+                onBack={() => setActiveTab('profile')}
+                onCancelSubscription={handleCancelSubscription}
+                onProfileClick={handleProfileClick}
+                onUpdateUser={handleUpdateUser}
+                onNavigate={setActiveTab}
+            />
+        )}
+        {activeTab === 'feature-subscription' && selectedFeatureId && (
+            <FeatureSubscriptionView 
+                featureId={selectedFeatureId}
+                onBack={() => setActiveTab('pro-membership')}
+                onSubscribe={handleUnlockFeature}
+                onOpenFeature={handleOpenFeature}
             />
         )}
         {activeTab === 'personal-info' && (
@@ -424,7 +607,7 @@ const App: React.FC = () => {
             activeTab={isMenuSubView || activeTab === 'menu' ? 'menu' : (['analysis', 'investments', 'social', 'events', 'simulator'].includes(activeTab) ? 'ai' : activeTab)} 
             onTabChange={setActiveTab} 
             onAdd={handleOpenNewPeriodModal} 
-            badgeTabs={eventNotifications.length > 0 ? ['ai'] : []}
+            badgeTabs={eventNotificationCount > 0 ? ['ai'] : []}
           />
       )}
       

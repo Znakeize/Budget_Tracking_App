@@ -4,7 +4,7 @@ import { Card } from '../components/ui/Card';
 import { 
   History, Wrench, CalendarHeart, Settings, 
   LifeBuoy, FileText, MessageSquare, ChevronRight, 
-  Bell, BellRing, UserCircle, Users 
+  Bell, BellRing, UserCircle, Users, Crown 
 } from 'lucide-react';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
 
@@ -18,6 +18,7 @@ interface MenuViewProps {
 interface UserProfile {
   name: string;
   email: string;
+  isPro?: boolean;
 }
 
 export const MenuView: React.FC<MenuViewProps> = ({ onNavigate, notificationCount, onToggleNotifications, onProfileClick }) => {
@@ -83,13 +84,16 @@ export const MenuView: React.FC<MenuViewProps> = ({ onNavigate, notificationCoun
             onClick={() => onNavigate('profile')}
             className="w-full text-left"
         >
-            <Card className="p-4 bg-white dark:bg-slate-800 border-l-4 border-l-indigo-500 hover:shadow-md transition-all active:scale-[0.99]">
+            <Card className={`p-4 bg-white dark:bg-slate-800 border-l-4 ${user?.isPro ? 'border-l-amber-500' : 'border-l-indigo-500'} hover:shadow-md transition-all active:scale-[0.99]`}>
                 <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-md">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-md ${user?.isPro ? 'bg-gradient-to-br from-amber-400 to-orange-600' : 'bg-gradient-to-br from-indigo-500 to-purple-600'}`}>
                         {user ? user.name.charAt(0).toUpperCase() : <UserCircle size={24} />}
                     </div>
                     <div className="flex-1">
-                        <h3 className="font-bold text-slate-900 dark:text-white text-lg">{user ? user.name : 'Guest User'}</h3>
+                        <h3 className="font-bold text-slate-900 dark:text-white text-lg flex items-center gap-2">
+                            {user ? user.name : 'Guest User'}
+                            {user?.isPro && <Crown size={14} className="text-amber-500" fill="currentColor" />}
+                        </h3>
                         <p className="text-xs text-slate-500 dark:text-slate-400">{user ? user.email : 'Sign in to sync data'}</p>
                     </div>
                     <ChevronRight size={20} className="text-slate-300" />
@@ -101,6 +105,25 @@ export const MenuView: React.FC<MenuViewProps> = ({ onNavigate, notificationCoun
         <div>
             <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 ml-1">Features</h3>
             <div className="grid grid-cols-2 gap-3">
+                {/* Pro Membership Link (High Visibility) */}
+                {!user?.isPro && (
+                    <button 
+                        onClick={() => onNavigate('pro-membership')}
+                        className="p-4 bg-gradient-to-br from-slate-900 to-indigo-900 dark:from-slate-800 dark:to-slate-900 rounded-2xl shadow-lg shadow-indigo-900/20 border border-indigo-500/30 hover:border-indigo-500 transition-all active:scale-95 text-left group col-span-2 flex items-center justify-between"
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/10 text-yellow-400">
+                                <Crown size={20} fill="currentColor" />
+                            </div>
+                            <div>
+                                <div className="font-bold text-white">Go Pro</div>
+                                <div className="text-[10px] text-indigo-200">Unlock AI & Premium Features</div>
+                            </div>
+                        </div>
+                        <ChevronRight size={16} className="text-white/50 group-hover:text-white transition-colors" />
+                    </button>
+                )}
+
                 {menuItems.map((item) => (
                     <button 
                         key={item.id}

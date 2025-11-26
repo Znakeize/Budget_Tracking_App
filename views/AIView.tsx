@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { BudgetData } from '../types';
 import { Card } from '../components/ui/Card';
 import { analyzeBudgetWithAI } from '../utils/aiHelper';
-import { Sparkles, Bot, Loader2, Bell, BellRing, X, PieChart, ChevronRight, TrendingUp, CalendarHeart, RefreshCcw, Users } from 'lucide-react';
+import { Sparkles, Bot, Loader2, Bell, BellRing, X, PieChart, ChevronRight, TrendingUp, CalendarHeart, Users, Lock, RefreshCcw } from 'lucide-react';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
 
 interface AIViewProps {
@@ -18,6 +18,9 @@ interface AIViewProps {
   onViewSocial: () => void;
   eventNotificationCount?: number;
   onProfileClick: () => void;
+  user: any;
+  onNavigate: (tab: string) => void;
+  onViewFeature?: (featureId: string) => void;
 }
 
 export const AIView: React.FC<AIViewProps> = ({ 
@@ -31,17 +34,36 @@ export const AIView: React.FC<AIViewProps> = ({
   onViewSimulator,
   onViewSocial,
   eventNotificationCount = 0,
-  onProfileClick
+  onProfileClick,
+  user,
+  onNavigate,
+  onViewFeature
 }) => {
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
 
   const handleAiAnalysis = async () => {
     setIsAiLoading(true);
-    // Use the last 6 periods for context, or current history
     const result = await analyzeBudgetWithAI(history, currencySymbol);
     setAiAnalysis(result);
     setIsAiLoading(false);
+  };
+
+  const hasAccess = (featureId: string) => {
+      return user?.isPro || (user?.unlockedFeatures && user.unlockedFeatures.includes(featureId));
+  };
+
+  const handleRestrictedClick = (featureId: string, action: () => void) => {
+      if (hasAccess(featureId)) {
+          action();
+      } else {
+          // Redirect to store to unlock specific feature
+          if (onViewFeature) {
+              onViewFeature(featureId);
+          } else {
+              onNavigate('pro-membership');
+          }
+      }
   };
 
   return (
@@ -113,8 +135,15 @@ export const AIView: React.FC<AIViewProps> = ({
         </Card>
 
         {/* Life Simulator Entry */}
-        <button onClick={onViewSimulator} className="w-full text-left group">
-            <Card className="p-5 bg-white dark:bg-slate-800 border-2 border-fuchsia-500/20 hover:border-fuchsia-500 transition-all shadow-sm group-hover:shadow-md">
+        <button onClick={() => handleRestrictedClick('simulator', onViewSimulator)} className="w-full text-left group">
+            <Card className="p-5 bg-white dark:bg-slate-800 border-2 border-fuchsia-500/20 hover:border-fuchsia-500 transition-all shadow-sm group-hover:shadow-md relative overflow-hidden">
+                {!hasAccess('simulator') && (
+                    <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/60 backdrop-blur-[2px] z-20 flex items-center justify-center">
+                        <div className="bg-slate-900 text-white px-4 py-2 rounded-full flex items-center gap-2 shadow-xl transform group-hover:scale-105 transition-transform">
+                            <Lock size={14} /> <span className="text-xs font-bold">Unlock Feature</span>
+                        </div>
+                    </div>
+                )}
                 <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-2xl bg-fuchsia-100 dark:bg-fuchsia-900/30 flex items-center justify-center text-fuchsia-600 dark:text-fuchsia-400 group-hover:scale-110 transition-transform duration-300">
                         <RefreshCcw size={24} />
@@ -133,8 +162,13 @@ export const AIView: React.FC<AIViewProps> = ({
 
         {/* Feature Grid */}
         <div className="grid grid-cols-2 gap-3">
-            <button onClick={onViewAnalysis} className="text-left group">
-                <Card className="p-4 h-full border border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors">
+            <button onClick={() => handleRestrictedClick('analysis', onViewAnalysis)} className="text-left group relative">
+                <Card className="p-4 h-full border border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors relative overflow-hidden">
+                    {!hasAccess('analysis') && (
+                        <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/60 backdrop-blur-[1px] z-20 flex items-center justify-center">
+                            <Lock size={16} className="text-slate-900 dark:text-white" />
+                        </div>
+                    )}
                     <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-3 group-hover:scale-110 transition-transform duration-300">
                         <TrendingUp size={20} />
                     </div>
@@ -143,8 +177,13 @@ export const AIView: React.FC<AIViewProps> = ({
                 </Card>
             </button>
 
-            <button onClick={onViewInvestments} className="text-left group">
-                <Card className="p-4 h-full border border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors">
+            <button onClick={() => handleRestrictedClick('investments', onViewInvestments)} className="text-left group relative">
+                <Card className="p-4 h-full border border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors relative overflow-hidden">
+                    {!hasAccess('investments') && (
+                        <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/60 backdrop-blur-[1px] z-20 flex items-center justify-center">
+                            <Lock size={16} className="text-slate-900 dark:text-white" />
+                        </div>
+                    )}
                     <div className="w-10 h-10 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-violet-600 dark:text-violet-400 mb-3 group-hover:scale-110 transition-transform duration-300">
                         <PieChart size={20} />
                     </div>
@@ -153,8 +192,13 @@ export const AIView: React.FC<AIViewProps> = ({
                 </Card>
             </button>
 
-            <button onClick={onViewEvents} className="text-left group relative">
-                <Card className="p-4 h-full border border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors">
+            <button onClick={() => handleRestrictedClick('events', onViewEvents)} className="text-left group relative">
+                <Card className="p-4 h-full border border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors relative overflow-hidden">
+                    {!hasAccess('events') && (
+                        <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/60 backdrop-blur-[1px] z-20 flex items-center justify-center">
+                            <Lock size={16} className="text-slate-900 dark:text-white" />
+                        </div>
+                    )}
                     <div className="w-10 h-10 rounded-full bg-fuchsia-100 dark:bg-fuchsia-900/30 flex items-center justify-center text-fuchsia-600 dark:text-fuchsia-400 mb-3 group-hover:scale-110 transition-transform duration-300">
                         <CalendarHeart size={20} />
                     </div>
@@ -166,8 +210,13 @@ export const AIView: React.FC<AIViewProps> = ({
                 )}
             </button>
 
-            <button onClick={onViewSocial} className="text-left group relative">
-                <Card className="p-4 h-full border border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors">
+            <button onClick={() => handleRestrictedClick('social', onViewSocial)} className="text-left group relative">
+                <Card className="p-4 h-full border border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors relative overflow-hidden">
+                    {!hasAccess('social') && (
+                        <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/60 backdrop-blur-[1px] z-20 flex items-center justify-center">
+                            <Lock size={16} className="text-slate-900 dark:text-white" />
+                        </div>
+                    )}
                     <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400 mb-3 group-hover:scale-110 transition-transform duration-300">
                         <Users size={20} />
                     </div>

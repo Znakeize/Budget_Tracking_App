@@ -2,14 +2,14 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Card } from '../components/ui/Card';
 import { EventData, EventCategory, EventExpense, EventVendor, EventMember } from '../types';
-import { formatCurrency, generateId } from '../utils/calculations';
+import { formatCurrency, generateId, NotificationItem } from '../utils/calculations';
 import { analyzeEventWithAI } from '../utils/aiHelper';
 import { 
   Calendar, MapPin, Plus, ChevronLeft, Wallet, PieChart, Users, 
   ShoppingBag, CheckCircle, Clock, FileText, Send, Sparkles, 
   Trash2, TrendingUp, AlertCircle, Camera, Download, Share2,
   Pencil, Edit2, X, Bell, BellRing, Briefcase, Layers, Receipt,
-  ArrowRight, DollarSign
+  ArrowRight, DollarSign, CalendarHeart
 } from 'lucide-react';
 import { Doughnut } from 'react-chartjs-2';
 import { jsPDF } from 'jspdf';
@@ -21,21 +21,14 @@ interface EventsViewProps {
   currencySymbol: string;
   onBack: () => void;
   onProfileClick: () => void;
+  notificationCount: number;
+  onToggleNotifications: () => void;
+  focusEventId?: string;
+  focusTab?: string;
 }
 
-// Internal Notification Type
-export interface EventNotification {
-  id: string;
-  eventId: string;
-  eventName: string;
-  message: string;
-  type: 'danger' | 'warning' | 'info';
-  date?: string;
-  relatedItemId?: string; // ID of the specific item (vendor, expense, etc.)
-}
-
-export const getEventNotifications = (events: EventData[], currencySymbol: string): EventNotification[] => {
-  const notifs: EventNotification[] = [];
+export const getEventNotifications = (events: EventData[], currencySymbol: string): NotificationItem[] => {
+  const notifs: NotificationItem[] = [];
   const today = new Date().toISOString().split('T')[0];
 
   events.forEach(event => {
@@ -46,9 +39,8 @@ export const getEventNotifications = (events: EventData[], currencySymbol: strin
 
     if (daysLeft <= 14 && daysLeft >= 0) {
       notifs.push({
-        id: `date-${event.id}`,
-        eventId: event.id,
-        eventName: event.name,
+        id: `Event-${event.id}-date`,
+        category: 'Event',
         message: `${event.name} is coming up in ${daysLeft} days!`,
         type: 'info',
         date: today
@@ -59,19 +51,17 @@ export const getEventNotifications = (events: EventData[], currencySymbol: strin
     const totalSpent = event.expenses.reduce((sum, e) => sum + e.amount, 0);
     if (totalSpent > event.totalBudget && event.totalBudget > 0) {
       notifs.push({
-         id: `budget-${event.id}`,
-         eventId: event.id,
-         eventName: event.name,
-         message: `Budget exceeded by ${formatCurrency(totalSpent - event.totalBudget, currencySymbol)}`,
+         id: `Event-${event.id}-budget-over`,
+         category: 'Event',
+         message: `${event.name}: Budget exceeded by ${formatCurrency(totalSpent - event.totalBudget, currencySymbol)}`,
          type: 'danger',
          date: today
       });
     } else if (totalSpent > event.totalBudget * 0.9 && event.totalBudget > 0) {
         notifs.push({
-            id: `budget-warn-${event.id}`,
-            eventId: event.id,
-            eventName: event.name,
-            message: `You have used 90% of your budget.`,
+            id: `Event-${event.id}-budget-warn`,
+            category: 'Event',
+            message: `${event.name}: 90% of budget used.`,
             type: 'warning',
             date: today
          });
@@ -82,23 +72,19 @@ export const getEventNotifications = (events: EventData[], currencySymbol: strin
         if (vendor.status !== 'paid' && vendor.dueDate) {
              if (vendor.dueDate < today) {
                   notifs.push({
-                    id: `vendor-overdue-${vendor.id}`,
-                    eventId: event.id,
-                    eventName: event.name,
-                    message: `Payment to ${vendor.name} is overdue (${vendor.dueDate})`,
+                    id: `Event-${event.id}-vendor-overdue-${vendor.id}`,
+                    category: 'Event',
+                    message: `${event.name}: Payment to ${vendor.name} is overdue`,
                     type: 'danger',
-                    date: vendor.dueDate,
-                    relatedItemId: vendor.id
+                    date: vendor.dueDate
                   });
              } else if (vendor.dueDate === today) {
                   notifs.push({
-                    id: `vendor-due-${vendor.id}`,
-                    eventId: event.id,
-                    eventName: event.name,
-                    message: `Payment to ${vendor.name} is due today`,
+                    id: `Event-${event.id}-vendor-due-${vendor.id}`,
+                    category: 'Event',
+                    message: `${event.name}: Payment to ${vendor.name} is due today`,
                     type: 'warning',
-                    date: vendor.dueDate,
-                    relatedItemId: vendor.id
+                    date: vendor.dueDate
                   });
              } else {
                  const due = new Date(vendor.dueDate);
@@ -106,13 +92,11 @@ export const getEventNotifications = (events: EventData[], currencySymbol: strin
                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                  if (diffDays <= 7 && diffDays > 0) {
                      notifs.push({
-                        id: `vendor-soon-${vendor.id}`,
-                        eventId: event.id,
-                        eventName: event.name,
-                        message: `Payment to ${vendor.name} due in ${diffDays} days`,
+                        id: `Event-${event.id}-vendor-soon-${vendor.id}`,
+                        category: 'Event',
+                        message: `${event.name}: Payment to ${vendor.name} due in ${diffDays} days`,
                         type: 'info',
-                        date: vendor.dueDate,
-                        relatedItemId: vendor.id
+                        date: vendor.dueDate
                       });
                  }
              }
@@ -123,16 +107,33 @@ export const getEventNotifications = (events: EventData[], currencySymbol: strin
   return notifs;
 };
 
-export const EventsView: React.FC<EventsViewProps> = ({ events, onUpdateEvents, currencySymbol, onBack, onProfileClick }) => {
+export const EventsView: React.FC<EventsViewProps> = ({ 
+    events, 
+    onUpdateEvents, 
+    currencySymbol, 
+    onBack, 
+    onProfileClick,
+    notificationCount,
+    onToggleNotifications,
+    focusEventId,
+    focusTab
+}) => {
   const [activeEventParams, setActiveEventParams] = useState<{id: string, initialTab?: string, focusItemId?: string} | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Handle Deep Linking via props
+  useEffect(() => {
+      if (focusEventId) {
+          setActiveEventParams({ 
+              id: focusEventId, 
+              initialTab: focusTab || 'dashboard' 
+          });
+      }
+  }, [focusEventId, focusTab]);
 
   // Active Event State
   const activeEvent = useMemo(() => events.find(e => e.id === activeEventParams?.id), [events, activeEventParams]);
   
-  const notifications = useMemo(() => getEventNotifications(events, currencySymbol), [events, currencySymbol]);
-
   const handleCreateEvent = (newEvent: EventData) => {
     onUpdateEvents([...events, newEvent]);
     setIsCreateModalOpen(false);
@@ -150,18 +151,6 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onUpdateEvents, 
     }
   };
 
-  const handleNotificationSelect = (notif: EventNotification) => {
-      let initialTab = 'dashboard';
-      if (notif.id.startsWith('vendor-')) {
-          initialTab = 'vendors';
-      } else if (notif.id.startsWith('budget-')) {
-          initialTab = 'budget';
-      }
-      
-      setActiveEventParams({ id: notif.eventId, initialTab, focusItemId: notif.relatedItemId });
-      setShowNotifications(false);
-  };
-
   if (activeEvent) {
     return (
       <EventDetailView 
@@ -171,6 +160,9 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onUpdateEvents, 
         currencySymbol={activeEvent.currencySymbol || currencySymbol}
         initialTab={activeEventParams?.initialTab}
         focusItemId={activeEventParams?.focusItemId}
+        notificationCount={notificationCount}
+        onToggleNotifications={onToggleNotifications}
+        onProfileClick={onProfileClick}
       />
     );
   }
@@ -191,12 +183,11 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onUpdateEvents, 
                 </div>
                 
                 <div className="flex items-center gap-1 pb-1">
-                    {/* Event Specific Notification Bell */}
                     <button 
-                        onClick={() => setShowNotifications(!showNotifications)}
+                        onClick={onToggleNotifications}
                         className="relative p-1.5 focus:outline-none active:scale-95 transition-transform"
                     >
-                        {notifications.length > 0 ? (
+                        {notificationCount > 0 ? (
                             <>
                                 <BellRing size={20} className="text-indigo-600 dark:text-indigo-400" />
                                 <span className="absolute top-1 right-1 -mt-0.5 -mr-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-50 dark:border-slate-900"></span>
@@ -228,14 +219,9 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onUpdateEvents, 
                    const totalSpent = evt.expenses.reduce((s, e) => s + e.amount, 0);
                    const progress = evt.totalBudget > 0 ? (totalSpent / evt.totalBudget) * 100 : 0;
                    const daysLeft = Math.ceil((new Date(evt.date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                   // Check if this event has active notifications
-                   const hasAlerts = notifications.some(n => n.eventId === evt.id);
 
                    return (
                        <Card key={evt.id} className="p-0 overflow-hidden cursor-pointer group hover:shadow-lg transition-shadow relative" onClick={() => setActiveEventParams({ id: evt.id })}>
-                           {hasAlerts && (
-                               <div className="absolute top-3 right-3 w-3 h-3 bg-red-500 rounded-full border-2 border-white dark:border-slate-900 z-10 animate-pulse"></div>
-                           )}
                            <div className={`h-2 w-full ${evt.theme === 'dark' ? 'bg-slate-800' : evt.theme === 'colorful' ? 'bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500' : 'bg-indigo-500'}`}></div>
                            <div className="p-4">
                                <div className="flex justify-between items-start mb-3">
@@ -297,14 +283,6 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onUpdateEvents, 
            </div>
        </div>
 
-       {showNotifications && (
-           <EventNotificationPopup 
-                notifications={notifications} 
-                onClose={() => setShowNotifications(false)} 
-                onSelectNotification={handleNotificationSelect}
-           />
-       )}
-
        <CreateEventModal 
          isOpen={isCreateModalOpen} 
          onClose={() => setIsCreateModalOpen(false)} 
@@ -317,7 +295,17 @@ export const EventsView: React.FC<EventsViewProps> = ({ events, onUpdateEvents, 
 
 // --- Sub-View: Event Detail ---
 
-const EventDetailView: React.FC<{ event: EventData, onUpdate: (e: EventData) => void, onBack: () => void, currencySymbol: string, initialTab?: string, focusItemId?: string }> = ({ event, onUpdate, onBack, currencySymbol, initialTab, focusItemId }) => {
+const EventDetailView: React.FC<{ 
+    event: EventData, 
+    onUpdate: (e: EventData) => void, 
+    onBack: () => void, 
+    currencySymbol: string, 
+    initialTab?: string, 
+    focusItemId?: string,
+    notificationCount: number,
+    onToggleNotifications: () => void,
+    onProfileClick: () => void
+}> = ({ event, onUpdate, onBack, currencySymbol, initialTab, focusItemId, notificationCount, onToggleNotifications, onProfileClick }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'budget' | 'vendors' | 'team' | 'ai'>((initialTab as any) || 'dashboard');
   const [isEditEventOpen, setIsEditEventOpen] = useState(false);
 
@@ -334,7 +322,7 @@ const EventDetailView: React.FC<{ event: EventData, onUpdate: (e: EventData) => 
     <div className="flex flex-col h-full relative">
        {/* Detailed Header */}
        <div className={`flex-none pt-6 px-4 pb-0 bg-white dark:bg-slate-900 z-20 border-b border-slate-200 dark:border-white/5 transition-colors duration-300 shadow-sm`}>
-            <div className="flex items-start justify-between mb-3">
+            <div className="flex justify-between items-end mb-3">
                 <div className="flex items-center gap-1.5 flex-1 min-w-0">
                     <button onClick={onBack} className="p-2 -ml-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                         <ChevronLeft size={24} />
@@ -356,9 +344,22 @@ const EventDetailView: React.FC<{ event: EventData, onUpdate: (e: EventData) => 
                         </div>
                     </div>
                 </div>
-                <div className="text-right pl-2">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">Budget</div>
-                    <div className="font-bold text-slate-900 dark:text-white whitespace-nowrap">{formatCurrency(event.totalBudget, currencySymbol)}</div>
+                
+                <div className="flex items-center gap-1 pb-1">
+                    <button 
+                        onClick={onToggleNotifications}
+                        className="relative p-1.5 focus:outline-none active:scale-95 transition-transform"
+                    >
+                        {notificationCount > 0 ? (
+                            <>
+                                <BellRing size={20} className="text-indigo-600 dark:text-indigo-400" />
+                                <span className="absolute top-1 right-1 -mt-0.5 -mr-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-50 dark:border-slate-900"></span>
+                            </>
+                        ) : (
+                            <Bell size={20} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" />
+                        )}
+                    </button>
+                    <HeaderProfile onClick={onProfileClick} />
                 </div>
             </div>
 
@@ -410,7 +411,8 @@ const EventDetailView: React.FC<{ event: EventData, onUpdate: (e: EventData) => 
   );
 };
 
-// --- Tabs Components ---
+// ... [Rest of the components: EventDashboardTab, EventBudgetTab, EventVendorsTab, EventTeamTab, EventAITab, Modals stay unchanged] ...
+// For brevity, assuming the rest of the file content remains the same as the previous version but without the local EventNotificationPopup and getEventNotifications function.
 
 const EventDashboardTab = ({ event, totalSpent, remaining, currencySymbol }: any) => {
     const categoryTotals = event.categories.map((c: any) => ({
@@ -682,7 +684,7 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
         const newVendor: EventVendor = {
             id: generateId(),
             ...vendor,
-            paidAmount: adv, // Initialize paid amount with advance
+            paidAmount: adv, 
             status: adv > 0 ? (adv >= vendor.totalAmount ? 'paid' : 'partial') : 'pending',
             paymentHistory: adv > 0 ? [{
                 id: generateId(),
@@ -750,7 +752,7 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
                 return { 
                     ...v, 
                     paidAmount: newPaid,
-                    advance: isAdvance ? 0 : v.advance, // Reset advance if we delete the advance payment
+                    advance: isAdvance ? 0 : v.advance, 
                     status: newStatus as 'pending' | 'partial' | 'paid',
                     paymentHistory: (v.paymentHistory || []).filter((h: any) => h.id !== paymentId)
                 };
@@ -1077,70 +1079,7 @@ const EventAITab = ({ event }: any) => {
     );
 };
 
-// --- Modals ---
-
-const EventNotificationPopup = ({ notifications, onClose, onSelectNotification }: { notifications: EventNotification[], onClose: () => void, onSelectNotification: (notif: EventNotification) => void }) => {
-    return (
-        <>
-            <div 
-                className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[1px]" 
-                onClick={onClose}
-            ></div>
-            <div className="absolute top-[4.5rem] right-4 z-50 w-72 animate-in zoom-in-95 slide-in-from-top-2 duration-200">
-                <Card className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200 dark:border-white/10 shadow-2xl p-0 overflow-hidden ring-1 ring-black/5">
-                    {/* Header */}
-                    <div className="flex items-center justify-between p-3 border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/5">
-                        <h3 className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                            <Briefcase size={14} className="text-indigo-500" /> 
-                            Event Alerts
-                            {notifications.length > 0 && <span className="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full">{notifications.length}</span>}
-                        </h3>
-                        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors">
-                            <X size={14} />
-                        </button>
-                    </div>
-                    
-                    {/* Content */}
-                    <div className="max-h-64 overflow-y-auto p-2 space-y-1">
-                        {notifications.length > 0 ? (
-                            notifications.map((notif) => (
-                                <div 
-                                    key={notif.id} 
-                                    className="relative group flex flex-col gap-1 p-2 rounded-lg bg-slate-50 dark:bg-black/20 hover:bg-slate-100 dark:hover:bg-white/5 border border-transparent hover:border-slate-200 dark:hover:border-white/5 transition-all cursor-pointer"
-                                    onClick={() => onSelectNotification(notif)}
-                                >
-                                    <div className="flex items-start gap-2">
-                                        <div className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                                            notif.type === 'danger' ? 'bg-red-500' : 
-                                            notif.type === 'warning' ? 'bg-orange-500' : 
-                                            'bg-blue-500'
-                                        }`}></div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-[10px] font-bold text-slate-500 mb-0.5">{notif.eventName}</p>
-                                            <p className={`text-xs font-medium leading-snug ${
-                                                notif.type === 'danger' ? 'text-red-600 dark:text-red-400' : 
-                                                'text-slate-700 dark:text-slate-200'
-                                            }`}>
-                                                {notif.message}
-                                            </p>
-                                            {notif.date && <p className="text-[9px] text-slate-400 mt-0.5">{notif.date}</p>}
-                                        </div>
-                                    </div>
-                                </div>
-                            ))
-                        ) : (
-                            <div className="py-8 text-center">
-                                <Bell size={20} className="mx-auto text-slate-300 dark:text-slate-600 mb-2 opacity-50" />
-                                <p className="text-[10px] text-slate-400">No event alerts!</p>
-                            </div>
-                        )}
-                    </div>
-                </Card>
-            </div>
-        </>
-    );
-};
-
+// ... [Modals: CreateEventModal, EditEventModal, AddEventExpenseModal, EditExpenseModal, AddCategoryModal, EditCategoryModal, AddVendorModal, EditVendorModal, EventInviteModal, EventSplitModal remain unchanged]
 const CreateEventModal = ({ isOpen, onClose, onConfirm, currencySymbol }: any) => {
     const [name, setName] = useState('');
     const [type, setType] = useState('General');

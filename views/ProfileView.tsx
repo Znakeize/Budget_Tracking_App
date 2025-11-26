@@ -1,10 +1,11 @@
+
 import React from 'react';
 import { Card } from '../components/ui/Card';
-import { User, Mail, LogOut, CheckCircle, Bell, BellRing, ChevronLeft, UserCircle, Settings, Shield } from 'lucide-react';
+import { User, Mail, LogOut, CheckCircle, Bell, BellRing, ChevronLeft, UserCircle, Settings, Shield, Crown, ChevronRight, Package } from 'lucide-react';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
 
 interface ProfileViewProps {
-  user: { name: string, email: string, joined: number } | null;
+  user: { name: string, email: string, joined: number, isPro?: boolean, unlockedFeatures?: string[] } | null;
   onLogout: () => void;
   onBack: () => void;
   onNavigate: (tab: string) => void;
@@ -56,26 +57,94 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ user, onLogout, onBack
             {/* Profile Header Card */}
             <div className="flex flex-col items-center text-center pt-4 pb-2">
                 <div className="relative">
-                    <div className="w-28 h-28 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-2xl shadow-indigo-500/30 mb-4 ring-4 ring-white dark:ring-slate-800 text-5xl font-bold">
+                    <div className={`w-28 h-28 rounded-full flex items-center justify-center text-white shadow-2xl mb-4 ring-4 ring-white dark:ring-slate-800 text-5xl font-bold ${user.isPro ? 'bg-gradient-to-br from-amber-400 to-orange-600' : 'bg-gradient-to-br from-indigo-500 to-purple-600'}`}>
                         {user.name.charAt(0).toUpperCase()}
                     </div>
-                    <div className="absolute bottom-4 right-0 bg-emerald-500 w-8 h-8 rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center text-white">
-                        <CheckCircle size={14} strokeWidth={3} />
-                    </div>
+                    {user.isPro && (
+                        <div className="absolute -top-1 -right-1 bg-amber-500 w-9 h-9 rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center text-white shadow-sm">
+                            <Crown size={14} fill="currentColor" />
+                        </div>
+                    )}
                 </div>
                 
                 <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{user.name}</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">{user.email}</p>
                 
                 <div className="flex gap-3 mt-4">
-                    <div className="px-4 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300 text-xs font-bold rounded-full border border-indigo-100 dark:border-indigo-500/20">
-                        Pro Member
-                    </div>
+                    {user.isPro ? (
+                        <div className="px-4 py-1.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-bold rounded-full border border-amber-200 dark:border-amber-500/20 flex items-center gap-1.5">
+                            <Crown size={12} fill="currentColor" /> PRO Active
+                        </div>
+                    ) : (
+                        <div className="px-4 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs font-bold rounded-full border border-slate-200 dark:border-slate-700">
+                            Free Plan
+                        </div>
+                    )}
                     <div className="px-4 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs font-bold rounded-full border border-slate-200 dark:border-slate-700">
                         Joined {joinedDate}
                     </div>
                 </div>
             </div>
+
+            {/* Pro Upgrade / Status Banner */}
+            {!user.isPro ? (
+                <>
+                    <button 
+                        onClick={() => onNavigate('pro-membership')}
+                        className="w-full"
+                    >
+                        <Card className="p-4 bg-gradient-to-r from-slate-900 to-indigo-900 dark:from-indigo-900 dark:to-purple-900 text-white border-none relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl transform translate-x-10 -translate-y-10"></div>
+                            <div className="relative z-10 flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center text-yellow-300 backdrop-blur-sm">
+                                        <Crown size={24} fill="currentColor" />
+                                    </div>
+                                    <div className="text-left">
+                                        <h3 className="font-bold text-lg">Upgrade to Pro</h3>
+                                        <p className="text-xs text-slate-300">Unlock AI Insights & Unlimited History</p>
+                                    </div>
+                                </div>
+                                <div className="bg-white text-indigo-900 p-2 rounded-full group-hover:scale-110 transition-transform">
+                                    <ChevronRight size={20} />
+                                </div>
+                            </div>
+                        </Card>
+                    </button>
+
+                    {user.unlockedFeatures && user.unlockedFeatures.length > 0 && (
+                        <Card className="p-4 border-l-4 border-l-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/10">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h4 className="font-bold text-slate-900 dark:text-white text-sm">Features Unlocked</h4>
+                                    <p className="text-xs text-slate-500 mt-1">You have {user.unlockedFeatures.length} lifetime modules.</p>
+                                </div>
+                                <button 
+                                    onClick={() => onNavigate('membership-management')}
+                                    className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline px-2 py-1 rounded hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors flex items-center gap-1"
+                                >
+                                    Manage
+                                </button>
+                            </div>
+                        </Card>
+                    )}
+                </>
+            ) : (
+                <Card className="p-4 border-l-4 border-l-amber-500 bg-amber-50/50 dark:bg-amber-900/10">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <h4 className="font-bold text-slate-900 dark:text-white text-sm">Membership Active</h4>
+                            <p className="text-xs text-slate-500 mt-1">Your Pro plan renews on Feb 1, 2025.</p>
+                        </div>
+                        <button 
+                            onClick={() => onNavigate('membership-management')}
+                            className="text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline px-2 py-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+                        >
+                            Manage
+                        </button>
+                    </div>
+                </Card>
+            )}
 
             {/* Account Settings */}
             <Card className="overflow-hidden">
