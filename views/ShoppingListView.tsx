@@ -765,12 +765,21 @@ const ShopItemsView: React.FC<{
                     >
                         <div className="flex gap-3">
                             {/* Checkbox */}
-                            <button 
-                                onClick={() => handleToggleCheck(item.id)}
-                                className={`flex-shrink-0 mt-0.5 transition-all duration-300 ${item.checked ? 'text-emerald-500' : 'text-slate-300 hover:text-slate-400'}`}
-                            >
-                                {item.checked ? <CheckCircle size={24} fill="currentColor" className="text-emerald-500" /> : <Circle size={24} strokeWidth={1.5} />}
-                            </button>
+                            <div className="check-container flex-shrink-0 mt-0.5">
+                                <input 
+                                    type="checkbox" 
+                                    id={`cbx-${item.id}`} 
+                                    className="cbx" 
+                                    checked={item.checked} 
+                                    onChange={() => handleToggleCheck(item.id)} 
+                                />
+                                <label htmlFor={`cbx-${item.id}`} className="check">
+                                    <svg width="18px" height="18px" viewBox="0 0 18 18">
+                                        <path d="M 1 9 L 1 9 c 0 -5 3 -8 8 -8 L 9 1 C 14 1 17 5 17 9 L 17 9 c 0 4 -4 8 -8 8 L 9 17 C 5 17 1 14 1 9 L 1 9 Z" />
+                                        <polyline points="1 9 7 14 15 4" />
+                                    </svg>
+                                </label>
+                            </div>
                             
                             <div className="flex-1 min-w-0">
                                 {/* Header Row */}
