@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { X, AlertCircle, Bell, Calendar, TrendingDown, PiggyBank, Crown, CalendarHeart } from 'lucide-react';
+import { X, AlertCircle, Bell, Calendar, TrendingDown, PiggyBank, Crown, CalendarHeart, MinusCircle, Users } from 'lucide-react';
 import { Card } from './Card';
 import { NotificationItem } from '../../utils/calculations';
 
@@ -8,9 +8,10 @@ interface NotificationPopupProps {
   notifications: NotificationItem[];
   onClose: () => void;
   onNotificationClick: (item: NotificationItem) => void;
+  onDismiss: (id: string) => void;
 }
 
-export const NotificationPopup: React.FC<NotificationPopupProps> = ({ notifications, onClose, onNotificationClick }) => {
+export const NotificationPopup: React.FC<NotificationPopupProps> = ({ notifications, onClose, onNotificationClick, onDismiss }) => {
   const getIcon = (category: NotificationItem['category']) => {
       switch(category) {
           case 'Bill': return <Calendar size={14} />;
@@ -18,6 +19,7 @@ export const NotificationPopup: React.FC<NotificationPopupProps> = ({ notificati
           case 'Savings': return <PiggyBank size={14} />;
           case 'System': return <Crown size={14} />;
           case 'Event': return <CalendarHeart size={14} />;
+          case 'Collaboration': return <Users size={14} />;
           default: return <AlertCircle size={14} />;
       }
   };
@@ -53,13 +55,27 @@ export const NotificationPopup: React.FC<NotificationPopupProps> = ({ notificati
                                     ? 'bg-indigo-50/50 dark:bg-indigo-900/10 border-indigo-100 dark:border-indigo-500/20 hover:bg-indigo-50 dark:hover:bg-indigo-900/20' 
                                     : notif.category === 'Event'
                                         ? 'bg-fuchsia-50/50 dark:bg-fuchsia-900/10 border-fuchsia-100 dark:border-fuchsia-500/20 hover:bg-fuchsia-50 dark:hover:bg-fuchsia-900/20'
-                                        : 'bg-white dark:bg-black/20 border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/10'
+                                        : notif.category === 'Collaboration'
+                                            ? 'bg-amber-50/50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-500/20 hover:bg-amber-50 dark:hover:bg-amber-900/20'
+                                            : 'bg-white dark:bg-black/20 border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/10'
                             }`}
                             onClick={() => {
                                 onNotificationClick(notif);
                             }} 
                           >
-                              <div className="flex items-start gap-2.5">
+                              {/* Dismiss Button */}
+                              <button
+                                  onClick={(e) => {
+                                      e.stopPropagation();
+                                      onDismiss(notif.id);
+                                  }}
+                                  className="absolute top-2 right-2 p-1 text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 z-20 bg-white/50 dark:bg-slate-800/50 rounded-full transition-colors"
+                                  title="Clear"
+                              >
+                                  <MinusCircle size={16} />
+                              </button>
+
+                              <div className="flex items-start gap-2.5 pr-6">
                                   <div className={`mt-0.5 p-1.5 rounded-full shrink-0 shadow-sm flex items-center justify-center ${
                                       notif.type === 'danger' ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' : 
                                       notif.type === 'warning' ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400' : 
@@ -72,6 +88,7 @@ export const NotificationPopup: React.FC<NotificationPopupProps> = ({ notificati
                                       <p className={`text-xs font-medium leading-snug ${
                                           notif.category === 'System' ? 'text-indigo-900 dark:text-indigo-200' : 
                                           notif.category === 'Event' ? 'text-fuchsia-900 dark:text-fuchsia-200' :
+                                          notif.category === 'Collaboration' ? 'text-amber-900 dark:text-amber-200' :
                                           notif.type === 'danger' ? 'text-slate-900 dark:text-white font-bold' : 
                                           'text-slate-700 dark:text-slate-200'
                                       }`}>

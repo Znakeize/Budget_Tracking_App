@@ -146,3 +146,95 @@ export interface EventData {
   created: number;
   theme?: string; // 'pastel', 'dark', 'colorful'
 }
+
+// --- Shopping List Interfaces ---
+
+export interface ShopItem {
+  id: string;
+  name: string;
+  quantity: string;
+  notes?: string;
+  price?: number; // Estimated Price
+  actualPrice?: number; // Actual Price paid
+  checked: boolean;
+  addedBy: string; // member name
+  purchasedBy?: string;
+  dueDate?: string; // For reminders
+  assignee?: string; // For shared responsibility
+}
+
+export interface Shop {
+  id: string;
+  name: string; // e.g., Keells, Hardware Store
+  location?: string;
+  items: ShopItem[];
+  budget?: number;
+}
+
+export interface ShopMember {
+  id: string;
+  name: string;
+  email?: string;
+  role: 'owner' | 'editor' | 'viewer';
+  avatarColor: string;
+}
+
+export interface ShoppingListData {
+  id: string;
+  name: string; // e.g., Weekly Groceries
+  shops: Shop[];
+  members: ShopMember[];
+  created: number;
+  currencySymbol: string;
+  color: string;
+  budget?: number;
+  lastModified?: number;
+}
+
+// --- Collaborative / Shared Budget Interfaces ---
+
+export interface SharedMember {
+  id: string;
+  name: string;
+  email?: string;
+  role: 'Owner' | 'Editor' | 'Viewer';
+  avatarColor: string;
+  contribution?: number;
+}
+
+export interface SharedExpense {
+  id: string;
+  title: string;
+  amount: number;
+  paidBy: string;
+  sharedWith: string[]; // IDs of members sharing this expense
+  category: string;
+  date: string;
+  notes?: string;
+  receipt?: string;
+  split: Record<string, number>; // userId -> amount owed
+  type: 'expense' | 'settlement'; // Distinguish between regular expense and debt settlement
+}
+
+export interface GroupActivity {
+  id: string;
+  type: 'expense' | 'settlement' | 'member' | 'edit';
+  text: string;
+  date: string;
+  user: string;
+  amount?: number;
+}
+
+export interface SharedGroup {
+  id: string;
+  name: string;
+  totalBudget: number;
+  currency: string;
+  members: SharedMember[];
+  expenses: SharedExpense[];
+  categories: string[];
+  activityLog: GroupActivity[];
+  settings: {
+      shareAllCategories: boolean;
+  };
+}

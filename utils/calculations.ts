@@ -1,5 +1,5 @@
 
-import { BudgetData } from '../types';
+import { BudgetData, ShoppingListData, SharedGroup } from '../types';
 
 export const calculateTotals = (data: BudgetData) => {
   const totalIncome = data.income.reduce((sum, item) => sum + item.actual, 0);
@@ -72,7 +72,9 @@ export interface NotificationItem {
   type: 'danger' | 'warning' | 'info' | 'success';
   message: string;
   date: string;
-  category: 'Bill' | 'Debt' | 'Budget' | 'Savings' | 'System' | 'Event';
+  category: 'Bill' | 'Debt' | 'Budget' | 'Savings' | 'System' | 'Event' | 'Shopping' | 'Collaboration';
+  actionLabel?: string;
+  data?: any; // Stores context like listId, shopId for navigation
 }
 
 export const getNotifications = (data: BudgetData, history: BudgetData[] = []): NotificationItem[] => {
@@ -207,4 +209,155 @@ export const getNotifications = (data: BudgetData, history: BudgetData[] = []): 
       if (a.type !== b.type) return priority[a.type] - priority[b.type];
       return a.date.localeCompare(b.date);
   });
+};
+
+export const getShoppingNotifications = (lists: ShoppingListData[]): NotificationItem[] => {
+    const notifs: NotificationItem[] = [];
+    const todayObj = new Date();
+    const todayStr = todayObj.toISOString().split('T')[0];
+    const dayOfWeek = todayObj.getDay(); // 0=Sun, 1=Mon, ... 6=Sat
+
+    lists.forEach(list => {
+        // 1. Personal Reminders / Due Dates
+        let overdueCount = 0;
+        let dueTodayCount = 0;
+
+        list.shops.forEach(shop => {
+            shop.items.forEach(item => {
+                if (!item.checked && item.dueDate) {
+                    if (item.dueDate < todayStr) {
+                        overdueCount++;
+                    } else if (item.dueDate === todayStr) {
+                        dueTodayCount++;
+                        // Specific Item Reminder
+                        notifs.push({
+                            id: `shop-due-${item.id}`,
+                            type: 'warning',
+                            message: `Buy ${item.name} today! (${shop.name})`,
+                            date: todayStr,
+                            category: 'Shopping',
+                            actionLabel: 'View Item',
+                            data: { listId: list.id, shopId: shop.id }
+                        });
+                    }
+                }
+            });
+        });
+
+        if (overdueCount > 0) {
+            notifs.push({
+                id: `shop-overdue-${list.id}`,
+                type: 'danger',
+                message: `You have ${overdueCount} overdue items in ${list.name}`,
+                date: todayStr,
+                category: 'Shopping',
+                actionLabel: 'Check List',
+                data: { listId: list.id }
+            });
+        }
+
+        // 2. Shared List Updates (Mock Logic)
+        if (list.members.length > 1) {
+             const isRecentlyModified = list.lastModified && (Date.now() - list.lastModified) < 86400000; // 24h
+             if (isRecentlyModified) {
+                 notifs.push({
+                     id: `shop-shared-${list.id}-${list.lastModified}`,
+                     type: 'info',
+                     message: `Recent updates in shared list: ${list.name}`,
+                     date: todayStr,
+                     category: 'Shopping',
+                     actionLabel: 'See Changes',
+                     data: { listId: list.id }
+                 });
+             }
+        }
+
+        // 3. Stale List Warning
+        // If list has unchecked items but hasn't been modified in 7 days
+        const hasUnchecked = list.shops.some(s => s.items.some(i => !i.checked));
+        const isStale = list.lastModified && (Date.now() - list.lastModified) > (7 * 24 * 60 * 60 * 1000);
+        if (hasUnchecked && isStale) {
+            notifs.push({
+                id: `shop-stale-${list.id}`,
+                type: 'warning',
+                message: `You haven't updated ${list.name} in a while. Time to review?`,
+                date: todayStr,
+                category: 'Shopping',
+                actionLabel: 'Review',
+                data: { listId: list.id }
+            });
+        }
+
+        // 4. Weekend Shopping Nudge (Friday, Saturday, Sunday)
+        // Triggers if list name contains 'Grocery' or 'Food' and has unchecked items
+        const isWeekend = dayOfWeek === 5 || dayOfWeek === 6 || dayOfWeek === 0;
+        const isGroceryList = /grocer|food|market|shop/i.test(list.name);
+        if (isWeekend && isGroceryList && hasUnchecked) {
+             // Only push if not already stale to avoid double spam
+             if (!isStale) {
+                 notifs.push({
+                     id: `shop-weekend-${list.id}`,
+                     type: 'success',
+                     message: `Weekend is here! Ready to tackle your ${list.name} run?`,
+                     date: todayStr,
+                     category: 'Shopping',
+                     actionLabel: 'Start Shopping',
+                     data: { listId: list.id }
+                 });
+             }
+        }
+
+        // 5. Smart Suggestion (Almost Complete)
+        let totalItems = 0;
+        let checkedItems = 0;
+        list.shops.forEach(s => {
+            totalItems += s.items.length;
+            checkedItems += s.items.filter(i => i.checked).length;
+        });
+        
+        if (totalItems > 5 && (checkedItems / totalItems) > 0.9 && checkedItems < totalItems) {
+             notifs.push({
+                 id: `shop-nudge-${list.id}`,
+                 type: 'success',
+                 message: `Almost done with ${list.name}! Just ${totalItems - checkedItems} items left.`,
+                 date: todayStr,
+                 category: 'Shopping',
+                 actionLabel: 'Finish Now',
+                 data: { listId: list.id }
+             });
+        }
+    });
+
+    return notifs;
+};
+
+export const getCollaborativeNotifications = (groups: SharedGroup[]): NotificationItem[] => {
+    const notifs: NotificationItem[] = [];
+    const today = new Date().toISOString().split('T')[0];
+
+    groups.forEach(group => {
+        const totalSpent = group.expenses.filter(e => e.type === 'expense').reduce((sum, e) => sum + e.amount, 0);
+        const progress = group.totalBudget > 0 ? (totalSpent / group.totalBudget) * 100 : 0;
+
+        if (progress >= 100) {
+            notifs.push({
+                id: `Group-${group.id}-over`,
+                category: 'Collaboration', // Ensure category is correct
+                message: `${group.name}: Budget limit exceeded!`,
+                type: 'danger',
+                date: today,
+                data: { groupId: group.id }
+            });
+        } else if (progress >= 85) {
+            notifs.push({
+                id: `Group-${group.id}-warn`,
+                category: 'Collaboration', // Ensure category is correct
+                message: `${group.name}: ${Math.round(progress)}% of budget used.`,
+                type: 'warning',
+                date: today,
+                data: { groupId: group.id }
+            });
+        }
+    });
+    return notifs;
 };

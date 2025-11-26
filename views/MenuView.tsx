@@ -4,7 +4,7 @@ import { Card } from '../components/ui/Card';
 import { 
   History, Wrench, CalendarHeart, Settings, 
   LifeBuoy, FileText, MessageSquare, ChevronRight, 
-  Bell, BellRing, UserCircle, Users, Crown 
+  Bell, BellRing, UserCircle, Users, Crown, ShoppingCart 
 } from 'lucide-react';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
 
@@ -36,9 +36,9 @@ export const MenuView: React.FC<MenuViewProps> = ({ onNavigate, notificationCoun
   }, []);
 
   const menuItems = [
+    { id: 'shopping-list', label: 'Shopping', icon: ShoppingCart, color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400', desc: 'Lists & Shared' },
     { id: 'history', label: 'History', icon: History, color: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400', desc: 'Past Budgets' },
     { id: 'tools', label: 'Tools', icon: Wrench, color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400', desc: 'Export & Data' },
-    { id: 'events', label: 'Events', icon: CalendarHeart, color: 'bg-fuchsia-100 dark:bg-fuchsia-900/30 text-fuchsia-600 dark:text-fuchsia-400', desc: 'Planner' },
     { id: 'community-links', label: 'Connect', icon: Users, color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400', desc: 'Join Us' },
   ];
 
@@ -77,7 +77,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ onNavigate, notificationCoun
             </div>
        </div>
 
-      <div className="flex-1 overflow-y-auto hide-scrollbar p-4 space-y-6 pb-24">
+      <div className="flex-1 overflow-y-auto hide-scrollbar p-4 space-y-6 pb-28">
       
         {/* Profile Teaser */}
         <button 

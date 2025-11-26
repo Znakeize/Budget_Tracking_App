@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { BudgetData } from '../types';
 import { Card } from '../components/ui/Card';
 import { analyzeBudgetWithAI } from '../utils/aiHelper';
-import { Sparkles, Bot, Loader2, Bell, BellRing, X, PieChart, ChevronRight, TrendingUp, CalendarHeart, Users, Lock, RefreshCcw } from 'lucide-react';
+import { Sparkles, Bot, Loader2, Bell, BellRing, X, PieChart, ChevronRight, TrendingUp, CalendarHeart, Users, Lock, RefreshCcw, Hexagon } from 'lucide-react';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
 
 interface AIViewProps {
@@ -17,6 +17,7 @@ interface AIViewProps {
   onViewSimulator: () => void;
   onViewSocial: () => void;
   eventNotificationCount?: number;
+  socialNotificationCount?: number;
   onProfileClick: () => void;
   user: any;
   onNavigate: (tab: string) => void;
@@ -34,6 +35,7 @@ export const AIView: React.FC<AIViewProps> = ({
   onViewSimulator,
   onViewSocial,
   eventNotificationCount = 0,
+  socialNotificationCount = 0,
   onProfileClick,
   user,
   onNavigate,
@@ -199,15 +201,27 @@ export const AIView: React.FC<AIViewProps> = ({
                             <Lock size={16} className="text-slate-900 dark:text-white" />
                         </div>
                     )}
-                    <div className="w-10 h-10 rounded-full bg-fuchsia-100 dark:bg-fuchsia-900/30 flex items-center justify-center text-fuchsia-600 dark:text-fuchsia-400 mb-3 group-hover:scale-110 transition-transform duration-300">
-                        <CalendarHeart size={20} />
+                    
+                    {/* Notification Icon */}
+                    {eventNotificationCount > 0 && (
+                        <div className="absolute top-3 right-3 animate-in zoom-in duration-300 z-10">
+                            <div className="relative drop-shadow-md">
+                                <Hexagon size={22} className="text-red-500" fill="currentColor" strokeWidth={0} />
+                                <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white">
+                                    {eventNotificationCount > 9 ? '!' : eventNotificationCount}
+                                </span>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="relative">
+                        <div className="w-10 h-10 rounded-full bg-fuchsia-100 dark:bg-fuchsia-900/30 flex items-center justify-center text-fuchsia-600 dark:text-fuchsia-400 mb-3 group-hover:scale-110 transition-transform duration-300">
+                            <CalendarHeart size={20} />
+                        </div>
                     </div>
                     <h3 className="font-bold text-slate-900 dark:text-white mb-1">Event Planner</h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400">Manage weddings, trips & parties.</p>
                 </Card>
-                {eventNotificationCount > 0 && (
-                     <div className="absolute top-3 right-3 w-3 h-3 bg-red-500 rounded-full border-2 border-white dark:border-slate-900 animate-pulse"></div>
-                )}
             </button>
 
             <button onClick={() => handleRestrictedClick('social', onViewSocial)} className="text-left group relative">
@@ -217,8 +231,23 @@ export const AIView: React.FC<AIViewProps> = ({
                             <Lock size={16} className="text-slate-900 dark:text-white" />
                         </div>
                     )}
-                    <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400 mb-3 group-hover:scale-110 transition-transform duration-300">
-                        <Users size={20} />
+                    
+                    {/* Notification Icon */}
+                    {socialNotificationCount > 0 && (
+                        <div className="absolute top-3 right-3 animate-in zoom-in duration-300 z-10">
+                            <div className="relative drop-shadow-md">
+                                <Hexagon size={22} className="text-red-500" fill="currentColor" strokeWidth={0} />
+                                <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white">
+                                    {socialNotificationCount > 9 ? '!' : socialNotificationCount}
+                                </span>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="relative">
+                        <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400 mb-3 group-hover:scale-110 transition-transform duration-300">
+                            <Users size={20} />
+                        </div>
                     </div>
                     <h3 className="font-bold text-slate-900 dark:text-white mb-1">Collaboration</h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400">Shared budgets & group splits.</p>

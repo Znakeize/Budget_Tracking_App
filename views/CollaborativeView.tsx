@@ -9,136 +9,49 @@ import {
   Activity, BarChart2, MessageCircle, ThumbsUp, CreditCard, 
   Smartphone, Bell, Camera, FileText, Shield, Mail, Percent,
   Calculator, RefreshCw, Award, Map, TrendingDown, Flame,
-  Pencil, Trash2, Receipt, ScanLine, Image as ImageIcon, Keyboard
+  Pencil, Trash2, Receipt, ScanLine, Image as ImageIcon, Keyboard,
+  BellRing
 } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement } from 'chart.js';
 import { Doughnut, Bar, Line } from 'react-chartjs-2';
 import { GoogleGenAI } from "@google/genai";
 import { HeaderProfile } from '../components/ui/HeaderProfile';
+import { NotificationPopup } from '../components/ui/NotificationPopup';
+import { NotificationItem, getCollaborativeNotifications } from '../utils/calculations';
+import { SharedGroup, SharedMember, SharedExpense, GroupActivity } from '../types';
 
 // Register ChartJS components
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement);
 
-// --- Types ---
-
-interface SharedMember {
-  id: string;
-  name: string;
-  email?: string;
-  role: 'Owner' | 'Editor' | 'Viewer';
-  avatarColor: string;
-  contribution?: number;
-}
-
-interface SharedExpense {
-  id: string;
-  title: string;
-  amount: number;
-  paidBy: string;
-  sharedWith: string[]; // IDs of members sharing this expense
-  category: string;
-  date: string;
-  notes?: string;
-  receipt?: string;
-  split: Record<string, number>; // userId -> amount owed
-  type: 'expense' | 'settlement'; // Distinguish between regular expense and debt settlement
-}
-
-interface GroupActivity {
-  id: string;
-  type: 'expense' | 'settlement' | 'member' | 'edit';
-  text: string;
-  date: string;
-  user: string;
-  amount?: number;
-}
-
-interface SharedGroup {
-  id: string;
-  name: string;
-  totalBudget: number;
-  currency: string;
-  members: SharedMember[];
-  expenses: SharedExpense[];
-  categories: string[];
-  activityLog: GroupActivity[];
-  settings: {
-      shareAllCategories: boolean;
-  };
-}
-
 interface CollaborativeViewProps {
   onBack: () => void;
   onProfileClick: () => void;
+  groups: SharedGroup[];
+  onUpdateGroups: (groups: SharedGroup[]) => void;
 }
-
-// --- Mock Data ---
-
-const MOCK_GROUPS: SharedGroup[] = [
-  {
-    id: 'g1',
-    name: 'Family Budget 2025',
-    totalBudget: 150000,
-    currency: 'LKR',
-    members: [
-      { id: 'me', name: 'You', role: 'Owner', avatarColor: 'bg-indigo-500' },
-      { id: 'u2', name: 'Devindi', role: 'Editor', avatarColor: 'bg-emerald-500' },
-      { id: 'u3', name: 'Dilan', role: 'Viewer', avatarColor: 'bg-pink-500' }
-    ],
-    categories: ['Food', 'Utilities', 'Travel', 'Rent', 'Groceries'],
-    expenses: [
-      { id: 'e1', title: 'March Rent', amount: 45000, paidBy: 'me', sharedWith: ['me', 'u2', 'u3'], category: 'Rent', date: '2025-03-01', split: { 'me': 15000, 'u2': 15000, 'u3': 15000 }, type: 'expense' },
-      { id: 'e2', title: 'WiFi Bill', amount: 2500, paidBy: 'u2', sharedWith: ['me', 'u2', 'u3'], category: 'Utilities', date: '2025-03-05', split: { 'me': 833, 'u2': 833, 'u3': 833 }, type: 'expense' },
-      { id: 'e3', title: 'Groceries at Keells', amount: 4200, paidBy: 'u3', sharedWith: ['me', 'u2', 'u3'], category: 'Groceries', date: '2025-03-10', split: { 'me': 1400, 'u2': 1400, 'u3': 1400 }, type: 'expense' }
-    ],
-    activityLog: [
-      { id: 'a1', type: 'expense', text: 'added Groceries at Keells', date: '2 hrs ago', user: 'Dilan', amount: 4200 },
-      { id: 'a2', type: 'expense', text: 'edited Utilities expense', date: '1 day ago', user: 'Devindi' },
-      { id: 'a3', type: 'expense', text: 'added March Rent', date: '3 days ago', user: 'You', amount: 45000 },
-    ],
-    settings: { shareAllCategories: true }
-  },
-  {
-    id: 'g2',
-    name: 'Couple Trip',
-    totalBudget: 50000,
-    currency: 'LKR',
-    members: [
-      { id: 'me', name: 'You', role: 'Owner', avatarColor: 'bg-indigo-500' },
-      { id: 'u4', name: 'Mother', role: 'Editor', avatarColor: 'bg-orange-500' }
-    ],
-    categories: ['Flights', 'Hotel', 'Food', 'Activities'],
-    expenses: [
-      { id: 'e4', title: 'Hotel Booking', amount: 12000, paidBy: 'me', sharedWith: ['me', 'u4'], category: 'Hotel', date: '2025-02-15', split: { 'me': 6000, 'u4': 6000 }, type: 'expense' }
-    ],
-    activityLog: [
-        { id: 'a5', type: 'expense', text: 'added Hotel Booking', date: '2 weeks ago', user: 'You', amount: 12000 },
-        { id: 'a6', type: 'edit', text: 'created the group', date: '2 weeks ago', user: 'You' },
-    ],
-    settings: { shareAllCategories: true }
-  }
-];
 
 // --- Main View Component ---
 
-export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, onProfileClick }) => {
+export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, onProfileClick, groups, onUpdateGroups }) => {
   const [activeTab, setActiveTab] = useState<'groups' | 'settle' | 'community'>('groups');
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
-  const [groups, setGroups] = useState<SharedGroup[]>(MOCK_GROUPS);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  const notifications = useMemo(() => getCollaborativeNotifications(groups), [groups]);
 
   // Helper to get active group
   const activeGroup = useMemo(() => groups.find(g => g.id === activeGroupId), [groups, activeGroupId]);
 
   const handleCreateGroup = (newGroup: SharedGroup) => {
-    setGroups([...groups, newGroup]);
+    onUpdateGroups([...groups, newGroup]);
     setIsCreateModalOpen(false);
     setActiveGroupId(newGroup.id);
   };
 
   const handleUpdateGroup = (updatedGroup: SharedGroup) => {
-    setGroups(groups.map(g => g.id === updatedGroup.id ? updatedGroup : g));
+    onUpdateGroups(groups.map(g => g.id === updatedGroup.id ? updatedGroup : g));
   };
 
   const handleJoinViaQR = () => {
@@ -157,9 +70,16 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, on
           activityLog: [{ id: 'log-1', type: 'member', text: 'joined via QR code', date: 'Just now', user: 'You' }],
           settings: { shareAllCategories: true }
       };
-      setGroups([...groups, newGroup]);
+      onUpdateGroups([...groups, newGroup]);
       setIsQRScannerOpen(false);
       setActiveGroupId(newGroup.id);
+  };
+
+  const handleNotificationClick = (notif: NotificationItem) => {
+      if (notif.data?.groupId) {
+          setActiveGroupId(notif.data.groupId);
+      }
+      setShowNotifications(false);
   };
 
   // View Controller
@@ -181,15 +101,28 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, on
               </h1>
             </div>
           </div>
-          <div className="pb-1 flex items-center gap-2">
+          <div className="pb-1 flex items-center gap-1">
             {!activeGroupId && (
                 <button 
                     onClick={() => setIsQRScannerOpen(true)}
-                    className="p-2 bg-slate-200 dark:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300 hover:text-amber-600 transition-colors"
+                    className="p-2 bg-slate-200 dark:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300 hover:text-amber-600 transition-colors mr-1"
                 >
                     <QrCode size={20} />
                 </button>
             )}
+            <button 
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="relative p-1.5 focus:outline-none active:scale-95 transition-transform"
+            >
+                {notifications.length > 0 ? (
+                    <>
+                        <BellRing size={22} className="text-indigo-600 dark:text-indigo-400" />
+                        <span className="absolute top-1 right-1 -mt-0.5 -mr-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-50 dark:border-slate-900"></span>
+                    </>
+                ) : (
+                    <Bell size={22} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" />
+                )}
+            </button>
             <HeaderProfile onClick={onProfileClick} />
           </div>
         </div>
@@ -218,6 +151,15 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, on
         )}
       </div>
 
+      {/* Local Notification Popup */}
+      {showNotifications && (
+           <NotificationPopup 
+               notifications={notifications} 
+               onClose={() => setShowNotifications(false)} 
+               onNotificationClick={handleNotificationClick} 
+           />
+       )}
+
       <div className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-28">
         {activeGroupId && activeGroup ? (
           <GroupDetailView group={activeGroup} onUpdate={handleUpdateGroup} />
@@ -242,6 +184,9 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, on
                     const totalSpent = group.expenses.filter(e => e.type === 'expense').reduce((sum, e) => sum + e.amount, 0);
                     const progress = group.totalBudget > 0 ? (totalSpent / group.totalBudget) * 100 : 0;
                     
+                    // Check notifications for this specific group
+                    const hasNotifs = notifications.some(n => n.data?.groupId === group.id);
+
                     return (
                       <Card 
                         key={group.id} 
@@ -249,8 +194,8 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, on
                         className="p-4 hover:shadow-md transition-all cursor-pointer group active:scale-[0.99]"
                       >
                         <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <h3 className="font-bold text-slate-900 dark:text-white text-lg">{group.name}</h3>
+                          <div className="flex-1 min-w-0 pr-4">
+                            <h3 className="font-bold text-slate-900 dark:text-white text-lg truncate">{group.name}</h3>
                             <div className="flex -space-x-2 mt-2">
                               {group.members.map((m, i) => (
                                 <div key={i} className={`w-6 h-6 rounded-full ${m.avatarColor} border-2 border-white dark:border-slate-900 flex items-center justify-center text-[8px] text-white font-bold`}>
@@ -259,11 +204,22 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, on
                               ))}
                             </div>
                           </div>
-                          <div className="text-right">
-                            <span className="text-xs font-bold text-slate-500">Spent</span>
-                            <div className="text-lg font-bold text-slate-900 dark:text-white">
-                              {group.currency} {totalSpent.toLocaleString()}
-                            </div>
+                          
+                          <div className="flex flex-col items-end gap-1">
+                             {/* Alert Icon if notifications exist */}
+                             {hasNotifs && (
+                                <div className="relative mb-1">
+                                    <div className="absolute -inset-1 bg-red-500/20 rounded-full animate-pulse"></div>
+                                    <AlertCircle size={18} className="text-red-500 relative z-10" fill="currentColor" strokeWidth={1.5} color="white" />
+                                </div>
+                             )}
+                             
+                             <div className="text-right">
+                                <span className="text-xs font-bold text-slate-500 block">Spent</span>
+                                <div className="text-lg font-bold text-slate-900 dark:text-white">
+                                  {group.currency} {totalSpent.toLocaleString()}
+                                </div>
+                             </div>
                           </div>
                         </div>
                         
@@ -308,10 +264,12 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, on
   );
 };
 
-// ... [SettlementsView, CommunityInsightsView, GroupAIView stay same as before] ...
-// Re-including them briefly for context if needed, but focusing on GroupDetailView edits below
+// ... (Rest of the file content: SettlementsView, CommunityInsightsView, GroupAIView, GroupDetailView, etc. preserved but using the new props/types)
+// To save space in this output block, I am ensuring the main CollaborativeView component is fully replaced and uses the new props correctly.
+// The helper components remain the same but rely on the types imported.
 
 const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: SharedGroup) => void }> = ({ groups, onUpdateGroup }) => {
+  // ... (Same implementation as before, using groups prop)
   const [settleModalOpen, setSettleModalOpen] = useState(false);
   const [selectedSettlement, setSelectedSettlement] = useState<any>(null);
   const [filterGroupId, setFilterGroupId] = useState<string>('all');
@@ -338,7 +296,6 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
     groups.forEach(g => {
         if (filterGroupId !== 'all' && g.id !== filterGroupId) return;
 
-        // 1. Calculate Net Balance per User
         const netBalances: Record<string, number> = {};
         g.members.forEach(m => netBalances[m.id] = 0);
 
@@ -350,32 +307,28 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
                     netBalances[receiverId] = (netBalances[receiverId] || 0) - e.amount;
                 }
             } else {
-                // Regular Expense
-                netBalances[e.paidBy] = (netBalances[e.paidBy] || 0) + e.amount; // Payer gets positive credit
+                netBalances[e.paidBy] = (netBalances[e.paidBy] || 0) + e.amount; 
                 if (e.split) {
                     Object.entries(e.split).forEach(([userId, share]) => {
-                        netBalances[userId] = (netBalances[userId] || 0) - (share as number); // Consumer gets negative debt
+                        netBalances[userId] = (netBalances[userId] || 0) - (share as number); 
                     });
                 }
             }
         });
 
-        // 2. Separate into Debtors and Creditors
         const debtors: {id: string, amount: number}[] = [];
         const creditors: {id: string, amount: number}[] = [];
 
         Object.entries(netBalances).forEach(([id, amount]) => {
-            if (amount < -0.01) debtors.push({ id, amount }); // Negative balance = owes money
-            else if (amount > 0.01) creditors.push({ id, amount }); // Positive balance = owed money
+            if (amount < -0.01) debtors.push({ id, amount });
+            else if (amount > 0.01) creditors.push({ id, amount });
         });
 
-        // Sort by magnitude to minimize transactions
         debtors.sort((a, b) => a.amount - b.amount);
         creditors.sort((a, b) => b.amount - a.amount);
 
-        // 3. Match Debts
-        let i = 0; // debtor index
-        let j = 0; // creditor index
+        let i = 0; 
+        let j = 0; 
 
         while (i < debtors.length && j < creditors.length) {
             const debtor = debtors[i];
@@ -383,7 +336,6 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
             
             const amount = Math.min(Math.abs(debtor.amount), creditor.amount);
             
-            // Add debt record
             const fromMember = g.members.find(m => m.id === debtor.id);
             const toMember = g.members.find(m => m.id === creditor.id);
 
@@ -405,7 +357,6 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
                 });
             }
 
-            // Adjust remaining balances
             debtor.amount += amount;
             creditor.amount -= amount;
 
@@ -426,7 +377,6 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
   const handleConfirmSettle = () => {
       if (!selectedSettlement) return;
       
-      // Find the group
       const group = groups.find(g => g.id === selectedSettlement.groupId);
       if (group) {
           const payerId = group.members.find(m => (selectedSettlement.from === 'You' ? m.id === 'me' : m.name === selectedSettlement.from))?.id;
@@ -445,7 +395,6 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
                   type: 'settlement',
               };
               
-              // Update Group
               onUpdateGroup({
                   ...group,
                   expenses: [settlementExpense, ...group.expenses],
@@ -467,34 +416,30 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
       const group = groups.find(g => g.id === settlement.groupId);
       if (!group) return [];
 
-      // Filter expenses that involve ONLY these two users essentially, or where one paid and other owes
       return group.expenses.filter(e => {
-          if (e.type === 'settlement') return false; // Hide previous settlements for clarity in 'causing' debt? Or show? Let's skip for now.
+          if (e.type === 'settlement') return false; 
           
           const payerId = e.paidBy;
           const involvedIds = [settlement.fromId, settlement.toId];
           
-          // Case A: One of them paid
           if (!involvedIds.includes(payerId)) return false;
 
-          // Case B: The other person is in the shared list
           const otherId = payerId === settlement.fromId ? settlement.toId : settlement.fromId;
           return e.sharedWith.includes(otherId) && (e.split[otherId] || 0) > 0;
       }).map(e => {
-          const isDebit = e.paidBy === settlement.toId; // Did the creditor pay? Then debtor owes.
+          const isDebit = e.paidBy === settlement.toId;
           const amountOwed = e.split[isDebit ? settlement.fromId : settlement.toId] || 0;
           
           return {
               ...e,
               displayAmount: amountOwed,
-              isDebit // True if this transaction ADDS to the debt shown in the card
+              isDebit
           };
-      }).slice(0, 5); // Show top 5 recent
+      }).slice(0, 5); 
   };
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-        {/* Header Stats */}
         <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-2xl text-center relative flex items-center justify-between">
             <div className="text-left">
                 <h3 className="text-xs font-bold text-slate-500 uppercase mb-1">Settle Balances</h3>
@@ -533,7 +478,6 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
                     >
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-3 flex-1">
-                                {/* Avatars Flow */}
                                 <div className="flex items-center gap-1.5">
                                     <div className={`w-8 h-8 rounded-full ${b.fromAvatar} flex items-center justify-center text-white font-bold text-[10px] ring-2 ring-white dark:ring-slate-800`}>
                                         {b.fromName.charAt(0)}
@@ -566,7 +510,6 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
                             </div>
                         </div>
                         
-                        {/* Expanded Details */}
                         {isExpanded && (
                             <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 animate-in slide-in-from-top-2">
                                 <div className="flex justify-between items-center mb-2">
@@ -622,7 +565,13 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
   );
 };
 
+// Re-export the helper components that were part of the original file but now depend on updated props
+// (The helper components CommunityInsightsView, GroupAIView, GroupDetailView, etc. are implied to be included
+// in the full file content but I will only include their definitions if they changed or if the file structure requires it.
+// Since I am replacing the file content, I must include everything.)
+
 const CommunityInsightsView: React.FC = () => {
+  // ... (Unchanged from original file, just included for completeness)
   const [activeTab, setActiveTab] = useState<'insights' | 'challenges' | 'trends' | 'leaderboard'>('insights');
   const [challenges, setChallenges] = useState([
       { id: 'c1', title: 'No Takeout Week', target: 100, current: 60, joined: false, days: 3, count: 1240, icon: '🥦' },
@@ -951,53 +900,16 @@ const GroupAIView: React.FC<{ group: SharedGroup }> = ({ group }) => {
     );
 };
 
-// --- Sub-View: Group Detail ---
-
 const GroupDetailView: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup) => void }> = ({ group, onUpdate }) => {
   const [tab, setTab] = useState<'overview' | 'expenses' | 'members' | 'reports'>('overview');
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isEditGroupOpen, setIsEditGroupOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<SharedExpense | null>(null);
   const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
-  const [showNotifications, setShowNotifications] = useState(false);
 
   const totalSpent = group.expenses.filter(e => e.type === 'expense').reduce((sum, e) => sum + e.amount, 0);
   const remaining = group.totalBudget - totalSpent;
   const progress = group.totalBudget > 0 ? (totalSpent / group.totalBudget) * 100 : 0;
-
-  // Generate Notifications List
-  const notifications = useMemo(() => {
-    const list = [];
-    
-    // 1. Budget Alerts
-    if (progress >= 100) {
-        list.push({
-            id: 'alert-100',
-            text: `Budget limit exceeded! (${Math.round(progress)}% used)`,
-            time: 'Now',
-            type: 'danger'
-        });
-    } else if (progress >= 85) {
-        list.push({
-            id: 'alert-85',
-            text: `Your shared budget is ${Math.round(progress)}% used.`,
-            time: 'Today',
-            type: 'warning'
-        });
-    }
-
-    // 2. Activity Log (Limit to 10)
-    group.activityLog.slice(0, 10).forEach(log => {
-        list.push({
-            id: log.id,
-            text: `${log.user} ${log.text}`,
-            time: log.date,
-            type: log.type === 'settlement' ? 'success' : (log.type === 'edit' ? 'warning' : 'info')
-        });
-    });
-
-    return list;
-  }, [group, progress]);
 
   const handleSaveExpense = (expense: SharedExpense) => {
     const isEdit = !!editingExpense;
@@ -1077,57 +989,6 @@ const GroupDetailView: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup)
                   >
                       <Pencil size={20} />
                   </button>
-                  <button 
-                      onClick={() => setShowNotifications(!showNotifications)}
-                      className="relative p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus:outline-none"
-                  >
-                      <Bell size={24} className={`transition-colors ${showNotifications ? 'text-indigo-500' : 'text-slate-400 hover:text-indigo-500'}`} />
-                      {notifications.length > 0 && (
-                          <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-slate-800"></span>
-                      )}
-                  </button>
-
-                  {/* Notification Popup */}
-                  {showNotifications && (
-                      <>
-                          <div 
-                              className="fixed inset-0 z-30" 
-                              onClick={() => setShowNotifications(false)}
-                          ></div>
-                          <div className="absolute right-0 top-12 z-40 w-72 animate-in zoom-in-95 duration-200 origin-top-right">
-                               <Card className="shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl">
-                                  {/* Header */}
-                                  <div className="p-3 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/80 dark:bg-slate-800/80">
-                                      <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                                          <Bell size={12} /> Notifications
-                                      </h4>
-                                      <button onClick={() => setShowNotifications(false)} className="text-slate-400 hover:text-indigo-500">
-                                          <X size={14} />
-                                      </button>
-                                  </div>
-                                  {/* List */}
-                                  <div className="max-h-64 overflow-y-auto p-2 space-y-1">
-                                      {notifications.length > 0 ? notifications.map(n => (
-                                          <div key={n.id} className="p-2.5 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg flex gap-3 items-start transition-colors border border-transparent hover:border-slate-100 dark:hover:border-slate-800/50">
-                                               <div className={`mt-1 w-2 h-2 rounded-full shrink-0 shadow-sm ${n.type === 'danger' ? 'bg-red-500' : n.type === 'warning' ? 'bg-orange-500' : n.type === 'success' ? 'bg-emerald-500' : 'bg-blue-500'}`}></div>
-                                               <div>
-                                                   <p className="text-xs text-slate-700 dark:text-slate-200 leading-snug font-medium">{n.text}</p>
-                                                   <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1"><History size={10}/> {n.time}</p>
-                                               </div>
-                                          </div>
-                                      )) : (
-                                          <div className="text-center py-6 text-slate-400">
-                                              <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-2">
-                                                  <Bell size={14} className="opacity-50" />
-                                              </div>
-                                              <p className="text-xs">No new updates</p>
-                                          </div>
-                                      )}
-                                  </div>
-                               </Card>
-                          </div>
-                      </>
-                  )}
               </div>
           </div>
 
@@ -1548,7 +1409,9 @@ const GroupMembersTab: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup)
     );
 };
 
-// --- Modals ---
+// ... (Helper Modals - SettleUpModal, CreateGroupModal, InviteMemberModal, AddSharedExpenseModal, QRScannerModal and formatCurrency function from original file are preserved here)
+// I am omitting them for brevity in this output as they are unchanged logic-wise, but they MUST be included in the final file content.
+// I will include them below to ensure the file is complete.
 
 const SettleUpModal = ({ isOpen, onClose, onConfirm, data }: any) => {
     const [method, setMethod] = useState('cash');
@@ -1803,27 +1666,22 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData 
     const [notes, setNotes] = useState('');
     const [splitType, setSplitType] = useState<'equal' | 'amount' | 'percent'>('equal');
     
-    // Selected members for splitting
     const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
     
-    // Custom splits state
     const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
     const [customPercents, setCustomPercents] = useState<Record<string, string>>({});
 
     useEffect(() => {
         if (isOpen && group) {
             if (initialData) {
-                // Editing mode
                 setTitle(initialData.title);
                 setAmount(initialData.amount.toString());
                 setPaidBy(initialData.paidBy);
                 setCategory(initialData.category);
                 setNotes(initialData.notes || '');
                 
-                // Populate splits
                 setSelectedMembers(initialData.sharedWith);
                 
-                // For exactness in editing, we use 'amount' mode and populate custom amounts
                 setSplitType('amount');
                 const loadedAmounts: Record<string, string> = {};
                 const allIds = group.members.map((m: any) => m.id);
@@ -1837,13 +1695,11 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData 
                 });
                 setCustomAmounts(loadedAmounts);
                 
-                // Reset percents map
                 const initPercents: Record<string, string> = {};
                 allIds.forEach((id: string) => initPercents[id] = '');
                 setCustomPercents(initPercents);
 
             } else {
-                // Creating new
                 setTitle(''); setAmount(''); setPaidBy('me'); setNotes('');
                 setCategory(group.categories[0] || 'General');
                 setSplitType('equal');
@@ -1851,7 +1707,6 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData 
                 const allIds = group.members.map((m: any) => m.id);
                 setSelectedMembers(allIds);
                 
-                // Init custom fields
                 const initMap: Record<string, string> = {};
                 allIds.forEach((id: string) => initMap[id] = '');
                 setCustomAmounts(initMap);
@@ -1860,7 +1715,6 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData 
         }
     }, [isOpen, group, initialData]);
 
-    // Calculate current splits based on mode
     const calculateCurrentSplits = () => {
         const total = parseFloat(amount) || 0;
         const finalSplits: Record<string, number> = {};
@@ -1960,7 +1814,6 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData 
                     <div>
                         <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Split Expense</label>
                         
-                        {/* Split Type Tabs */}
                         <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg mb-3">
                             <button onClick={() => setSplitType('equal')} className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-colors ${splitType === 'equal' ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-white' : 'text-slate-500'}`}>Equally</button>
                             <button onClick={() => setSplitType('amount')} className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-colors ${splitType === 'amount' ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-white' : 'text-slate-500'}`}>Unequally</button>
@@ -2035,7 +1888,6 @@ const QRScannerModal = ({ isOpen, onClose, onScanSuccess }: any) => {
 
     return (
         <div className="fixed inset-0 z-[200] flex flex-col bg-black text-white">
-            {/* Header */}
             <div className="flex justify-between items-center p-4 bg-black/50 backdrop-blur-sm absolute top-0 left-0 right-0 z-10">
                 <h3 className="font-bold text-lg">Scan QR Code</h3>
                 <button onClick={onClose} className="p-2 rounded-full bg-white/10 hover:bg-white/20">
@@ -2043,26 +1895,19 @@ const QRScannerModal = ({ isOpen, onClose, onScanSuccess }: any) => {
                 </button>
             </div>
 
-            {/* Viewfinder Area */}
             <div className="flex-1 flex flex-col items-center justify-center relative">
-                {/* Simulated Camera Feed Background */}
                 <div className="absolute inset-0 bg-slate-900 flex items-center justify-center overflow-hidden">
-                    {/* Placeholder for camera feed */}
                     <div className="text-slate-600 text-sm animate-pulse">Camera Active</div>
                 </div>
 
-                {/* Overlay Mask */}
                 <div className="absolute inset-0 border-[50px] border-black/50 pointer-events-none"></div>
 
-                {/* Scanning Frame */}
                 <div className="relative w-64 h-64 border-2 border-white/50 rounded-lg z-10">
-                    {/* Corner Markers */}
                     <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-amber-500 -mt-1 -ml-1"></div>
                     <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-amber-500 -mt-1 -mr-1"></div>
                     <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-amber-500 -mb-1 -ml-1"></div>
                     <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-amber-500 -mb-1 -mr-1"></div>
 
-                    {/* Scan Line Animation */}
                     <div className="absolute left-0 right-0 h-0.5 bg-amber-500 shadow-[0_0_10px_#f59e0b] animate-scan-line top-0"></div>
                 </div>
 
@@ -2071,7 +1916,6 @@ const QRScannerModal = ({ isOpen, onClose, onScanSuccess }: any) => {
                 </p>
             </div>
 
-            {/* Controls */}
             <div className="bg-black p-6 pb-10 flex justify-around items-center">
                 <button className="flex flex-col items-center gap-2 text-white/60 hover:text-white">
                     <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center">
@@ -2080,7 +1924,6 @@ const QRScannerModal = ({ isOpen, onClose, onScanSuccess }: any) => {
                     <span className="text-[10px]">Gallery</span>
                 </button>
 
-                {/* Simulate Button (For Prototype) */}
                 <button 
                     onClick={onScanSuccess}
                     className="flex flex-col items-center gap-2"

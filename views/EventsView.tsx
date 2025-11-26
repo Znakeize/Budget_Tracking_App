@@ -8,12 +8,13 @@ import {
   Calendar, MapPin, Plus, ChevronLeft, Wallet, PieChart, Users, 
   ShoppingBag, CheckCircle, Clock, FileText, Send, Sparkles, 
   Trash2, TrendingUp, AlertCircle, Camera, Download, Share2,
-  Pencil, Edit2, X, Bell, BellRing, Briefcase, Layers, Receipt,
-  ArrowRight, DollarSign, CalendarHeart
+  Pencil, Edit2, X, Briefcase, Layers, Receipt,
+  ArrowRight, DollarSign, CalendarHeart, Bell, BellRing
 } from 'lucide-react';
 import { Doughnut } from 'react-chartjs-2';
 import { jsPDF } from 'jspdf';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
+import { NotificationPopup } from '../components/ui/NotificationPopup';
 
 interface EventsViewProps {
   events: EventData[];
@@ -21,8 +22,6 @@ interface EventsViewProps {
   currencySymbol: string;
   onBack: () => void;
   onProfileClick: () => void;
-  notificationCount: number;
-  onToggleNotifications: () => void;
   focusEventId?: string;
   focusTab?: string;
 }
@@ -113,13 +112,14 @@ export const EventsView: React.FC<EventsViewProps> = ({
     currencySymbol, 
     onBack, 
     onProfileClick,
-    notificationCount,
-    onToggleNotifications,
     focusEventId,
     focusTab
 }) => {
   const [activeEventParams, setActiveEventParams] = useState<{id: string, initialTab?: string, focusItemId?: string} | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  const eventNotifications = useMemo(() => getEventNotifications(events, currencySymbol), [events, currencySymbol]);
 
   // Handle Deep Linking via props
   useEffect(() => {
@@ -151,6 +151,16 @@ export const EventsView: React.FC<EventsViewProps> = ({
     }
   };
 
+  const handleNotificationClick = (notif: NotificationItem) => {
+      const parts = notif.id.split('-');
+      // Expected ID format: Event-{eventId}-...
+      if (parts.length > 1 && parts[0] === 'Event') {
+          const eventId = parts[1];
+          setActiveEventParams({ id: eventId });
+      }
+      setShowNotifications(false);
+  };
+
   if (activeEvent) {
     return (
       <EventDetailView 
@@ -160,8 +170,6 @@ export const EventsView: React.FC<EventsViewProps> = ({
         currencySymbol={activeEvent.currencySymbol || currencySymbol}
         initialTab={activeEventParams?.initialTab}
         focusItemId={activeEventParams?.focusItemId}
-        notificationCount={notificationCount}
-        onToggleNotifications={onToggleNotifications}
         onProfileClick={onProfileClick}
       />
     );
@@ -184,22 +192,31 @@ export const EventsView: React.FC<EventsViewProps> = ({
                 
                 <div className="flex items-center gap-1 pb-1">
                     <button 
-                        onClick={onToggleNotifications}
+                        onClick={() => setShowNotifications(!showNotifications)}
                         className="relative p-1.5 focus:outline-none active:scale-95 transition-transform"
                     >
-                        {notificationCount > 0 ? (
+                        {eventNotifications.length > 0 ? (
                             <>
-                                <BellRing size={20} className="text-indigo-600 dark:text-indigo-400" />
+                                <BellRing size={22} className="text-indigo-600 dark:text-indigo-400" />
                                 <span className="absolute top-1 right-1 -mt-0.5 -mr-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-50 dark:border-slate-900"></span>
                             </>
                         ) : (
-                            <Bell size={20} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" />
+                            <Bell size={22} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" />
                         )}
                     </button>
                     <HeaderProfile onClick={onProfileClick} />
                 </div>
             </div>
        </div>
+
+       {/* Local Notification Popup */}
+       {showNotifications && (
+           <NotificationPopup 
+               notifications={eventNotifications} 
+               onClose={() => setShowNotifications(false)} 
+               onNotificationClick={handleNotificationClick} 
+           />
+       )}
 
        <div className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-28">
            {/* Create Event Button */}
@@ -219,21 +236,33 @@ export const EventsView: React.FC<EventsViewProps> = ({
                    const totalSpent = evt.expenses.reduce((s, e) => s + e.amount, 0);
                    const progress = evt.totalBudget > 0 ? (totalSpent / evt.totalBudget) * 100 : 0;
                    const daysLeft = Math.ceil((new Date(evt.date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                   
+                   // Check notifications for this specific event
+                   const hasNotifs = eventNotifications.some(n => n.id.startsWith(`Event-${evt.id}`));
 
                    return (
                        <Card key={evt.id} className="p-0 overflow-hidden cursor-pointer group hover:shadow-lg transition-shadow relative" onClick={() => setActiveEventParams({ id: evt.id })}>
                            <div className={`h-2 w-full ${evt.theme === 'dark' ? 'bg-slate-800' : evt.theme === 'colorful' ? 'bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500' : 'bg-indigo-500'}`}></div>
                            <div className="p-4">
                                <div className="flex justify-between items-start mb-3">
-                                   <div className="flex-1 min-w-0 pr-2">
+                                   <div className="flex-1 min-w-0 pr-8">
                                        <h3 className="text-lg font-bold text-slate-900 dark:text-white truncate">{evt.name}</h3>
                                        <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
                                            <span className="flex items-center gap-1"><Calendar size={12}/> {new Date(evt.date).toLocaleDateString()}</span>
                                            <span className="flex items-center gap-1 truncate"><MapPin size={12}/> {evt.location}</span>
                                        </div>
                                    </div>
-                                   <div className={`text-[10px] font-bold px-2 py-1 rounded-full whitespace-nowrap ${daysLeft > 0 ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-slate-100 text-slate-500'}`}>
-                                       {daysLeft > 0 ? `${daysLeft} days` : 'Past'}
+                                   <div className="flex flex-col items-end gap-2">
+                                       {/* Alert Icon if notifications exist */}
+                                       {hasNotifs && (
+                                           <div className="relative">
+                                               <div className="absolute -inset-1 bg-red-500/20 rounded-full animate-pulse"></div>
+                                               <AlertCircle size={18} className="text-red-500 relative z-10" fill="currentColor" strokeWidth={1.5} color="white" />
+                                           </div>
+                                       )}
+                                       <div className={`text-[10px] font-bold px-2 py-1 rounded-full whitespace-nowrap ${daysLeft > 0 ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-slate-100 text-slate-500'}`}>
+                                           {daysLeft > 0 ? `${daysLeft} days` : 'Past'}
+                                       </div>
                                    </div>
                                </div>
                                
@@ -302,12 +331,13 @@ const EventDetailView: React.FC<{
     currencySymbol: string, 
     initialTab?: string, 
     focusItemId?: string,
-    notificationCount: number,
-    onToggleNotifications: () => void,
     onProfileClick: () => void
-}> = ({ event, onUpdate, onBack, currencySymbol, initialTab, focusItemId, notificationCount, onToggleNotifications, onProfileClick }) => {
+}> = ({ event, onUpdate, onBack, currencySymbol, initialTab, focusItemId, onProfileClick }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'budget' | 'vendors' | 'team' | 'ai'>((initialTab as any) || 'dashboard');
   const [isEditEventOpen, setIsEditEventOpen] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  const eventNotifications = useMemo(() => getEventNotifications([event], currencySymbol), [event, currencySymbol]);
 
   useEffect(() => {
       if (initialTab) {
@@ -347,16 +377,16 @@ const EventDetailView: React.FC<{
                 
                 <div className="flex items-center gap-1 pb-1">
                     <button 
-                        onClick={onToggleNotifications}
+                        onClick={() => setShowNotifications(!showNotifications)}
                         className="relative p-1.5 focus:outline-none active:scale-95 transition-transform"
                     >
-                        {notificationCount > 0 ? (
+                        {eventNotifications.length > 0 ? (
                             <>
-                                <BellRing size={20} className="text-indigo-600 dark:text-indigo-400" />
+                                <BellRing size={22} className="text-indigo-600 dark:text-indigo-400" />
                                 <span className="absolute top-1 right-1 -mt-0.5 -mr-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-50 dark:border-slate-900"></span>
                             </>
                         ) : (
-                            <Bell size={20} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" />
+                            <Bell size={22} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" />
                         )}
                     </button>
                     <HeaderProfile onClick={onProfileClick} />
@@ -389,6 +419,14 @@ const EventDetailView: React.FC<{
             </div>
        </div>
 
+       {showNotifications && (
+           <NotificationPopup 
+               notifications={eventNotifications} 
+               onClose={() => setShowNotifications(false)} 
+               onNotificationClick={() => setShowNotifications(false)} 
+           />
+       )}
+
        <div className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-28">
            {activeTab === 'dashboard' && <EventDashboardTab event={event} totalSpent={totalSpent} remaining={remaining} currencySymbol={currencySymbol} />}
            {activeTab === 'budget' && <EventBudgetTab event={event} onUpdate={onUpdate} currencySymbol={currencySymbol} focusItemId={focusItemId} />}
@@ -410,9 +448,6 @@ const EventDetailView: React.FC<{
     </div>
   );
 };
-
-// ... [Rest of the components: EventDashboardTab, EventBudgetTab, EventVendorsTab, EventTeamTab, EventAITab, Modals stay unchanged] ...
-// For brevity, assuming the rest of the file content remains the same as the previous version but without the local EventNotificationPopup and getEventNotifications function.
 
 const EventDashboardTab = ({ event, totalSpent, remaining, currencySymbol }: any) => {
     const categoryTotals = event.categories.map((c: any) => ({
@@ -593,7 +628,7 @@ const EventBudgetTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) =
                             </div>
                             <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mb-3">
                                 <div 
-                                    className={`h-full rounded-full ${percent > 100 ? 'bg-red-500' : percent > 80 ? 'bg-orange-500' : 'bg-emerald-500'}`}
+                                    className={`h-full rounded-full transition-all duration-500 ${percent > 100 ? 'bg-red-500' : percent > 80 ? 'bg-orange-500' : 'bg-emerald-500'}`}
                                     style={{width: `${Math.min(percent, 100)}%`}}
                                 ></div>
                             </div>
@@ -1079,7 +1114,6 @@ const EventAITab = ({ event }: any) => {
     );
 };
 
-// ... [Modals: CreateEventModal, EditEventModal, AddEventExpenseModal, EditExpenseModal, AddCategoryModal, EditCategoryModal, AddVendorModal, EditVendorModal, EventInviteModal, EventSplitModal remain unchanged]
 const CreateEventModal = ({ isOpen, onClose, onConfirm, currencySymbol }: any) => {
     const [name, setName] = useState('');
     const [type, setType] = useState('General');

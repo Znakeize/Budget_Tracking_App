@@ -25,9 +25,10 @@ import { CommunityLinksView } from './views/CommunityLinksView';
 import { ProMembershipView } from './views/ProMembershipView';
 import { MembershipManagementView } from './views/MembershipManagementView';
 import { FeatureSubscriptionView } from './views/FeatureSubscriptionView';
-import { BudgetData, PeriodType, EventData } from './types';
-import { INITIAL_DATA, SAMPLE_EVENTS } from './constants';
-import { generateId, calculateTotals, getNotifications, NotificationItem } from './utils/calculations';
+import { ShoppingListView } from './views/ShoppingListView';
+import { BudgetData, PeriodType, EventData, ShoppingListData, SharedGroup } from './types';
+import { INITIAL_DATA, SAMPLE_EVENTS, SAMPLE_SHOPPING_LISTS, MOCK_GROUPS } from './constants';
+import { generateId, calculateTotals, getNotifications, NotificationItem, formatCurrency, getShoppingNotifications, getCollaborativeNotifications } from './utils/calculations';
 import { NewPeriodModal } from './components/ui/NewPeriodModal';
 import { NotificationPopup } from './components/ui/NotificationPopup';
 
@@ -52,6 +53,8 @@ const App: React.FC = () => {
   const [budgetData, setBudgetData] = useState<BudgetData>(INITIAL_DATA);
   const [history, setHistory] = useState<BudgetData[]>([INITIAL_DATA]);
   const [events, setEvents] = useState<EventData[]>([]);
+  const [shoppingLists, setShoppingLists] = useState<ShoppingListData[]>([]);
+  const [groups, setGroups] = useState<SharedGroup[]>([]);
   
   // App State
   const [loaded, setLoaded] = useState(false);
@@ -62,10 +65,12 @@ const App: React.FC = () => {
   
   // System Notifications State (Persistent)
   const [systemNotifications, setSystemNotifications] = useState<NotificationItem[]>([]);
+  const [dismissedIds, setDismissedIds] = useState<string[]>([]);
 
   // Deep Linking State
   const [budgetFocusTarget, setBudgetFocusTarget] = useState<{ section: string, itemId: string } | null>(null);
   const [eventFocus, setEventFocus] = useState<{ id: string, tab?: string } | null>(null);
+  const [shoppingFocus, setShoppingFocus] = useState<{ listId: string, shopId?: string } | null>(null);
 
   const [isNewPeriodModalOpen, setIsNewPeriodModalOpen] = useState(false);
   const [calculatedRollover, setCalculatedRollover] = useState(0);
@@ -75,17 +80,24 @@ const App: React.FC = () => {
   const notifications = useMemo(() => {
       const budgetAlerts = getNotifications(budgetData, history);
       const eventAlerts = getEventNotifications(events, budgetData.currencySymbol);
-      const allNotifications = [...systemNotifications, ...budgetAlerts, ...eventAlerts];
+      const shoppingAlerts = getShoppingNotifications(shoppingLists);
+      const collabAlerts = getCollaborativeNotifications(groups);
       
+      const allNotifications = [...systemNotifications, ...budgetAlerts, ...eventAlerts, ...shoppingAlerts, ...collabAlerts];
+      
+      // Filter dismissed notifications
+      const activeNotifications = allNotifications.filter(n => !dismissedIds.includes(n.id));
+
       // Priority sort
       const priority = { danger: 0, warning: 1, success: 2, info: 3 };
-      return allNotifications.sort((a, b) => {
+      return activeNotifications.sort((a, b) => {
           if (a.type !== b.type) return priority[a.type] - priority[b.type];
           return b.date.localeCompare(a.date); // Newest date first
       });
-  }, [budgetData, history, systemNotifications, events]);
+  }, [budgetData, history, systemNotifications, events, shoppingLists, groups, dismissedIds]);
 
   const eventNotificationCount = useMemo(() => getEventNotifications(events, budgetData.currencySymbol).length, [events, budgetData.currencySymbol]);
+  const socialNotificationCount = useMemo(() => getCollaborativeNotifications(groups).length, [groups]);
 
   // Helper to add system notification
   const addSystemNotification = useCallback((message: string, type: 'success' | 'warning' | 'info' | 'danger') => {
@@ -109,11 +121,21 @@ const App: React.FC = () => {
       localStorage.setItem('systemNotifications', JSON.stringify(updated));
   };
 
+  const handleDismissNotification = (id: string) => {
+      setDismissedIds(prev => [...prev, id]);
+      // Also remove from system notifications if applicable to keep persistent state clean
+      if (systemNotifications.some(n => n.id === id)) {
+          removeSystemNotification(id);
+      }
+  };
+
   useEffect(() => {
     const savedHistory = localStorage.getItem('budgetHistory');
     const savedActiveId = localStorage.getItem('activePeriodId');
     const savedTheme = localStorage.getItem('theme');
     const savedEvents = localStorage.getItem('budgetEvents');
+    const savedShopping = localStorage.getItem('budgetShopping');
+    const savedGroups = localStorage.getItem('budgetGroups');
     const savedUser = localStorage.getItem('budget_user_session');
     const savedSysNotifs = localStorage.getItem('systemNotifications');
 
@@ -140,6 +162,38 @@ const App: React.FC = () => {
         }
     } else {
         setEvents(SAMPLE_EVENTS);
+    }
+
+    if (savedShopping) {
+        try { 
+            const parsedShopping = JSON.parse(savedShopping);
+            if (parsedShopping && parsedShopping.length > 0) {
+                setShoppingLists(parsedShopping);
+            } else {
+                setShoppingLists(SAMPLE_SHOPPING_LISTS);
+            }
+        } catch (e) { 
+            console.error("Failed to parse shopping", e);
+            setShoppingLists(SAMPLE_SHOPPING_LISTS);
+        }
+    } else {
+        setShoppingLists(SAMPLE_SHOPPING_LISTS);
+    }
+
+    if (savedGroups) {
+        try { 
+            const parsedGroups = JSON.parse(savedGroups);
+            if (parsedGroups && parsedGroups.length > 0) {
+                setGroups(parsedGroups);
+            } else {
+                setGroups(MOCK_GROUPS);
+            }
+        } catch (e) { 
+            console.error("Failed to parse groups", e);
+            setGroups(MOCK_GROUPS);
+        }
+    } else {
+        setGroups(MOCK_GROUPS);
     }
 
     if (savedSysNotifs) {
@@ -296,6 +350,33 @@ const App: React.FC = () => {
       localStorage.setItem('budgetEvents', JSON.stringify(newEvents));
   }, []);
 
+  const handleUpdateShopping = useCallback((newLists: ShoppingListData[]) => {
+      setShoppingLists(newLists);
+      localStorage.setItem('budgetShopping', JSON.stringify(newLists));
+  }, []);
+
+  const handleUpdateGroups = useCallback((newGroups: SharedGroup[]) => {
+      setGroups(newGroups);
+      localStorage.setItem('budgetGroups', JSON.stringify(newGroups));
+  }, []);
+
+  const handleSyncShoppingToBudget = useCallback((amount: number, shopName: string) => {
+      const newExpense = {
+          id: generateId(),
+          name: shopName,
+          budgeted: 0,
+          spent: amount
+      };
+      // Append to expenses list
+      const updatedData = {
+          ...budgetData,
+          expenses: [...budgetData.expenses, newExpense]
+      };
+      handleUpdateBudget(updatedData);
+      addSystemNotification(`Added ${formatCurrency(amount, budgetData.currencySymbol)} expense for ${shopName}`, 'success');
+      setActiveTab('budget');
+  }, [budgetData, handleUpdateBudget, addSystemNotification]);
+
   const handleUndo = useCallback(() => {
     if (undoStack.length === 0) return;
     const previousState = undoStack[undoStack.length - 1];
@@ -389,7 +470,7 @@ const App: React.FC = () => {
   const handleReset = () => {
     localStorage.clear();
     setBudgetData(INITIAL_DATA); setHistory([INITIAL_DATA]); setEvents([]);
-    setUndoStack([]); setRedoStack([]); setUser(null); setSystemNotifications([]);
+    setUndoStack([]); setRedoStack([]); setUser(null); setSystemNotifications([]); setShoppingLists([]); setGroups([]);
     window.location.reload();
   };
 
@@ -411,6 +492,22 @@ const App: React.FC = () => {
           
           setEventFocus({ id: eventId, tab: initialTab });
           setActiveTab('events');
+          setShowNotifications(false);
+          return;
+      }
+
+      if (notif.category === 'Shopping') {
+          if (notif.data?.listId) {
+              setShoppingFocus({ listId: notif.data.listId, shopId: notif.data.shopId });
+          }
+          setActiveTab('shopping-list');
+          setShowNotifications(false);
+          return;
+      }
+
+      if (notif.data?.groupId) {
+          setActiveTab('social');
+          // Need a way to pass focus to collaborative view? For now just open tab
           setShowNotifications(false);
           return;
       }
@@ -438,7 +535,7 @@ const App: React.FC = () => {
 
   if (!loaded) return <div className="h-screen bg-slate-900 text-white flex items-center justify-center">Loading...</div>;
 
-  const isMenuSubView = ['history', 'tools', 'settings', 'support', 'legal', 'feedback', 'collaborative', 'community-links', 'profile', 'personal-info', 'email-prefs', 'security', 'pro-membership', 'membership-management', 'feature-subscription'].includes(activeTab);
+  const isMenuSubView = ['history', 'tools', 'settings', 'support', 'legal', 'feedback', 'collaborative', 'community-links', 'profile', 'personal-info', 'email-prefs', 'security', 'pro-membership', 'membership-management', 'feature-subscription', 'shopping-list'].includes(activeTab);
 
   return (
     <Layout>
@@ -472,7 +569,9 @@ const App: React.FC = () => {
                 onToggleNotifications={() => setShowNotifications(!showNotifications)}
                 onViewAnalysis={() => setActiveTab('analysis')} onViewInvestments={() => setActiveTab('investments')}
                 onViewEvents={() => setActiveTab('events')} onViewSocial={() => setActiveTab('social')}
-                onViewSimulator={() => setActiveTab('simulator')} eventNotificationCount={eventNotificationCount}
+                onViewSimulator={() => setActiveTab('simulator')} 
+                eventNotificationCount={eventNotificationCount}
+                socialNotificationCount={socialNotificationCount}
                 onProfileClick={handleProfileClick}
                 user={user}
                 onNavigate={setActiveTab}
@@ -493,10 +592,24 @@ const App: React.FC = () => {
             />
         )}
         {activeTab === 'social' && (
-            <CollaborativeView onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick} />
+            <CollaborativeView onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick} groups={groups} onUpdateGroups={handleUpdateGroups} />
         )}
         {activeTab === 'collaborative' && (
-            <CollaborativeView onBack={() => setActiveTab('menu')} onProfileClick={handleProfileClick} />
+            <CollaborativeView onBack={() => setActiveTab('menu')} onProfileClick={handleProfileClick} groups={groups} onUpdateGroups={handleUpdateGroups} />
+        )}
+        {activeTab === 'shopping-list' && (
+            <ShoppingListView 
+                onBack={() => setActiveTab('menu')} 
+                onProfileClick={handleProfileClick}
+                notificationCount={notifications.length}
+                onToggleNotifications={() => setShowNotifications(!showNotifications)}
+                shoppingLists={shoppingLists}
+                onUpdateLists={handleUpdateShopping}
+                onSyncToBudget={handleSyncShoppingToBudget}
+                focusListId={shoppingFocus?.listId}
+                focusShopId={shoppingFocus?.shopId}
+                clearFocus={() => setShoppingFocus(null)}
+            />
         )}
         {activeTab === 'community-links' && (
             <CommunityLinksView onBack={() => setActiveTab('menu')} />
@@ -505,8 +618,6 @@ const App: React.FC = () => {
             <EventsView 
                 events={events} onUpdateEvents={handleUpdateEvents} currencySymbol={budgetData.currencySymbol}
                 onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick}
-                notificationCount={notifications.length}
-                onToggleNotifications={() => setShowNotifications(!showNotifications)}
                 focusEventId={eventFocus?.id}
                 focusTab={eventFocus?.tab}
             />
@@ -607,7 +718,7 @@ const App: React.FC = () => {
             activeTab={isMenuSubView || activeTab === 'menu' ? 'menu' : (['analysis', 'investments', 'social', 'events', 'simulator'].includes(activeTab) ? 'ai' : activeTab)} 
             onTabChange={setActiveTab} 
             onAdd={handleOpenNewPeriodModal} 
-            badgeTabs={eventNotificationCount > 0 ? ['ai'] : []}
+            badgeTabs={(eventNotificationCount > 0 || socialNotificationCount > 0) ? ['ai'] : []}
           />
       )}
       
@@ -618,7 +729,10 @@ const App: React.FC = () => {
 
       {showNotifications && (
         <NotificationPopup 
-            notifications={notifications} onClose={() => setShowNotifications(false)} onNotificationClick={handleNotificationClick}
+            notifications={notifications} 
+            onClose={() => setShowNotifications(false)} 
+            onNotificationClick={handleNotificationClick}
+            onDismiss={handleDismissNotification}
         />
       )}
     </Layout>

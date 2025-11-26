@@ -1,5 +1,5 @@
 
-import { BudgetData, EventData } from './types';
+import { BudgetData, EventData, ShoppingListData, SharedGroup } from './types';
 
 export const CURRENCY_SYMBOLS: Record<string, string> = {
   'USD': '$', 'EUR': '€', 'GBP': '£', 'CAD': '$',
@@ -172,4 +172,100 @@ export const SAMPLE_EVENTS: EventData[] = [
         created: Date.now(),
         theme: "dark"
     }
+];
+
+export const SAMPLE_SHOPPING_LISTS: ShoppingListData[] = [
+    {
+        id: 'list-sample-1',
+        name: 'Weekly Essentials',
+        created: Date.now(),
+        currencySymbol: '$',
+        color: 'bg-indigo-500',
+        budget: 250,
+        members: [
+            { id: 'me', name: 'You', role: 'owner', avatarColor: 'bg-indigo-500' },
+            { id: 'partner', name: 'Sarah', role: 'editor', avatarColor: 'bg-pink-500' }
+        ],
+        shops: [
+            {
+                id: 'shop-1',
+                name: 'Fresh Market',
+                budget: 120,
+                items: [
+                    { id: 'i1', name: 'Organic Milk', quantity: '1 gal', price: 5.50, checked: true, addedBy: 'You' },
+                    { id: 'i2', name: 'Chicken Breast', quantity: '2 lbs', price: 14.00, checked: false, addedBy: 'You' },
+                    { id: 'i3', name: 'Avocados', quantity: '4', price: 6.00, checked: false, addedBy: 'Sarah', notes: 'Get the ripe ones' },
+                    { id: 'i4', name: 'Sourdough Bread', quantity: '1 loaf', price: 4.50, checked: true, addedBy: 'You' },
+                    { id: 'i5', name: 'Jasmine Rice', quantity: '5lb bag', price: 9.00, checked: false, addedBy: 'You' },
+                    { id: 'i6', name: 'Eggs', quantity: '1 dozen', price: 4.00, checked: true, addedBy: 'Sarah' }
+                ]
+            },
+            {
+                id: 'shop-2',
+                name: 'City Pharmacy',
+                budget: 50,
+                items: [
+                    { id: 'i7', name: 'Multivitamins', quantity: '1 bottle', price: 18.00, checked: false, addedBy: 'You' },
+                    { id: 'i8', name: 'Toothpaste', quantity: '2 pack', price: 8.00, checked: false, addedBy: 'Sarah' },
+                    { id: 'i9', name: 'Sunscreen', quantity: 'SPF 50', price: 12.00, checked: true, addedBy: 'Sarah' }
+                ]
+            },
+            {
+                id: 'shop-3',
+                name: 'Home Depot',
+                budget: 80,
+                items: [
+                    { id: 'i10', name: 'LED Bulbs', quantity: '6 pack', price: 22.00, checked: false, addedBy: 'You', notes: 'Warm white 2700K' },
+                    { id: 'i11', name: 'Paint Brushes', quantity: 'Set of 3', price: 15.00, checked: false, addedBy: 'You' }
+                ]
+            }
+        ]
+    }
+];
+
+export const MOCK_GROUPS: SharedGroup[] = [
+  {
+    id: 'g1',
+    name: 'Family Budget 2025',
+    totalBudget: 150000,
+    currency: 'LKR',
+    members: [
+      { id: 'me', name: 'You', role: 'Owner', avatarColor: 'bg-indigo-500' },
+      { id: 'u2', name: 'Devindi', role: 'Editor', avatarColor: 'bg-emerald-500' },
+      { id: 'u3', name: 'Dilan', role: 'Viewer', avatarColor: 'bg-pink-500' }
+    ],
+    categories: ['Food', 'Utilities', 'Travel', 'Rent', 'Groceries'],
+    expenses: [
+      { id: 'e1', title: 'March Rent', amount: 45000, paidBy: 'me', sharedWith: ['me', 'u2', 'u3'], category: 'Rent', date: '2025-03-01', split: { 'me': 15000, 'u2': 15000, 'u3': 15000 }, type: 'expense' },
+      { id: 'e2', title: 'WiFi Bill', amount: 2500, paidBy: 'u2', sharedWith: ['me', 'u2', 'u3'], category: 'Utilities', date: '2025-03-05', split: { 'me': 833, 'u2': 833, 'u3': 833 }, type: 'expense' },
+      { id: 'e3', title: 'Groceries at Keells', amount: 4200, paidBy: 'u3', sharedWith: ['me', 'u2', 'u3'], category: 'Groceries', date: '2025-03-10', split: { 'me': 1400, 'u2': 1400, 'u3': 1400 }, type: 'expense' }
+    ],
+    activityLog: [
+      { id: 'a1', type: 'expense', text: 'added Groceries at Keells', date: '2 hrs ago', user: 'Dilan', amount: 4200 },
+      { id: 'a2', type: 'expense', text: 'edited Utilities expense', date: '1 day ago', user: 'Devindi' },
+      { id: 'a3', type: 'expense', text: 'added March Rent', date: '3 days ago', user: 'You', amount: 45000 },
+    ],
+    settings: { shareAllCategories: true }
+  },
+  {
+    id: 'g2',
+    name: 'Couple Trip',
+    totalBudget: 50000,
+    currency: 'LKR',
+    members: [
+      { id: 'me', name: 'You', role: 'Owner', avatarColor: 'bg-indigo-500' },
+      { id: 'u4', name: 'Mother', role: 'Editor', avatarColor: 'bg-orange-500' }
+    ],
+    categories: ['Flights', 'Hotel', 'Food', 'Activities'],
+    expenses: [
+      { id: 'e4', title: 'Hotel Booking', amount: 12000, paidBy: 'me', sharedWith: ['me', 'u4'], category: 'Hotel', date: '2025-02-15', split: { 'me': 6000, 'u4': 6000 }, type: 'expense' },
+      { id: 'e5', title: 'Flight Tickets', amount: 40000, paidBy: 'me', sharedWith: ['me', 'u4'], category: 'Flights', date: '2025-02-16', split: { 'me': 20000, 'u4': 20000 }, type: 'expense' }
+    ],
+    activityLog: [
+        { id: 'a7', type: 'expense', text: 'added Flight Tickets', date: 'Just now', user: 'You', amount: 35000 },
+        { id: 'a5', type: 'expense', text: 'added Hotel Booking', date: '2 weeks ago', user: 'You', amount: 12000 },
+        { id: 'a6', type: 'edit', text: 'created the group', date: '2 weeks ago', user: 'You' },
+    ],
+    settings: { shareAllCategories: true }
+  }
 ];
