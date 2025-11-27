@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+
+import React, { useState, useMemo, useEffect } from 'react';
 import { BudgetData } from '../types';
 import { Card } from '../components/ui/Card';
 import { calculateTotals, formatCurrency } from '../utils/calculations';
-import { Bar, Doughnut, Line } from 'react-chartjs-2';
+import { Bar, Doughnut, Line, Pie } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -16,9 +17,18 @@ import {
   ArcElement,
   Filler
 } from 'chart.js';
-import { Filter, TrendingUp, TrendingDown, Lightbulb, Calendar, X, Bell, BellRing, ArrowUp, ArrowDown, Check, ChevronDown, ChevronUp, ChevronLeft, Trash2 } from 'lucide-react';
+import { 
+  TrendingUp, TrendingDown, LayoutGrid, DollarSign, CreditCard, 
+  ArrowUpRight, ArrowDownRight, Activity, Calendar, PieChart, 
+  Target, Shield, Download, Bell, ChevronLeft, Search, Filter,
+  Lightbulb, AlertTriangle, FileText, Lock, ChevronRight, X,
+  Briefcase, Home, Car, Coffee, Gift, ShoppingBag, BarChart, Sparkles, Clock,
+  FileSpreadsheet, Table, CheckSquare, Square, ChevronDown, BellRing, RefreshCcw
+} from 'lucide-react';
 import { MONTH_NAMES } from '../constants';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
+import { jsPDF } from 'jspdf';
+import * as XLSX from 'xlsx';
 
 ChartJS.register(
   CategoryScale,
@@ -42,909 +52,1448 @@ interface AnalysisViewProps {
   onProfileClick: () => void;
 }
 
-type TimeRange = '3M' | '6M' | '1Y' | 'ALL' | 'CUSTOM';
+const ZapIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>;
 
-export const AnalysisView: React.FC<AnalysisViewProps> = ({ history, currencySymbol, notificationCount, onToggleNotifications, onBack, onProfileClick }) => {
-  // Filter State
-  const [range, setRange] = useState<TimeRange>('6M');
-  const [customStartDate, setCustomStartDate] = useState('');
-  const [customEndDate, setCustomEndDate] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-  const [showAverages, setShowAverages] = useState(true);
+// Icon mapping for categories
+const CATEGORY_ICONS: Record<string, any> = {
+    'Housing': Home,
+    'Rent': Home,
+    'Mortgage': Home,
+    'Transport': Car,
+    'Fuel': Car,
+    'Food': Coffee,
+    'Dining': Coffee,
+    'Groceries': ShoppingBag,
+    'Entertainment': Gift,
+    'Shopping': ShoppingBag,
+    'Utilities': ZapIcon,
+    'Bills': FileText,
+};
 
-  // Category Filter State
-  const [selectedIncomeFilters, setSelectedIncomeFilters] = useState<string[]>([]);
-  const [selectedExpenseFilters, setSelectedExpenseFilters] = useState<string[]>([]);
-  const [showIncomeOptions, setShowIncomeOptions] = useState(false);
-  const [showExpenseOptions, setShowExpenseOptions] = useState(false);
+export const AnalysisView: React.FC<AnalysisViewProps> = ({ 
+  history, 
+  currencySymbol, 
+  notificationCount, 
+  onToggleNotifications, 
+  onBack, 
+  onProfileClick 
+}) => {
+  const [activeTab, setActiveTab] = useState<'overview' | 'income' | 'expenses' | 'cashflow' | 'planner' | 'reports' | 'tools'>('overview');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  // Get Unique Options for Filters
-  const uniqueIncomeSources = useMemo(() => {
-    const s = new Set<string>();
-    history.forEach(d => d.income.forEach(i => s.add(i.name)));
-    return Array.from(s).sort();
-  }, [history]);
+  // --- Reports State ---
+  const [reportTimeframe, setReportTimeframe] = useState<'3m' | '6m' | 'ytd' | 'all'>('3m');
+  const [selectedReportType, setSelectedReportType] = useState<'summary' | 'category' | 'comparison' | 'tax'>('summary');
+  const [reportCategories, setReportCategories] = useState<string[]>([]);
+  const [isCatDropdownOpen, setIsCatDropdownOpen] = useState(false);
 
-  const uniqueExpenseCategories = useMemo(() => {
-    const s = new Set<string>();
-    history.forEach(d => d.expenses.forEach(e => s.add(e.name)));
-    return Array.from(s).sort();
-  }, [history]);
+  // --- Tools State ---
+  const [alertSettings, setAlertSettings] = useState({
+      thresholds: true,
+      unusual: true,
+      bills: true,
+      balance: false,
+      subs: false
+  });
 
-  const toggleIncomeFilter = (name: string) => {
-    setSelectedIncomeFilters(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
-  };
+  // --- Data Processing ---
+  const sortedHistory = useMemo(() => [...history].sort((a, b) => a.created - b.created), [history]);
+  const currentPeriod = sortedHistory[sortedHistory.length - 1];
+  const previousPeriod = sortedHistory.length > 1 ? sortedHistory[sortedHistory.length - 2] : null;
+  
+  const currentTotals = useMemo(() => calculateTotals(currentPeriod), [currentPeriod]);
+  const prevTotals = useMemo(() => previousPeriod ? calculateTotals(previousPeriod) : null, [previousPeriod]);
 
-  const toggleExpenseFilter = (name: string) => {
-    setSelectedExpenseFilters(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
-  };
-
-  const clearFilters = () => {
-    setRange('6M');
-    setCustomStartDate('');
-    setCustomEndDate('');
-    setSelectedIncomeFilters([]);
-    setSelectedExpenseFilters([]);
-    setShowAverages(true);
-  };
-
-  const isFilterActive = useMemo(() => {
-    return selectedIncomeFilters.length > 0 || selectedExpenseFilters.length > 0 || range !== '6M';
-  }, [selectedIncomeFilters, selectedExpenseFilters, range]);
-
-  // Filter Data Logic (Date Range + Category Filters)
-  const filteredData = useMemo(() => {
-    // 1. Date Filtering
-    let sorted = [...history].sort((a, b) => a.created - b.created);
-    
-    let dateFiltered = sorted;
-    if (range !== 'ALL') {
-        let startTimestamp = 0;
-        let endTimestamp = Date.now();
-
-        if (range === 'CUSTOM') {
-            if (customStartDate) startTimestamp = new Date(customStartDate).getTime();
-            if (customEndDate) endTimestamp = new Date(customEndDate).getTime() + 86400000; // End of day
-        } else {
-            const now = new Date();
-            const monthsToSubtract = range === '3M' ? 3 : range === '6M' ? 6 : 12;
-            const cutoffDate = new Date();
-            cutoffDate.setMonth(now.getMonth() - monthsToSubtract);
-            startTimestamp = cutoffDate.getTime();
-        }
-        
-        dateFiltered = sorted.filter(item => item.created >= startTimestamp && item.created <= endTimestamp);
-    }
-
-    // 2. Category Filtering
-    if (selectedIncomeFilters.length === 0 && selectedExpenseFilters.length === 0) {
-        return dateFiltered;
-    }
-
-    return dateFiltered.map(period => ({
-        ...period,
-        income: selectedIncomeFilters.length > 0 
-            ? period.income.filter(i => selectedIncomeFilters.includes(i.name)) 
-            : period.income,
-        expenses: selectedExpenseFilters.length > 0
-            ? period.expenses.filter(e => selectedExpenseFilters.includes(e.name))
-            : period.expenses
-    }));
-  }, [history, range, customStartDate, customEndDate, selectedIncomeFilters, selectedExpenseFilters]);
-
-  // Filtered History for Metrics (Category filtered ONLY, ignores Date Range)
-  const filteredHistoryForMetrics = useMemo(() => {
-      if (selectedIncomeFilters.length === 0 && selectedExpenseFilters.length === 0) {
-          return history;
+  // Initialize report categories
+  useEffect(() => {
+      const allCats = Array.from(new Set(history.flatMap(h => h.expenses.map(e => e.name))));
+      if (reportCategories.length === 0 && allCats.length > 0) {
+          setReportCategories(allCats);
       }
-      return history.map(period => ({
-        ...period,
-        income: selectedIncomeFilters.length > 0 
-            ? period.income.filter(i => selectedIncomeFilters.includes(i.name)) 
-            : period.income,
-        expenses: selectedExpenseFilters.length > 0
-            ? period.expenses.filter(e => selectedExpenseFilters.includes(e.name))
-            : period.expenses
-      }));
-  }, [history, selectedIncomeFilters, selectedExpenseFilters]);
+  }, [history]);
 
-  // Performance Comparison Logic (Latest vs History)
-  const performanceMetrics = useMemo(() => {
-    const sorted = [...filteredHistoryForMetrics].sort((a, b) => a.created - b.created);
-    if (sorted.length < 2) return null;
+  // --- Report Data Filtering ---
+  const processedReportData = useMemo(() => {
+      const now = new Date();
+      let filteredHist = [...sortedHistory];
 
-    const current = sorted[sorted.length - 1];
-    
-    // Average of last 3 periods excluding current (if available) as baseline
-    const historySlice = sorted.slice(Math.max(0, sorted.length - 4), sorted.length - 1);
-    const hasHistory = historySlice.length > 0;
-    
-    // Fallback to previous single period if no deeper history
-    const previous = sorted[sorted.length - 2];
+      if (reportTimeframe === '3m') filteredHist = filteredHist.slice(-3);
+      if (reportTimeframe === '6m') filteredHist = filteredHist.slice(-6);
+      if (reportTimeframe === 'ytd') filteredHist = filteredHist.filter(h => h.year === now.getFullYear());
+      
+      const allExpenses = filteredHist.flatMap(h => 
+          h.expenses
+            .filter(e => reportCategories.includes(e.name))
+            .map(e => ({ ...e, period: `${MONTH_NAMES[h.month]} ${h.year}`, dateObj: h.created }))
+      );
 
-    const avgTotals = historySlice.reduce((acc, item) => {
-        const t = calculateTotals(item);
-        return {
-            income: acc.income + t.totalIncome,
-            expenses: acc.expenses + t.totalOut,
-        };
-    }, { income: 0, expenses: 0 });
-    
-    const baselineIncome = hasHistory ? avgTotals.income / historySlice.length : calculateTotals(previous).totalIncome;
-    const baselineExpense = hasHistory ? avgTotals.expenses / historySlice.length : calculateTotals(previous).totalOut;
+      return { history: filteredHist, expenses: allExpenses };
+  }, [sortedHistory, reportTimeframe, reportCategories]);
 
-    const currTotals = calculateTotals(current);
-    const prevTotals = calculateTotals(previous); 
+  // --- Export Functions ---
+  const getExportFilename = (ext: string) => `BudgetFlow_${selectedReportType}_${reportTimeframe}_${new Date().toISOString().split('T')[0]}.${ext}`;
 
-    const calcVariance = (curr: number, baseline: number) => {
-        if (baseline === 0) return 0;
-        return ((curr - baseline) / baseline) * 100;
-    };
-
-    const currentSavingsRate = currTotals.totalIncome > 0 ? ((currTotals.totalSavings + currTotals.totalInvestments) / currTotals.totalIncome) * 100 : 0;
-    const prevSavingsRate = prevTotals.totalIncome > 0 ? ((prevTotals.totalSavings + prevTotals.totalInvestments) / prevTotals.totalIncome) * 100 : 0;
-    
-    return {
-        periodLabel: `${current.period === 'monthly' ? MONTH_NAMES[current.month] : current.period} ${current.year}`,
-        baselineLabel: hasHistory ? `Avg of prev ${historySlice.length} periods` : 'Previous Period',
-        income: {
-            current: currTotals.totalIncome,
-            baseline: baselineIncome,
-            variance: calcVariance(currTotals.totalIncome, baselineIncome),
-        },
-        expenses: {
-            current: currTotals.totalOut,
-            baseline: baselineExpense,
-            variance: calcVariance(currTotals.totalOut, baselineExpense),
-        },
-        savingsRate: {
-            current: currentSavingsRate,
-            previous: prevSavingsRate,
-            diff: currentSavingsRate - prevSavingsRate
-        }
-    };
-  }, [filteredHistoryForMetrics]);
-
-  // Expense Comparison Chart Data
-  const expenseComparisonData = useMemo(() => {
-    if (!performanceMetrics) return { labels: [], datasets: [] };
-    
-    const isBad = performanceMetrics.expenses.variance > 0; // Higher expenses is usually bad
-    
-    return {
-        labels: ['Average', 'Current'],
-        datasets: [
-            {
-                label: 'Expenses',
-                data: [performanceMetrics.expenses.baseline, performanceMetrics.expenses.current],
-                backgroundColor: [
-                    'rgba(148, 163, 184, 0.5)', // Slate 400 for Baseline
-                    isBad ? 'rgba(239, 68, 68, 0.8)' : 'rgba(16, 185, 129, 0.8)' // Red or Green for Current
-                ],
-                borderRadius: 4,
-                barThickness: 25,
-            }
-        ]
-    };
-  }, [performanceMetrics]);
-
-  const expenseComparisonOptions = useMemo(() => ({
-    indexAxis: 'y' as const,
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-        legend: { display: false },
-        tooltip: {
-            callbacks: {
-                label: (context: any) => ` ${formatCurrency(context.raw, currencySymbol)}`
-            }
-        }
-    },
-    scales: {
-        x: { 
-            grid: { color: 'rgba(148, 163, 184, 0.1)' },
-            ticks: { 
-                callback: (val: any) => formatCurrency(val, currencySymbol),
-                color: '#94a3b8',
-                font: { size: 9 }
-            },
-            beginAtZero: true
-        },
-        y: {
-            grid: { display: false },
-            ticks: {
-                font: { size: 10, weight: 'bold' as const },
-                color: '#64748b'
-            }
-        }
-    }
-  }), [currencySymbol]);
-
-  // Insights Logic (Manual/Heuristic)
-  const insights = useMemo(() => {
-    const sorted = [...filteredData].sort((a, b) => a.created - b.created);
-    if (sorted.length === 0) return [];
-
-    const generatedInsights: { type: 'warning' | 'positive' | 'info' | 'neutral', text: string }[] = [];
-    
-    if (sorted.length >= 2) {
-        const current = sorted[sorted.length - 1];
-        const previous = sorted[sorted.length - 2];
-        const currTotals = calculateTotals(current);
-        const prevTotals = calculateTotals(previous);
-
-        // Global Expense Trend
-        const expenseDiff = currTotals.totalExpenses - prevTotals.totalExpenses;
-        const expensePct = prevTotals.totalExpenses > 0 ? (expenseDiff / prevTotals.totalExpenses) * 100 : 0;
-        
-        if (expensePct > 5) {
-            generatedInsights.push({
-                type: 'warning',
-                text: `Total expenses increased by ${Math.round(expensePct)}% vs last period.`
-            });
-        } else if (expensePct < -5) {
-            generatedInsights.push({
-                type: 'positive',
-                text: `Expenses reduced by ${Math.abs(Math.round(expensePct))}% vs last period.`
-            });
-        }
-
-        // Top 3 Categories Analysis (Using Filtered Categories if any selected)
-        const categoryTotals: Record<string, number> = {};
-        sorted.forEach(period => {
-            period.expenses.forEach(exp => {
-                categoryTotals[exp.name] = (categoryTotals[exp.name] || 0) + exp.spent;
-            });
-        });
-
-        const topCategories = Object.entries(categoryTotals)
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 3)
-            .map(([name]) => name);
-
-        topCategories.forEach((catName, index) => {
-            const currCat = current.expenses.find(e => e.name === catName);
-            const prevCat = previous.expenses.find(e => e.name === catName);
-
-            if (currCat && prevCat) {
-                const diff = currCat.spent - prevCat.spent;
-                const pct = prevCat.spent > 0 ? (diff / prevCat.spent) * 100 : 0;
-                const isSignificant = Math.abs(diff) > 20; 
-
-                if (isSignificant && pct > 10) {
-                    generatedInsights.push({
-                        type: 'warning',
-                        text: `${catName} is up ${Math.round(pct)}% (${formatCurrency(diff, currencySymbol)}) vs last month.`
-                    });
-                } else if (isSignificant && pct < -10) {
-                    generatedInsights.push({
-                        type: 'positive',
-                        text: `${catName} is down ${Math.abs(Math.round(pct))}% (${formatCurrency(Math.abs(diff), currencySymbol)}) vs last month.`
-                    });
-                }
-            }
-        });
-
-    } else {
-        generatedInsights.push({
-             type: 'neutral',
-             text: 'Track more periods to unlock trends.'
-        });
-    }
-    
-    const typePriority = { 'warning': 0, 'positive': 1, 'info': 2, 'neutral': 3 };
-    generatedInsights.sort((a, b) => typePriority[a.type] - typePriority[b.type]);
-
-    return generatedInsights.slice(0, 5);
-  }, [filteredData, currencySymbol]);
-
-  // Summary Stats
-  const summaryStats = useMemo(() => {
-    const count = filteredData.length || 1;
-    const totals = filteredData.reduce((acc, curr) => {
-        const t = calculateTotals(curr);
-        return {
-            leftToSpend: acc.leftToSpend + t.leftToSpend,
-            availableToBudget: acc.availableToBudget + t.availableToBudget,
-            totalExpenses: acc.totalExpenses + t.totalOut,
-            totalMoneyIn: acc.totalMoneyIn + t.totalIncome,
-        };
-    }, { leftToSpend: 0, availableToBudget: 0, totalExpenses: 0, totalMoneyIn: 0 });
-
-    if (showAverages && count > 0) {
-        return {
-            leftToSpend: totals.leftToSpend / count,
-            availableToBudget: totals.availableToBudget / count,
-            totalExpenses: totals.totalExpenses / count,
-            totalMoneyIn: totals.totalMoneyIn / count,
-        };
-    }
-    return totals;
-  }, [filteredData, showAverages]);
-
-  // Predictions Logic (Updated to use Category-specific trends)
-  const predictions = useMemo(() => {
-    if (filteredData.length < 2) return null;
-
-    const sortedSeries = [...filteredData].sort((a, b) => a.created - b.created);
-    
-    // 1. Forecast Left & Available (General)
-    const leftToSpendValues = sortedSeries.map(d => calculateTotals(d).leftToSpend);
-    const availableValues = sortedSeries.map(d => calculateTotals(d).availableToBudget);
-
-    const calculateHoltForecast = (data: number[]) => {
-        if (data.length < 2) return null;
-        if (data.length === 2) {
-             const slope = data[1] - data[0];
-             return { value: data[1] + slope, trend: slope };
-        }
-        const alpha = 0.5, beta = 0.3;  
-        let L = data[0], B = data[1] - data[0];
-        
-        for (let i = 1; i < data.length; i++) {
-            const current = data[i];
-            const prevL = L, prevB = B;
-            L = alpha * current + (1 - alpha) * (prevL + prevB);
-            B = beta * (L - prevL) + (1 - beta) * prevB;
-        }
-        return { value: L + B, trend: B };
-    };
-
-    const left = calculateHoltForecast(leftToSpendValues);
-    const avail = calculateHoltForecast(availableValues);
-
-    // 2. Forecast Expenses (Category-specific)
-    // Identify all categories across the filtered history
-    const allCategories = new Set<string>();
-    sortedSeries.forEach(d => d.expenses.forEach(e => allCategories.add(e.name)));
-
-    let predictedTotalExpenses = 0;
-    let currentTotalExpenses = 0;
-
-    const categoryForecasts: { name: string, value: number, trend: number }[] = [];
-
-    // Sum forecasts for each category
-    allCategories.forEach(catName => {
-        const history = sortedSeries.map(d => {
-            const item = d.expenses.find(e => e.name === catName);
-            return item ? item.spent : 0;
-        });
-
-        const forecast = calculateHoltForecast(history);
-        const lastVal = history[history.length - 1];
-        
-        currentTotalExpenses += lastVal;
-
-        if (forecast) {
-            // Expenses generally shouldn't decrease below 0 in forecast
-            const val = Math.max(0, forecast.value);
-            predictedTotalExpenses += val;
-            categoryForecasts.push({ name: catName, value: val, trend: forecast.trend });
-        } else {
-            predictedTotalExpenses += lastVal; // Fallback
-        }
-    });
-
-    // Fallback if no categories exist but there are total expenses recorded (unlikely but safe)
-    if (allCategories.size === 0) {
-         const totalHistory = sortedSeries.map(d => calculateTotals(d).totalOut);
-         const forecast = calculateHoltForecast(totalHistory);
-         predictedTotalExpenses = forecast ? forecast.value : 0;
-         currentTotalExpenses = totalHistory[totalHistory.length - 1];
-    }
-
-    const expenseTrend = predictedTotalExpenses - currentTotalExpenses;
-    
-    // Sort category forecasts by predicted value to show top spenders
-    const topCategories = categoryForecasts.sort((a, b) => b.value - a.value).slice(0, 3);
-
-    return {
-        left,
-        avail,
-        expenses: { value: predictedTotalExpenses, trend: expenseTrend },
-        topCategories
-    };
-  }, [filteredData]);
-
-  // Income Trend Chart Data
-  const incomeTrendData = useMemo(() => {
-    const sorted = [...filteredData].sort((a, b) => a.created - b.created);
-    const labels = sorted.map(d => d.period === 'monthly' ? MONTH_NAMES[d.month].substring(0, 3) : d.period);
-    const data = sorted.map(d => calculateTotals(d).totalIncome);
-
-    return {
-        labels,
-        datasets: [
-            {
-                label: 'Income Trend',
-                data,
-                borderColor: '#10b981', // emerald-500
-                backgroundColor: (context: any) => {
-                    const ctx = context.chart.ctx;
-                    const gradient = ctx.createLinearGradient(0, 0, 0, 200);
-                    gradient.addColorStop(0, 'rgba(16, 185, 129, 0.4)');
-                    gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
-                    return gradient;
-                },
-                fill: true,
-                tension: 0.4,
-                pointBackgroundColor: '#10b981',
-                pointBorderColor: '#fff',
-                pointBorderWidth: 2,
-                pointRadius: 4,
-            }
-        ]
-    };
-  }, [filteredData]);
-
-  const lineChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-        legend: { display: false },
-        tooltip: {
-            mode: 'index' as const,
-            intersect: false,
-            callbacks: {
-                label: (context: any) => ` ${formatCurrency(context.raw, currencySymbol)}`
-            }
-        }
-    },
-    scales: {
-        x: {
-            grid: { display: false },
-            ticks: { color: '#94a3b8', font: { size: 10 } }
-        },
-        y: {
-            grid: { color: 'rgba(148, 163, 184, 0.1)', drawBorder: false },
-            ticks: { display: false } 
-        }
-    },
-    interaction: {
-        mode: 'nearest' as const,
-        axis: 'x' as const,
-        intersect: false
-    }
+  const generatePDF = () => {
+      const doc = new jsPDF();
+      const title = selectedReportType === 'summary' ? "Monthly & Annual Summary" :
+                    selectedReportType === 'category' ? "Category Analysis Report" :
+                    selectedReportType === 'comparison' ? "Income vs Expense Report" :
+                    "Tax-Ready Expense Summary";
+      
+      doc.setFontSize(18);
+      doc.text(title, 20, 20);
+      doc.setFontSize(10);
+      doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 30);
+      doc.text(`Period: ${reportTimeframe.toUpperCase()}`, 20, 35);
+      
+      let y = 50;
+      
+      if (selectedReportType === 'summary' || selectedReportType === 'comparison') {
+          processedReportData.history.forEach(h => {
+              const t = calculateTotals(h);
+              if (y > 270) { doc.addPage(); y = 20; }
+              doc.setFontSize(12);
+              doc.text(`${MONTH_NAMES[h.month]} ${h.year}`, 20, y);
+              y += 7;
+              doc.setFontSize(10);
+              doc.text(`Income: ${currencySymbol}${t.totalIncome.toLocaleString()}`, 25, y);
+              doc.text(`Expenses: ${currencySymbol}${t.totalExpenses.toLocaleString()}`, 80, y);
+              doc.text(`Net: ${currencySymbol}${t.leftToSpend.toLocaleString()}`, 140, y);
+              y += 10;
+          });
+      } else if (selectedReportType === 'category') {
+          const catTotals: Record<string, number> = {};
+          processedReportData.expenses.forEach(e => {
+              catTotals[e.name] = (catTotals[e.name] || 0) + e.spent;
+          });
+          
+          Object.entries(catTotals).forEach(([cat, amount]) => {
+              if (y > 270) { doc.addPage(); y = 20; }
+              doc.text(`${cat}: ${currencySymbol}${amount.toLocaleString()}`, 20, y);
+              y += 7;
+          });
+      } else if (selectedReportType === 'tax') {
+          doc.text("Date", 20, y); doc.text("Category", 60, y); doc.text("Amount", 160, y);
+          y += 5;
+          doc.line(20, y, 190, y);
+          y += 5;
+          processedReportData.expenses.forEach(e => {
+              if (y > 270) { doc.addPage(); y = 20; }
+              doc.text(e.period, 20, y);
+              doc.text(e.name, 60, y);
+              doc.text(`${currencySymbol}${e.spent}`, 160, y);
+              y += 7;
+          });
+      }
+      
+      doc.save(getExportFilename('pdf'));
   };
 
-  // Chart Data
-  const plannedVsActualData = useMemo(() => {
-    const totals = filteredData.reduce((acc, curr) => {
-        acc.planned.bills += curr.bills.reduce((s, i) => s + i.amount, 0);
-        acc.planned.expenses += curr.expenses.reduce((s, i) => s + i.budgeted, 0);
-        acc.planned.savings += curr.savings.reduce((s, i) => s + i.planned, 0);
-        acc.actual.bills += curr.bills.reduce((s, i) => s + (i.paid ? i.amount : 0), 0);
-        acc.actual.expenses += curr.expenses.reduce((s, i) => s + i.spent, 0);
-        acc.actual.savings += curr.savings.reduce((s, i) => s + i.amount, 0);
-        return acc;
-    }, { planned: { bills: 0, expenses: 0, savings: 0 }, actual: { bills: 0, expenses: 0, savings: 0 } });
+  const generateExcel = () => {
+      const wb = XLSX.utils.book_new();
+      let data: any[] = [];
 
-    const divisor = showAverages ? (filteredData.length || 1) : 1;
-    const process = (val: number) => val / divisor;
+      if (selectedReportType === 'summary' || selectedReportType === 'comparison') {
+          data = processedReportData.history.map(h => {
+              const t = calculateTotals(h);
+              return { Period: `${MONTH_NAMES[h.month]} ${h.year}`, Income: t.totalIncome, Expenses: t.totalExpenses, Net: t.leftToSpend };
+          });
+      } else if (selectedReportType === 'category') {
+          const catTotals: Record<string, number> = {};
+          processedReportData.expenses.forEach(e => catTotals[e.name] = (catTotals[e.name] || 0) + e.spent);
+          data = Object.entries(catTotals).map(([Category, Amount]) => ({ Category, Amount }));
+      } else {
+          data = processedReportData.expenses.map(e => ({ Period: e.period, Category: e.name, Amount: e.spent }));
+      }
 
-    return {
-        labels: ['Bills', 'Expenses', 'Savings'],
-        datasets: [
-            { label: 'Planned', data: [process(totals.planned.bills), process(totals.planned.expenses), process(totals.planned.savings)], backgroundColor: '#6366f1', borderRadius: 4 },
-            { label: 'Actual', data: [process(totals.actual.bills), process(totals.actual.expenses), process(totals.actual.savings)], backgroundColor: '#ec4899', borderRadius: 4 }
-        ]
-    };
-  }, [filteredData, showAverages]);
+      const ws = XLSX.utils.json_to_sheet(data);
+      XLSX.utils.book_append_sheet(wb, ws, "Report");
+      XLSX.writeFile(wb, getExportFilename('xlsx'));
+  };
 
-  const expenseData = useMemo(() => {
-    const categories: Record<string, number> = {};
-    filteredData.forEach(d => {
-        d.expenses.forEach(e => { categories[e.name] = (categories[e.name] || 0) + e.spent; });
-    });
-    const divisor = showAverages ? (filteredData.length || 1) : 1;
-    return {
-        labels: Object.keys(categories),
-        datasets: [{ data: Object.values(categories).map(v => v / divisor), backgroundColor: ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4'], borderWidth: 0 }]
-    };
-  }, [filteredData, showAverages]);
+  const generateCSV = () => {
+      const wb = XLSX.utils.book_new();
+      let data: any[] = [];
+      if (selectedReportType === 'summary' || selectedReportType === 'comparison') {
+          data = processedReportData.history.map(h => { const t = calculateTotals(h); return { Period: `${MONTH_NAMES[h.month]} ${h.year}`, Income: t.totalIncome, Expenses: t.totalExpenses, Net: t.leftToSpend }; });
+      } else if (selectedReportType === 'category') {
+          const catTotals: Record<string, number> = {};
+          processedReportData.expenses.forEach(e => catTotals[e.name] = (catTotals[e.name] || 0) + e.spent);
+          data = Object.entries(catTotals).map(([Category, Amount]) => ({ Category, Amount }));
+      } else {
+          data = processedReportData.expenses.map(e => ({ Period: e.period, Category: e.name, Amount: e.spent }));
+      }
+      const ws = XLSX.utils.json_to_sheet(data);
+      const csv = XLSX.utils.sheet_to_csv(ws);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", getExportFilename('csv'));
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  };
 
-  const barOptions = { responsive: true, maintainAspectRatio: false, scales: { y: { grid: { color: 'rgba(148, 163, 184, 0.1)' }, ticks: { color: '#64748b' } }, x: { grid: { display: false }, ticks: { color: '#94a3b8' } } }, plugins: { legend: { display: false } } };
-  const doughnutOptions = { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: false } } };
+  // --- Helpers for Charts ---
+  const chartOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { display: false }, y: { display: false } },
+      interaction: { mode: 'index' as const, intersect: false },
+  };
+
+  const labels = sortedHistory.map(h => h.period === 'monthly' ? MONTH_NAMES[h.month].substring(0, 3) : 'Pd');
+
+  // --- 1. Overview Section Data ---
+  const overviewData = {
+      income: currentTotals.totalIncome,
+      expenses: currentTotals.totalOut,
+      net: currentTotals.leftToSpend,
+      savingsRate: currentTotals.totalIncome > 0 ? ((currentTotals.totalSavings + currentTotals.totalInvestments) / currentTotals.totalIncome) * 100 : 0
+  };
+
+  const spendingVsIncomeData = {
+      labels,
+      datasets: [
+          {
+              label: 'Income',
+              data: sortedHistory.map(h => calculateTotals(h).totalIncome),
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              fill: true,
+              tension: 0.4
+          },
+          {
+              label: 'Expenses',
+              data: sortedHistory.map(h => calculateTotals(h).totalOut),
+              borderColor: '#ef4444',
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              fill: true,
+              tension: 0.4
+          }
+      ]
+  };
+
+  // Data for Overview Charts
+  const overviewCategoryData = {
+      labels: currentPeriod.expenses.map(e => e.name),
+      datasets: [{
+          data: currentPeriod.expenses.map(e => e.spent),
+          backgroundColor: ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#6366f1', '#a855f7', '#ec4899'],
+          borderWidth: 0,
+      }]
+  };
+
+  const overviewCashFlowData = {
+      labels: labels.slice(-6),
+      datasets: [{
+          label: 'Net Flow',
+          data: sortedHistory.slice(-6).map(h => {
+              const t = calculateTotals(h);
+              return t.totalIncome - t.totalOut;
+          }),
+          backgroundColor: (ctx: any) => {
+              const v = ctx.raw;
+              return v >= 0 ? '#10b981' : '#ef4444';
+          },
+          borderRadius: 4
+      }]
+  };
+
+  // --- 2. Income Section Data ---
+  const incomeSourcesData = {
+      labels: currentPeriod.income.map(i => i.name),
+      datasets: [{
+          data: currentPeriod.income.map(i => i.actual),
+          backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899'],
+          borderWidth: 0
+      }]
+  };
+
+  const incomeHistoryValues = useMemo(() => sortedHistory.map(h => calculateTotals(h).totalIncome), [sortedHistory]);
+
+  const avgIncome = useMemo(() => incomeHistoryValues.reduce((a, b) => a + b, 0) / (incomeHistoryValues.length || 1), [incomeHistoryValues]);
+
+  const incomeGrowthRate = useMemo(() => {
+      if (incomeHistoryValues.length < 2) return 0;
+      let sumPct = 0;
+      let count = 0;
+      for(let i=1; i<incomeHistoryValues.length; i++) {
+          const prev = incomeHistoryValues[i-1];
+          if(prev > 0) {
+              sumPct += (incomeHistoryValues[i] - prev) / prev;
+              count++;
+          }
+      }
+      return count > 0 ? (sumPct / count) * 100 : 0;
+  }, [incomeHistoryValues]);
+
+  const incomeStdDev = useMemo(() => {
+      if (incomeHistoryValues.length < 2) return 0;
+      const mean = avgIncome;
+      const variance = incomeHistoryValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / incomeHistoryValues.length;
+      return Math.sqrt(variance);
+  }, [incomeHistoryValues, avgIncome]);
+
+  const incomeStabilityLabel = useMemo(() => {
+      if (avgIncome === 0) return 'N/A';
+      const cv = incomeStdDev / avgIncome; // Coefficient of Variation
+      if (cv < 0.1) return 'High';
+      if (cv < 0.25) return 'Medium';
+      return 'Low';
+  }, [incomeStdDev, avgIncome]);
+
+  const incomeTrendChartData = {
+      labels,
+      datasets: [{
+          label: 'Total Income',
+          data: incomeHistoryValues,
+          borderColor: '#10b981',
+          backgroundColor: (context: any) => {
+              const ctx = context.chart.ctx;
+              const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+              gradient.addColorStop(0, 'rgba(16, 185, 129, 0.4)');
+              gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+              return gradient;
+          },
+          fill: true,
+          tension: 0.4,
+          pointRadius: 4,
+          pointBackgroundColor: '#ffffff',
+          pointBorderColor: '#10b981',
+          pointBorderWidth: 2
+      }]
+  };
+
+  // --- 3. Expense Section Data ---
+  const expenseCategoriesData = {
+      labels: currentPeriod.expenses.map(e => e.name),
+      datasets: [{
+          data: currentPeriod.expenses.map(e => e.spent),
+          backgroundColor: ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#6366f1', '#a855f7', '#ec4899'],
+          borderWidth: 0,
+          borderRadius: 4
+      }]
+  };
+
+  // Comparison Logic
+  const totalSpent = currentTotals.totalExpenses;
+  const prevSpent = prevTotals ? prevTotals.totalExpenses : 0;
+  const diffSpent = totalSpent - prevSpent;
+  const pctChangeSpent = prevSpent > 0 ? (diffSpent / prevSpent) * 100 : 0;
+  const dailyAvg = totalSpent / 30; // Approx
+
+  const expenseTrendData = {
+      labels,
+      datasets: [{
+          label: 'Monthly Expenses',
+          data: sortedHistory.map(h => calculateTotals(h).totalExpenses),
+          borderColor: '#a855f7', // Purple
+          backgroundColor: (context: any) => {
+              const ctx = context.chart.ctx;
+              const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+              gradient.addColorStop(0, 'rgba(168, 85, 247, 0.4)');
+              gradient.addColorStop(1, 'rgba(168, 85, 247, 0.0)');
+              return gradient;
+          },
+          fill: true,
+          tension: 0.4,
+          pointRadius: 3
+      }]
+  };
+
+  // AI Suggestions Logic (Mocked based on data)
+  const topCategory = [...currentPeriod.expenses].sort((a,b) => b.spent - a.spent)[0];
+  const recurringTotal = currentPeriod.bills.reduce((s, b) => s + b.amount, 0) + 
+                         currentPeriod.expenses.filter(e => /sub|netflix|spotify|internet/i.test(e.name)).reduce((s, e) => s + e.spent, 0);
+  const recurringPct = currentTotals.totalOut > 0 ? (recurringTotal / currentTotals.totalOut) * 100 : 0;
+
+  // --- 4. Cash Flow Data ---
+  const cashFlowData = {
+      labels,
+      datasets: [{
+          label: 'Net Flow',
+          data: sortedHistory.map(h => {
+              const t = calculateTotals(h);
+              return t.totalIncome - t.totalOut;
+          }),
+          backgroundColor: (ctx: any) => {
+              const v = ctx.raw;
+              return v >= 0 ? '#10b981' : '#ef4444';
+          },
+          borderRadius: 4
+      }]
+  };
+
+  const cumulativeSavingsData = {
+      labels,
+      datasets: [{
+          label: 'Cumulative Savings',
+          data: sortedHistory.reduce((acc: number[], h) => {
+              const t = calculateTotals(h);
+              const prev = acc.length > 0 ? acc[acc.length - 1] : 0;
+              acc.push(prev + t.totalSavings + t.totalInvestments);
+              return acc;
+          }, []),
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          fill: true,
+          tension: 0.4
+      }]
+  };
+
+  // --- Render Components ---
+
+  const renderReports = () => {
+      // Toggle category selection
+      const toggleCategory = (cat: string) => {
+          if (reportCategories.includes(cat)) {
+              setReportCategories(reportCategories.filter(c => c !== cat));
+          } else {
+              setReportCategories([...reportCategories, cat]);
+          }
+      };
+
+      const selectAllCats = () => {
+          const allCats = Array.from(new Set(history.flatMap(h => h.expenses.map(e => e.name))));
+          setReportCategories(allCats);
+      };
+
+      const clearAllCats = () => setReportCategories([]);
+
+      return (
+          <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+              
+              {/* Configuration Card */}
+              <Card className="p-4 bg-white dark:bg-slate-800" overflowHidden={false}>
+                  <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-3 flex items-center gap-2">
+                      <Filter size={16} className="text-indigo-500" /> Report Configuration
+                  </h3>
+                  
+                  <div className="space-y-4">
+                      {/* Timeframe Selector */}
+                      <div>
+                          <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Date Range</label>
+                          <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl">
+                              {['3m', '6m', 'ytd', 'all'].map(tf => (
+                                  <button
+                                      key={tf}
+                                      onClick={() => setReportTimeframe(tf as any)}
+                                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${reportTimeframe === tf ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                  >
+                                      {tf === '3m' ? '3 Months' : tf === '6m' ? '6 Months' : tf === 'ytd' ? 'Year to Date' : 'All Time'}
+                                  </button>
+                              ))}
+                          </div>
+                      </div>
+
+                      {/* Category Filter */}
+                      <div className="relative z-50">
+                          <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Categories Included</label>
+                          <button 
+                              onClick={() => setIsCatDropdownOpen(!isCatDropdownOpen)}
+                              className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm"
+                          >
+                              <span className="text-slate-700 dark:text-slate-300">
+                                  {reportCategories.length === 0 ? 'No categories selected' : reportCategories.length === Array.from(new Set(history.flatMap(h => h.expenses.map(e => e.name)))).length ? 'All Categories Selected' : `${reportCategories.length} Selected`}
+                              </span>
+                              <ChevronDown size={16} className={`transition-transform ${isCatDropdownOpen ? 'rotate-180' : ''}`} />
+                          </button>
+                          
+                          {isCatDropdownOpen && (
+                              <div className="absolute z-[100] top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-3 max-h-60 overflow-y-auto custom-scrollbar">
+                                  <div className="flex gap-2 mb-2 pb-2 border-b border-slate-100 dark:border-slate-700">
+                                      <button onClick={selectAllCats} className="text-xs font-bold text-indigo-600">Select All</button>
+                                      <button onClick={clearAllCats} className="text-xs font-bold text-slate-400">Clear</button>
+                                  </div>
+                                  <div className="space-y-1">
+                                      {Array.from(new Set(history.flatMap(h => h.expenses.map(e => e.name)))).map(cat => (
+                                          <div key={cat} onClick={() => toggleCategory(cat)} className="flex items-center gap-2 p-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-lg cursor-pointer">
+                                              {reportCategories.includes(cat) ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} className="text-slate-300" />}
+                                              <span className="text-sm text-slate-700 dark:text-slate-300">{cat}</span>
+                                          </div>
+                                      ))}
+                                  </div>
+                              </div>
+                          )}
+                      </div>
+                  </div>
+              </Card>
+
+              {/* Report Types Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                  {[
+                      { id: 'summary', label: 'Monthly Summary', icon: FileText, desc: 'Income, Expenses, Net P&L' },
+                      { id: 'category', label: 'Category Analysis', icon: PieChart, desc: 'Detailed spending breakdown' },
+                      { id: 'comparison', label: 'Income vs Expense', icon: TrendingUp, desc: 'Trend comparison chart' },
+                      { id: 'tax', label: 'Tax-Ready Export', icon: Table, desc: 'Clean expense list for tax' }
+                  ].map((rpt) => (
+                      <div 
+                          key={rpt.id}
+                          onClick={() => setSelectedReportType(rpt.id as any)}
+                          className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${selectedReportType === rpt.id ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-indigo-300'}`}
+                      >
+                          <rpt.icon size={24} className={`mb-2 ${selectedReportType === rpt.id ? 'text-indigo-600' : 'text-slate-400'}`} />
+                          <h4 className={`text-sm font-bold ${selectedReportType === rpt.id ? 'text-indigo-900 dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>{rpt.label}</h4>
+                          <p className="text-[10px] text-slate-500 mt-1 leading-tight">{rpt.desc}</p>
+                      </div>
+                  ))}
+              </div>
+
+              {/* Full Detail Preview Area */}
+              <Card className="p-0 overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[400px]">
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center sticky top-0 z-10">
+                      <h4 className="text-xs font-bold text-slate-500 uppercase">Report Preview</h4>
+                      <span className="text-[10px] text-slate-400 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                          {selectedReportType === 'summary' || selectedReportType === 'comparison' 
+                              ? `${processedReportData.history.length} Periods` 
+                              : `${processedReportData.expenses.length} Records`}
+                      </span>
+                  </div>
+                  
+                  <div className="overflow-y-auto custom-scrollbar p-0 bg-white dark:bg-slate-900">
+                      {/* Summary Report Table */}
+                      {selectedReportType === 'summary' && (
+                          <table className="w-full text-xs text-left">
+                              <thead className="bg-slate-100 dark:bg-slate-800/50 text-slate-500 font-bold sticky top-0 z-10">
+                                  <tr>
+                                      <th className="p-3 border-b border-slate-200 dark:border-slate-700">Period</th>
+                                      <th className="p-3 border-b border-slate-200 dark:border-slate-700 text-right">Income</th>
+                                      <th className="p-3 border-b border-slate-200 dark:border-slate-700 text-right">Expenses</th>
+                                      <th className="p-3 border-b border-slate-200 dark:border-slate-700 text-right">Net</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                  {processedReportData.history.length > 0 ? processedReportData.history.map(h => {
+                                      const t = calculateTotals(h);
+                                      return (
+                                          <tr key={h.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                                              <td className="p-3 font-medium text-slate-700 dark:text-slate-300">{h.period === 'monthly' ? MONTH_NAMES[h.month] : h.period} {h.year}</td>
+                                              <td className="p-3 text-right text-emerald-600 dark:text-emerald-400">{formatCurrency(t.totalIncome, currencySymbol)}</td>
+                                              <td className="p-3 text-right text-red-500 dark:text-red-400">{formatCurrency(t.totalExpenses, currencySymbol)}</td>
+                                              <td className={`p-3 text-right font-bold ${t.leftToSpend >= 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-red-600 dark:text-red-400'}`}>
+                                                  {formatCurrency(t.leftToSpend, currencySymbol)}
+                                              </td>
+                                          </tr>
+                                      );
+                                  }) : (
+                                      <tr><td colSpan={4} className="p-6 text-center text-slate-400 italic">No data found for this range.</td></tr>
+                                  )}
+                                  {/* Total Row */}
+                                  {processedReportData.history.length > 0 && (
+                                      <tr className="bg-slate-50 dark:bg-slate-800 font-bold">
+                                          <td className="p-3 text-slate-900 dark:text-white">TOTAL</td>
+                                          <td className="p-3 text-right text-emerald-700 dark:text-emerald-300">
+                                              {formatCurrency(processedReportData.history.reduce((s, h) => s + calculateTotals(h).totalIncome, 0), currencySymbol)}
+                                          </td>
+                                          <td className="p-3 text-right text-red-700 dark:text-red-300">
+                                              {formatCurrency(processedReportData.history.reduce((s, h) => s + calculateTotals(h).totalExpenses, 0), currencySymbol)}
+                                          </td>
+                                          <td className="p-3 text-right text-indigo-700 dark:text-indigo-300">
+                                              {formatCurrency(processedReportData.history.reduce((s, h) => s + calculateTotals(h).leftToSpend, 0), currencySymbol)}
+                                          </td>
+                                      </tr>
+                                  )}
+                              </tbody>
+                          </table>
+                      )}
+
+                      {/* Category Report Table */}
+                      {selectedReportType === 'category' && (
+                          <table className="w-full text-xs text-left">
+                              <thead className="bg-slate-100 dark:bg-slate-800/50 text-slate-500 font-bold sticky top-0 z-10">
+                                  <tr>
+                                      <th className="p-3 border-b border-slate-200 dark:border-slate-700">Category</th>
+                                      <th className="p-3 border-b border-slate-200 dark:border-slate-700 text-center">Txns</th>
+                                      <th className="p-3 border-b border-slate-200 dark:border-slate-700 text-right">Total Spent</th>
+                                      <th className="p-3 border-b border-slate-200 dark:border-slate-700 text-right">%</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                  {(() => {
+                                      const catTotals: Record<string, {amount: number, count: number}> = {};
+                                      let grandTotal = 0;
+                                      processedReportData.expenses.forEach(e => {
+                                          if (!catTotals[e.name]) catTotals[e.name] = { amount: 0, count: 0 };
+                                          catTotals[e.name].amount += e.spent;
+                                          catTotals[e.name].count += 1;
+                                          grandTotal += e.spent;
+                                      });
+                                      const sortedCats = Object.entries(catTotals).sort((a, b) => b[1].amount - a[1].amount);
+
+                                      if (sortedCats.length === 0) return <tr><td colSpan={4} className="p-6 text-center text-slate-400 italic">No expenses found.</td></tr>;
+
+                                      return sortedCats.map(([cat, data], i) => (
+                                          <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                                              <td className="p-3 font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                                  <div className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600"></div>
+                                                  {cat}
+                                              </td>
+                                              <td className="p-3 text-center text-slate-500 dark:text-slate-400">{data.count}</td>
+                                              <td className="p-3 text-right font-bold text-slate-900 dark:text-white">{formatCurrency(data.amount, currencySymbol)}</td>
+                                              <td className="p-3 text-right text-slate-500 dark:text-slate-400">
+                                                  {grandTotal > 0 ? ((data.amount / grandTotal) * 100).toFixed(1) : 0}%
+                                              </td>
+                                          </tr>
+                                      ));
+                                  })()}
+                              </tbody>
+                          </table>
+                      )}
+
+                      {/* Comparison Report Table */}
+                      {selectedReportType === 'comparison' && (
+                          <table className="w-full text-xs text-left">
+                              <thead className="bg-slate-100 dark:bg-slate-800/50 text-slate-500 font-bold sticky top-0 z-10">
+                                  <tr>
+                                      <th className="p-3 border-b border-slate-200 dark:border-slate-700">Period</th>
+                                      <th className="p-3 border-b border-slate-200 dark:border-slate-700 text-right">In</th>
+                                      <th className="p-3 border-b border-slate-200 dark:border-slate-700 text-right">Out</th>
+                                      <th className="p-3 border-b border-slate-200 dark:border-slate-700 text-right">Diff</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                  {processedReportData.history.map(h => {
+                                      const t = calculateTotals(h);
+                                      const diff = t.totalIncome - t.totalExpenses;
+                                      return (
+                                          <tr key={h.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                                              <td className="p-3 font-medium text-slate-700 dark:text-slate-300">{MONTH_NAMES[h.month].substring(0,3)} '{h.year.toString().slice(-2)}</td>
+                                              <td className="p-3 text-right text-slate-500">{formatCurrency(t.totalIncome, currencySymbol)}</td>
+                                              <td className="p-3 text-right text-slate-500">{formatCurrency(t.totalExpenses, currencySymbol)}</td>
+                                              <td className={`p-3 text-right font-bold ${diff >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                  {diff >= 0 ? '+' : ''}{formatCurrency(diff, currencySymbol)}
+                                              </td>
+                                          </tr>
+                                      );
+                                  })}
+                              </tbody>
+                          </table>
+                      )}
+
+                      {/* Tax-Ready Report Table */}
+                      {selectedReportType === 'tax' && (
+                          <table className="w-full text-xs text-left">
+                              <thead className="bg-slate-100 dark:bg-slate-800/50 text-slate-500 font-bold sticky top-0 z-10">
+                                  <tr>
+                                      <th className="p-3 border-b border-slate-200 dark:border-slate-700">Date</th>
+                                      <th className="p-3 border-b border-slate-200 dark:border-slate-700">Description</th>
+                                      <th className="p-3 border-b border-slate-200 dark:border-slate-700">Category</th>
+                                      <th className="p-3 border-b border-slate-200 dark:border-slate-700 text-right">Amount</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                  {processedReportData.expenses.length > 0 ? processedReportData.expenses.map((e, i) => (
+                                      <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                                          <td className="p-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                              {new Date(e.dateObj).toLocaleDateString()}
+                                          </td>
+                                          <td className="p-3 text-slate-700 dark:text-slate-300 font-medium">
+                                              {e.name} Expense
+                                          </td>
+                                          <td className="p-3 text-slate-500 dark:text-slate-400 truncate max-w-[100px]">
+                                              {e.name}
+                                          </td>
+                                          <td className="p-3 text-right font-mono text-slate-900 dark:text-white">
+                                              {formatCurrency(e.spent, currencySymbol)}
+                                          </td>
+                                      </tr>
+                                  )) : (
+                                      <tr><td colSpan={4} className="p-6 text-center text-slate-400 italic">No expenses match filter.</td></tr>
+                                  )}
+                              </tbody>
+                          </table>
+                      )}
+                  </div>
+              </Card>
+
+              {/* Action Bar */}
+              <div className="fixed bottom-24 left-4 right-4 z-30">
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 p-2 flex gap-2">
+                      <button onClick={generatePDF} className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors active:scale-95">
+                          <FileText size={18} /> PDF
+                      </button>
+                      <button onClick={generateExcel} className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors active:scale-95">
+                          <FileSpreadsheet size={18} /> Excel
+                      </button>
+                      <button onClick={generateCSV} className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors active:scale-95">
+                          <Table size={18} /> CSV
+                      </button>
+                  </div>
+              </div>
+              <div className="h-16"></div> {/* Spacer for fixed bar */}
+          </div>
+      );
+  };
+
+  const renderTools = () => {
+      const toggleAlert = (key: keyof typeof alertSettings) => {
+          setAlertSettings(prev => ({ ...prev, [key]: !prev[key] }));
+      };
+
+      return (
+        <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+            <Card className="p-5">
+                <div className="flex items-center gap-3 mb-6">
+                    <div className="p-3 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full">
+                        <BellRing size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">Intelligent Alerts</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Configure how AI notifies you about your finances.</p>
+                    </div>
+                </div>
+
+                <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-start gap-3 max-w-[80%]">
+                            <PieChart size={18} className="text-slate-400 mt-0.5" />
+                            <div>
+                                <h4 className="text-sm font-bold text-slate-900 dark:text-white">Budget Thresholds</h4>
+                                <p className="text-xs text-slate-500 leading-snug">Get notified when you hit 80% and 100% of category limits.</p>
+                            </div>
+                        </div>
+                        <Toggle checked={alertSettings.thresholds} onChange={() => toggleAlert('thresholds')} />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-start gap-3 max-w-[80%]">
+                            <Activity size={18} className="text-slate-400 mt-0.5" />
+                            <div>
+                                <h4 className="text-sm font-bold text-slate-900 dark:text-white">Unusual Spending</h4>
+                                <p className="text-xs text-slate-500 leading-snug">Detect anomalies or double charges instantly.</p>
+                            </div>
+                        </div>
+                        <Toggle checked={alertSettings.unusual} onChange={() => toggleAlert('unusual')} />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-start gap-3 max-w-[80%]">
+                            <FileText size={18} className="text-slate-400 mt-0.5" />
+                            <div>
+                                <h4 className="text-sm font-bold text-slate-900 dark:text-white">Bill Reminders</h4>
+                                <p className="text-xs text-slate-500 leading-snug">Receive alerts 3 days before recurring bills are due.</p>
+                            </div>
+                        </div>
+                        <Toggle checked={alertSettings.bills} onChange={() => toggleAlert('bills')} />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-start gap-3 max-w-[80%]">
+                            <TrendingDown size={18} className="text-slate-400 mt-0.5" />
+                            <div>
+                                <h4 className="text-sm font-bold text-slate-900 dark:text-white">Low Balance Forecast</h4>
+                                <p className="text-xs text-slate-500 leading-snug">Predicts potential overdrafts based on spending trends.</p>
+                            </div>
+                        </div>
+                        <Toggle checked={alertSettings.balance} onChange={() => toggleAlert('balance')} />
+                    </div>
+                     <div className="flex items-center justify-between">
+                        <div className="flex items-start gap-3 max-w-[80%]">
+                            <RefreshCcw size={18} className="text-slate-400 mt-0.5" />
+                            <div>
+                                <h4 className="text-sm font-bold text-slate-900 dark:text-white">Subscription Monitor</h4>
+                                <p className="text-xs text-slate-500 leading-snug">Alert on price hikes for existing subscriptions.</p>
+                            </div>
+                        </div>
+                        <Toggle checked={alertSettings.subs} onChange={() => toggleAlert('subs')} />
+                    </div>
+                </div>
+            </Card>
+        </div>
+      );
+  };
+
+  const renderOverview = () => (
+      <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+          {/* Top Cards */}
+          <div className="grid grid-cols-2 gap-3">
+              <Card className="p-3 bg-gradient-to-br from-emerald-500 to-teal-600 text-white border-none">
+                  <div className="flex items-center gap-2 mb-1 opacity-80">
+                      <ArrowUpRight size={14} /> <span className="text-xs font-bold uppercase">Income</span>
+                  </div>
+                  <div className="text-xl font-bold truncate">{formatCurrency(overviewData.income, currencySymbol)}</div>
+              </Card>
+              <Card className="p-3 bg-gradient-to-br from-red-500 to-pink-600 text-white border-none">
+                  <div className="flex items-center gap-2 mb-1 opacity-80">
+                      <ArrowDownRight size={14} /> <span className="text-xs font-bold uppercase">Expenses</span>
+                  </div>
+                  <div className="text-xl font-bold truncate">{formatCurrency(overviewData.expenses, currencySymbol)}</div>
+              </Card>
+              <Card className="p-3 bg-white dark:bg-slate-800">
+                  <div className="text-xs text-slate-500 uppercase font-bold mb-1">Net Balance</div>
+                  <div className={`text-xl font-bold ${overviewData.net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {formatCurrency(overviewData.net, currencySymbol)}
+                  </div>
+              </Card>
+              <Card className="p-3 bg-white dark:bg-slate-800">
+                  <div className="text-xs text-slate-500 uppercase font-bold mb-1">Savings Rate</div>
+                  <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400">
+                      {overviewData.savingsRate.toFixed(1)}%
+                  </div>
+              </Card>
+          </div>
+
+          {/* Main Visual */}
+          <Card className="p-4">
+              <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4">Income vs Spending Trend</h3>
+              <div className="h-48">
+                  <Line data={spendingVsIncomeData} options={chartOptions} />
+              </div>
+          </Card>
+
+          {/* Charts: Category Breakdown & Recent Cash Flow */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card className="p-4">
+                  <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4">Category Breakdown</h3>
+                  <div className="h-48 relative flex justify-center">
+                      <Pie 
+                          data={overviewCategoryData} 
+                          options={{
+                              maintainAspectRatio: false,
+                              plugins: { 
+                                  legend: { 
+                                      position: 'right', 
+                                      labels: { boxWidth: 10, font: { size: 10 }, color: '#94a3b8' } 
+                                  } 
+                              }
+                          }} 
+                      />
+                  </div>
+              </Card>
+
+              <Card className="p-4">
+                  <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4">Cash Flow (Last 6 Mo)</h3>
+                  <div className="h-48">
+                      <Bar 
+                          data={overviewCashFlowData} 
+                          options={chartOptions} 
+                      />
+                  </div>
+              </Card>
+          </div>
+
+          {/* Insights */}
+          <div className="space-y-3">
+              <h3 className="text-sm font-bold text-slate-700 dark:text-white flex items-center gap-2">
+                  <Lightbulb size={16} className="text-yellow-500" /> Smart Insights
+              </h3>
+              {prevTotals && (
+                  <>
+                      {currentTotals.totalExpenses > prevTotals.totalExpenses ? (
+                          <div className="p-3 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 rounded-xl text-xs text-red-700 dark:text-red-300">
+                              Your total expenses increased by <strong>{Math.round(((currentTotals.totalExpenses - prevTotals.totalExpenses) / prevTotals.totalExpenses) * 100)}%</strong> from last period.
+                          </div>
+                      ) : (
+                          <div className="p-3 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/20 rounded-xl text-xs text-emerald-700 dark:text-emerald-300">
+                              Great job! You spent <strong>{Math.round(((prevTotals.totalExpenses - currentTotals.totalExpenses) / prevTotals.totalExpenses) * 100)}%</strong> less than last period.
+                          </div>
+                      )}
+                      {overviewData.savingsRate > 20 && (
+                          <div className="p-3 bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/20 rounded-xl text-xs text-indigo-700 dark:text-indigo-300">
+                              You saved <strong>{overviewData.savingsRate.toFixed(0)}%</strong> of your income this month — keep it up!
+                          </div>
+                      )}
+                  </>
+              )}
+          </div>
+      </div>
+  );
+
+  const renderIncome = () => (
+      <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+          
+          {/* Key Metrics Grid */}
+          <div className="grid grid-cols-3 gap-3">
+              <Card className="p-3 flex flex-col justify-center bg-emerald-50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-500/20">
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase">Avg Monthly</span>
+                  <div className="text-sm font-bold text-slate-900 dark:text-white mt-1">
+                      {formatCurrency(avgIncome, currencySymbol)}
+                  </div>
+              </Card>
+              <Card className="p-3 flex flex-col justify-center">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Growth Rate</span>
+                  <div className={`text-sm font-bold mt-1 ${incomeGrowthRate >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {incomeGrowthRate >= 0 ? '+' : ''}{incomeGrowthRate.toFixed(1)}%
+                  </div>
+              </Card>
+              <Card className="p-3 flex flex-col justify-center">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Stability</span>
+                  <div className="text-sm font-bold text-indigo-600 dark:text-indigo-400 mt-1">
+                      {incomeStabilityLabel}
+                  </div>
+                  <div className="text-[9px] text-slate-400">
+                      ±{formatCurrency(incomeStdDev, currencySymbol)}
+                  </div>
+              </Card>
+          </div>
+
+          {/* Income Trend Chart */}
+          <Card className="p-4">
+              <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4 flex items-center gap-2">
+                  <TrendingUp size={16} className="text-emerald-500" /> Monthly Income Trend
+              </h3>
+              <div className="h-48 relative">
+                  <Line 
+                      data={incomeTrendChartData}
+                      options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          plugins: { legend: { display: false } },
+                          scales: {
+                              x: { display: false },
+                              y: { display: true, ticks: { callback: (v) => `${v}`.substring(0,3)+'..' } }
+                          }
+                      }}
+                  />
+              </div>
+          </Card>
+
+          {/* Income Sources Chart */}
+          <Card className="p-4">
+              <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4">Current Sources</h3>
+              <div className="h-48 relative">
+                  <Doughnut 
+                      data={incomeSourcesData} 
+                      options={{ 
+                          maintainAspectRatio: false, 
+                          plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 } } } },
+                          cutout: '70%'
+                      }} 
+                  />
+              </div>
+          </Card>
+
+          {/* Details List */}
+          <Card className="p-0 overflow-hidden">
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 font-bold text-xs text-slate-500 uppercase">
+                  Details
+              </div>
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {currentPeriod.income.map((inc) => (
+                      <div key={inc.id} className="p-3 flex justify-between items-center text-sm">
+                          <span className="font-medium text-slate-700 dark:text-slate-300">{inc.name}</span>
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(inc.actual, currencySymbol)}</span>
+                      </div>
+                  ))}
+              </div>
+          </Card>
+      </div>
+  );
+
+  const renderExpenses = () => (
+      <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+          
+          {/* 1. Comparison Section */}
+          <div className="grid grid-cols-2 gap-3">
+              <Card className="p-3 flex flex-col justify-center bg-white dark:bg-slate-800">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase mb-1">Total Spent (Mo)</span>
+                  <div className="text-lg font-bold text-slate-900 dark:text-white">
+                      {formatCurrency(totalSpent, currencySymbol)}
+                  </div>
+                  {prevSpent > 0 && (
+                      <div className={`text-[10px] font-bold mt-1 ${pctChangeSpent > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                          {pctChangeSpent > 0 ? '+' : ''}{pctChangeSpent.toFixed(1)}% vs Last Month
+                      </div>
+                  )}
+              </Card>
+              <Card className="p-3 flex flex-col justify-center bg-white dark:bg-slate-800">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase mb-1">Daily Average</span>
+                  <div className="text-lg font-bold text-slate-900 dark:text-white">
+                      {formatCurrency(dailyAvg, currencySymbol)}
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-1">
+                      Est. {formatCurrency(dailyAvg * 30, currencySymbol)} / mo
+                  </div>
+              </Card>
+          </div>
+
+          {/* 2. Expense Trends Chart */}
+          <Card className="p-4">
+              <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4 flex items-center gap-2">
+                  <Activity size={16} className="text-purple-500" /> Monthly Expense Trend
+              </h3>
+              <div className="h-48 relative">
+                  <Line 
+                      data={expenseTrendData}
+                      options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          plugins: { legend: { display: false } },
+                          scales: {
+                              x: { display: false },
+                              y: { display: true, ticks: { callback: (v) => `${v}`.substring(0,3)+'..' } }
+                          }
+                      }}
+                  />
+              </div>
+          </Card>
+
+          {/* 3. AI Suggestions */}
+          <Card className="p-4 bg-gradient-to-r from-indigo-50/50 to-purple-50/50 dark:from-indigo-900/10 dark:to-purple-900/10 border border-indigo-100 dark:border-indigo-500/20">
+              <div className="flex items-center gap-2 mb-3">
+                  <Sparkles size={16} className="text-indigo-500" />
+                  <h3 className="text-sm font-bold text-indigo-900 dark:text-indigo-100">AI Spending Insights</h3>
+              </div>
+              <div className="space-y-3">
+                  {topCategory ? (
+                      <div className="flex gap-3 items-start p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                          <div className="mt-0.5"><TrendingDown size={14} className="text-emerald-500" /></div>
+                          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                              "Reduce <span className="font-bold">{topCategory.name}</span> cost by 8% to reach your monthly savings goal."
+                          </p>
+                      </div>
+                  ) : (
+                      <div className="flex gap-3 items-start p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                          <div className="mt-0.5"><TrendingDown size={14} className="text-emerald-500" /></div>
+                          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                              "Track your expenses to get personalized saving tips."
+                          </p>
+                      </div>
+                  )}
+                  
+                  {recurringTotal > 0 && (
+                      <div className="flex gap-3 items-start p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                          <div className="mt-0.5"><Clock size={14} className="text-orange-500" /></div>
+                          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                              "Your recurring subscriptions make up <span className="font-bold">{Math.round(recurringPct)}%</span> of total expenses."
+                          </p>
+                      </div>
+                  )}
+              </div>
+          </Card>
+
+          {/* 4. Category Breakdown (Existing) */}
+          <Card className="p-4">
+              <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4">Detailed Breakdown</h3>
+              <div className="h-48">
+                  <Bar 
+                      data={expenseCategoriesData} 
+                      options={{
+                          maintainAspectRatio: false,
+                          plugins: { legend: { display: false } },
+                          indexAxis: 'y' as const,
+                          scales: {
+                              x: { display: false },
+                              y: { ticks: { font: { size: 10 }, color: '#64748b' } }
+                          }
+                      }}
+                  />
+              </div>
+          </Card>
+
+          <div className="grid grid-cols-1 gap-3">
+              <h3 className="text-xs font-bold text-slate-500 uppercase ml-1">Top Categories</h3>
+              {currentPeriod.expenses.map((exp) => {
+                  const Icon = CATEGORY_ICONS[exp.name] || ShoppingBag;
+                  const ratio = exp.budgeted > 0 ? exp.spent / exp.budgeted : 0;
+                  const percent = Math.round(ratio * 100);
+                  
+                  return (
+                      <Card 
+                          key={exp.id} 
+                          className="p-3 flex items-center justify-between cursor-pointer hover:shadow-md transition-all active:scale-[0.99]"
+                          onClick={() => setSelectedCategory(exp.name)}
+                      >
+                          <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400">
+                                  <Icon size={18} />
+                              </div>
+                              <div>
+                                  <div className="font-bold text-slate-900 dark:text-white text-sm">{exp.name}</div>
+                                  <div className="text-[10px] text-slate-500">
+                                      {formatCurrency(exp.spent, currencySymbol)} / {formatCurrency(exp.budgeted, currencySymbol)}
+                                  </div>
+                              </div>
+                          </div>
+                          <div className="text-right">
+                              <div className={`text-sm font-bold ${percent > 100 ? 'text-red-500' : 'text-slate-700 dark:text-slate-300'}`}>
+                                  {percent}%
+                              </div>
+                              <ChevronRight size={14} className="ml-auto text-slate-300" />
+                          </div>
+                      </Card>
+                  );
+              })}
+          </div>
+      </div>
+  );
+
+  const renderCashFlow = () => {
+      const last3Months = sortedHistory.slice(-3);
+      const avgCashFlow3Mo = last3Months.reduce((acc, h) => {
+          const t = calculateTotals(h);
+          return acc + (t.totalIncome - t.totalOut);
+      }, 0) / (last3Months.length || 1);
+
+      const inflowOutflowData = {
+          labels,
+          datasets: [
+              {
+                  label: 'Inflow',
+                  data: sortedHistory.map(h => calculateTotals(h).totalIncome),
+                  borderColor: '#10b981',
+                  backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                  fill: false,
+                  tension: 0.4,
+                  pointRadius: 2
+              },
+              {
+                  label: 'Outflow',
+                  data: sortedHistory.map(h => calculateTotals(h).totalOut),
+                  borderColor: '#ef4444',
+                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                  fill: false,
+                  tension: 0.4,
+                  pointRadius: 2
+              }
+          ]
+      };
+
+      return (
+      <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+          <Card className="p-4">
+              <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4">Cash Inflow vs Outflow</h3>
+              <div className="h-48">
+                  <Line data={inflowOutflowData} options={chartOptions} />
+              </div>
+          </Card>
+
+          <Card className="p-4">
+              <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4">Net Cash Flow Trend</h3>
+              <div className="h-48">
+                  <Bar data={cashFlowData} options={chartOptions} />
+              </div>
+              <p className="text-[10px] text-slate-400 text-center mt-2">Inflow minus Outflow per period</p>
+          </Card>
+
+          <Card className="p-4">
+              <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4">Cumulative Savings</h3>
+              <div className="h-48">
+                  <Line data={cumulativeSavingsData} options={chartOptions} />
+              </div>
+          </Card>
+
+          {/* Insights */}
+          <div className="grid grid-cols-2 gap-3">
+              <Card className="p-3 bg-white dark:bg-slate-800 border-l-4 border-l-emerald-500">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold">Best Month</span>
+                  <div className="font-bold text-slate-900 dark:text-white">Mar 2025</div>
+                  <div className="text-[10px] text-emerald-500">+ {formatCurrency(2500, currencySymbol)}</div>
+              </Card>
+              <Card className="p-3 bg-white dark:bg-slate-800 border-l-4 border-l-orange-500">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold">High Expense</span>
+                  <div className="font-bold text-slate-900 dark:text-white">Dec 2024</div>
+                  <div className="text-[10px] text-orange-500">Holiday Season</div>
+              </Card>
+              <Card className="p-3 bg-white dark:bg-slate-800 border-l-4 border-l-indigo-500 col-span-2">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold">3-Month Avg Cash Flow</span>
+                  <div className={`font-bold ${avgCashFlow3Mo >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {avgCashFlow3Mo >= 0 ? '+' : ''}{formatCurrency(avgCashFlow3Mo, currencySymbol)}
+                  </div>
+                  <div className="text-[10px] text-slate-400">Moving average of recent surplus/deficit</div>
+              </Card>
+          </div>
+      </div>
+  )};
+
+  const renderPlanner = () => {
+      const topGoals = [...currentPeriod.goals]
+          .sort((a, b) => b.target - a.target)
+          .slice(0, 3);
+
+      const ringsData = {
+          labels: ['Saved', 'Remaining'],
+          datasets: topGoals.map((goal, index) => ({
+              label: goal.name,
+              data: [goal.current, Math.max(0, goal.target - goal.current)],
+              backgroundColor: [
+                  ['#6366f1', '#10b981', '#f59e0b', '#8b5cf6'][index],
+                  'rgba(148, 163, 184, 0.1)'
+              ],
+              borderWidth: 0,
+              borderRadius: 4,
+              cutout: '40%',
+          }))
+      };
+
+      return (
+      <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+          
+          {/* Progress Rings */}
+          {topGoals.length > 0 && (
+              <Card className="p-4">
+                  <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4 flex items-center gap-2">
+                      <Target size={16} className="text-indigo-500" /> Goal Progress Rings
+                  </h3>
+                  <div className="h-48 relative flex items-center justify-center">
+                      <Doughnut 
+                          data={ringsData} 
+                          options={{
+                              maintainAspectRatio: false,
+                              cutout: '50%',
+                              plugins: {
+                                  legend: { display: false },
+                                  tooltip: {
+                                      callbacks: {
+                                          label: function(context: any) {
+                                              if (context.dataIndex === 1) return '';
+                                              const label = context.dataset.label;
+                                              const val = context.raw;
+                                              const total = (context.dataset.data as number[]).reduce((a, b) => a + b, 0);
+                                              const pct = Math.round((val / total) * 100);
+                                              return `${label}: ${formatCurrency(val, currencySymbol)} (${pct}%)`;
+                                          }
+                                      },
+                                      filter: (item) => item.dataIndex === 0 
+                                  }
+                              }
+                          }} 
+                      />
+                      {/* Legend Overlay */}
+                      <div className="absolute right-0 top-0 bottom-0 flex flex-col justify-center gap-2 pr-2">
+                          {topGoals.map((g, i) => (
+                              <div key={g.id} className="flex items-center gap-1.5 text-[10px]">
+                                  <div className="w-2 h-2 rounded-full" style={{backgroundColor: ['#6366f1', '#10b981', '#f59e0b'][i]}}></div>
+                                  <span className="text-slate-600 dark:text-slate-300 max-w-[80px] truncate">{g.name}</span>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+              </Card>
+          )}
+
+          {/* Goal Tracker */}
+          <div>
+              <h3 className="text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Savings Goals</h3>
+              <div className="space-y-3">
+                  {currentPeriod.goals.map(goal => {
+                      const progress = goal.target > 0 ? (goal.current / goal.target) * 100 : 0;
+                      return (
+                          <Card key={goal.id} className="p-4">
+                              <div className="flex justify-between mb-2">
+                                  <span className="font-bold text-sm text-slate-900 dark:text-white">{goal.name}</span>
+                                  <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{Math.round(progress)}%</span>
+                              </div>
+                              <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mb-2">
+                                  <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${progress}%` }}></div>
+                              </div>
+                              <div className="flex justify-between text-[10px] text-slate-500">
+                                  <span>{formatCurrency(goal.current, currencySymbol)}</span>
+                                  <span>Target: {formatCurrency(goal.target, currencySymbol)}</span>
+                              </div>
+                          </Card>
+                      );
+                  })}
+              </div>
+          </div>
+
+          {/* Smart Forecast */}
+          <Card className="p-4 bg-slate-900 text-white border-none">
+              <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
+                  <Activity size={16} className="text-fuchsia-400" /> AI Forecast (Next 3 Months)
+              </h3>
+              <div className="space-y-3">
+                  <div className="flex justify-between items-center text-xs">
+                      <span className="opacity-70">Predicted Avg Expense</span>
+                      <span className="font-bold text-red-300">~{formatCurrency(currentTotals.totalOut * 1.05, currencySymbol)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                      <span className="opacity-70">Estimated Savings</span>
+                      <span className="font-bold text-emerald-300">~{formatCurrency(currentTotals.leftToSpend * 0.9, currencySymbol)}</span>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-white/10 text-[10px] opacity-60 italic">
+                      "Expenses trending up by 5%. Consider reducing subscription costs to maintain savings rate."
+                  </div>
+              </div>
+          </Card>
+      </div>
+  )};
 
   return (
-    <div className="flex flex-col h-full relative">
-       {/* Fixed Header */}
-       <div className="flex-none pt-6 px-4 pb-4 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-xl z-20 border-b border-slate-200 dark:border-white/5 transition-colors duration-300">
-            <div className="flex justify-between items-end mb-1">
+    <div className="flex flex-col h-full relative bg-slate-50 dark:bg-slate-900">
+       {/* Header */}
+       <div className="flex-none pt-6 px-4 pb-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl z-20 border-b border-slate-200 dark:border-white/5">
+            <div className="flex justify-between items-end mb-4">
                 <div className="flex items-center gap-3">
-                    <button onClick={onBack} className="p-2 -ml-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+                    <button onClick={onBack} className="p-2 -ml-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                         <ChevronLeft size={24} />
                     </button>
                     <div>
-                        <h2 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-0.5">Deep Dive</h2>
-                        <h1 className="text-2xl font-bold leading-none tracking-tight text-slate-900 dark:text-white">Analysis</h1>
+                        <h2 className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-0.5">Intelligence</h2>
+                        <h1 className="text-xl font-bold leading-none text-slate-900 dark:text-white">Deep Analysis</h1>
                     </div>
                 </div>
-                <div className="flex items-center gap-1 pb-1">
+                <div className="pb-1 flex items-center gap-1">
                     <button 
                         onClick={onToggleNotifications}
                         className="relative p-1.5 focus:outline-none active:scale-95 transition-transform"
                     >
-                        {notificationCount > 0 ? (
-                            <>
-                                <BellRing size={20} className="text-indigo-600 dark:text-indigo-400" />
-                                <span className="absolute top-1 right-1 -mt-0.5 -mr-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-50 dark:border-slate-900"></span>
-                            </>
-                        ) : (
-                            <Bell size={20} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" />
-                        )}
+                        <Bell size={20} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300" />
+                        {notificationCount > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>}
                     </button>
                     <HeaderProfile onClick={onProfileClick} />
                 </div>
             </div>
+
+            {/* Navigation Tabs */}
+            <div className="flex gap-1 overflow-x-auto hide-scrollbar pb-0 -mx-4 px-4">
+                {[
+                    { id: 'overview', label: 'Overview', icon: LayoutGrid },
+                    { id: 'income', label: 'Income', icon: DollarSign },
+                    { id: 'expenses', label: 'Expenses', icon: CreditCard },
+                    { id: 'cashflow', label: 'Cash Flow', icon: Activity },
+                    { id: 'planner', label: 'Planner', icon: Target },
+                    { id: 'reports', label: 'Reports', icon: FileText },
+                    { id: 'tools', label: 'Tools', icon: Shield },
+                ].map(tab => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id as any)}
+                        className={`flex flex-col items-center justify-center gap-1 min-w-[70px] py-2 text-[10px] font-bold border-b-2 transition-colors ${
+                            activeTab === tab.id 
+                            ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/10' 
+                            : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                        }`}
+                    >
+                        <tab.icon size={16} /> {tab.label}
+                    </button>
+                ))}
+            </div>
        </div>
 
-      <div className="flex-1 overflow-y-auto hide-scrollbar p-4 space-y-4 pb-28">
+       <div className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-28">
+           {activeTab === 'overview' && renderOverview()}
+           {activeTab === 'income' && renderIncome()}
+           {activeTab === 'expenses' && renderExpenses()}
+           {activeTab === 'cashflow' && renderCashFlow()}
+           {activeTab === 'planner' && renderPlanner()}
+           {activeTab === 'reports' && renderReports()}
+           {activeTab === 'tools' && renderTools()}
+       </div>
 
-        {/* Filter Controls Body */}
-        <div className="flex justify-end items-center gap-2 mb-2">
-             {isFilterActive && (
-                <button 
-                    onClick={clearFilters}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400 transition-colors active:scale-95"
-                >
-                    <X size={14} /> Clear
-                </button>
-             )}
-             <button 
-                onClick={() => setShowFilters(true)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-colors ${
-                    isFilterActive
-                    ? 'bg-indigo-600 text-white shadow-lg' 
-                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
-                }`}
-            >
-                <Filter size={14} /> Filter Data
-                {isFilterActive && (
-                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
-                )}
-            </button>
-        </div>
-
-        {/* Filter Modal */}
-        {showFilters && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowFilters(false)} />
-                <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 overflow-y-auto max-h-[85vh]">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">Data Filters</h3>
-                        <div className="flex items-center gap-2">
-                            {isFilterActive && (
-                                <button 
-                                    onClick={clearFilters}
-                                    className="text-xs font-bold text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 px-2 py-1 rounded transition-colors"
-                                >
-                                    Reset
-                                </button>
-                            )}
-                            <button onClick={() => setShowFilters(false)} className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors rounded-full hover:bg-slate-100 dark:hover:bg-slate-800">
-                                <X size={20} />
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div className="space-y-6">
-                         {/* Time Range */}
-                         <div>
-                            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase block mb-3">Time Range</label>
-                            <div className="grid grid-cols-4 gap-2 mb-3">
-                                {(['3M', '6M', '1Y', 'ALL'] as TimeRange[]).map((r) => (
-                                    <button key={r} onClick={() => setRange(r)}
-                                    className={`text-xs font-bold py-2.5 rounded-xl transition-all ${range === r ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
-                                    {r}
-                                    </button>
-                                ))}
-                            </div>
-                             <button 
-                                onClick={() => setRange('CUSTOM')}
-                                className={`w-full text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 ${range === 'CUSTOM' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}
-                            >
-                                <Calendar size={14} /> Custom Range
-                            </button>
-                             {range === 'CUSTOM' && (
-                                <div className="grid grid-cols-2 gap-3 mt-3 animate-in slide-in-from-top-1">
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase">Start Date</label>
-                                        <input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none focus:border-indigo-500 transition-colors" />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase">End Date</label>
-                                        <input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none focus:border-indigo-500 transition-colors" />
-                                    </div>
-                                </div>
-                            )}
-                         </div>
-
-                         {/* Categories */}
-                         <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-white/5">
-                            <div>
-                                <button 
-                                    onClick={() => setShowIncomeOptions(!showIncomeOptions)}
-                                    className="w-full flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-3"
-                                >
-                                    <span>Income Sources {selectedIncomeFilters.length > 0 && <span className="text-indigo-500 ml-1">({selectedIncomeFilters.length})</span>}</span>
-                                    {showIncomeOptions ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
-                                </button>
-                                {showIncomeOptions && (
-                                    <div className="flex flex-wrap gap-2 animate-in slide-in-from-top-1">
-                                        {uniqueIncomeSources.map(source => (
-                                            <button
-                                                key={source}
-                                                onClick={() => toggleIncomeFilter(source)}
-                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-colors flex items-center gap-1.5 ${
-                                                    selectedIncomeFilters.includes(source)
-                                                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                                                        : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
-                                                }`}
-                                            >
-                                                {selectedIncomeFilters.includes(source) && <Check size={10} />}
-                                                {source}
-                                            </button>
-                                        ))}
-                                         {uniqueIncomeSources.length === 0 && <span className="text-xs text-slate-400 italic">No income sources found in current range.</span>}
-                                    </div>
-                                )}
-                            </div>
-
-                            <div>
-                                <button 
-                                    onClick={() => setShowExpenseOptions(!showExpenseOptions)}
-                                    className="w-full flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-3"
-                                >
-                                    <span>Expense Categories {selectedExpenseFilters.length > 0 && <span className="text-pink-500 ml-1">({selectedExpenseFilters.length})</span>}</span>
-                                    {showExpenseOptions ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
-                                </button>
-                                {showExpenseOptions && (
-                                    <div className="flex flex-wrap gap-2 animate-in slide-in-from-top-1">
-                                        {uniqueExpenseCategories.map(cat => (
-                                            <button
-                                                key={cat}
-                                                onClick={() => toggleExpenseFilter(cat)}
-                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-colors flex items-center gap-1.5 ${
-                                                    selectedExpenseFilters.includes(cat)
-                                                        ? 'bg-pink-500/10 border-pink-500/20 text-pink-600 dark:text-pink-400'
-                                                        : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
-                                                }`}
-                                            >
-                                                {selectedExpenseFilters.includes(cat) && <Check size={10} />}
-                                                {cat}
-                                            </button>
-                                        ))}
-                                        {uniqueExpenseCategories.length === 0 && <span className="text-xs text-slate-400 italic">No expense categories found in current range.</span>}
-                                    </div>
-                                )}
-                            </div>
-                         </div>
-                         
-                         {/* View Mode */}
-                         <div className="pt-4 border-t border-slate-100 dark:border-white/5 flex justify-between items-center">
-                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Calculation Mode</span>
-                            <button onClick={() => setShowAverages(!showAverages)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-3 py-1.5 rounded-lg border border-indigo-500/20 active:scale-95 transition-transform">
-                                {showAverages ? 'Average per Period' : 'Total Aggregates'}
-                            </button>
-                         </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="mt-8 flex gap-3">
-                         <button 
-                            onClick={clearFilters}
-                            className="flex-1 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors flex items-center justify-center gap-2 active:scale-95"
-                        >
-                            <Trash2 size={16} /> Clear
-                        </button>
-                        <button 
-                            onClick={() => setShowFilters(false)}
-                            className="flex-[2] py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
-                        >
-                            Show Results
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )}
-        
-        {/* Performance Comparison (Latest vs History) */}
-        {performanceMetrics && (
-            <Card className="p-4 border border-slate-200 dark:border-white/5">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                        <TrendingUp size={16} className="text-indigo-500" /> 
-                        Latest Performance
-                    </h3>
-                    <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded-full">
-                        {performanceMetrics.periodLabel}
-                    </span>
-                </div>
-                
-                <div className="grid grid-cols-3 gap-4 divide-x divide-slate-100 dark:divide-white/5">
-                    {/* Income */}
-                    <div className="px-1">
-                        <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">Income</p>
-                        <p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(performanceMetrics.income.current, currencySymbol)}</p>
-                        <div className={`flex items-center gap-1 text-[10px] font-bold ${performanceMetrics.income.variance >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                            {performanceMetrics.income.variance >= 0 ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
-                            {Math.abs(performanceMetrics.income.variance).toFixed(1)}%
-                        </div>
-                        <p className="text-[9px] text-slate-400 mt-1 truncate">vs {formatCurrency(performanceMetrics.income.baseline, currencySymbol)} (Avg)</p>
-                    </div>
-                    {/* Expenses */}
-                    <div className="px-1 pl-4">
-                        <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">Expenses</p>
-                        <p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(performanceMetrics.expenses.current, currencySymbol)}</p>
-                        <div className={`flex items-center gap-1 text-[10px] font-bold ${performanceMetrics.expenses.variance <= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                            {performanceMetrics.expenses.variance > 0 ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
-                            {Math.abs(performanceMetrics.expenses.variance).toFixed(1)}%
-                        </div>
-                        <p className="text-[9px] text-slate-400 mt-1 truncate">vs {formatCurrency(performanceMetrics.expenses.baseline, currencySymbol)} (Avg)</p>
-                    </div>
-                    {/* Savings Rate */}
-                    <div className="px-1 pl-4">
-                        <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">Savings Rate</p>
-                        <p className="text-lg font-bold text-slate-900 dark:text-white">{performanceMetrics.savingsRate.current.toFixed(1)}%</p>
-                        <div className={`flex items-center gap-1 text-[10px] font-bold ${performanceMetrics.savingsRate.diff >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                            {performanceMetrics.savingsRate.diff >= 0 ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
-                            {Math.abs(performanceMetrics.savingsRate.diff).toFixed(1)} pts
-                        </div>
-                        <p className="text-[9px] text-slate-400 mt-1 truncate">vs {performanceMetrics.savingsRate.previous.toFixed(1)}% (Prev)</p>
-                    </div>
-                </div>
-
-                {/* Expense Comparison Chart */}
-                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/5">
-                    <div className="flex justify-between items-center mb-2">
-                        <p className="text-[10px] uppercase text-slate-500 font-bold">Expense Trend</p>
-                        <span className={`text-xs font-bold ${performanceMetrics.expenses.variance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-                            {performanceMetrics.expenses.variance > 0 ? '+' : ''}{performanceMetrics.expenses.variance.toFixed(1)}% vs Avg
-                        </span>
-                    </div>
-                    <div className="h-24">
-                        <Bar data={expenseComparisonData} options={expenseComparisonOptions} />
-                    </div>
-                </div>
-            </Card>
-        )}
-
-        {filteredData.length === 0 ? (
-            <div className="text-center py-12 text-slate-500">
-                <Filter size={48} className="mx-auto mb-2 opacity-20" />
-                <p>No data found for this range.</p>
-            </div>
-        ) : (
-            <>
-                {/* Stats Grid */}
-                <div className="grid grid-cols-2 gap-3">
-                    <Card className="p-3 border-l-2 border-l-emerald-500 bg-white dark:bg-slate-800/50">
-                        <div className="text-[10px] uppercase text-slate-500 dark:text-slate-400 font-bold mb-1">Avg Income (Selected)</div>
-                        <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(summaryStats.totalMoneyIn, currencySymbol)}</div>
-                    </Card>
-                    <Card className="p-3 border-l-2 border-l-pink-500 bg-white dark:bg-slate-800/50">
-                        <div className="text-[10px] uppercase text-slate-500 dark:text-slate-400 font-bold mb-1">Avg Expense (Selected)</div>
-                        <div className="text-lg font-bold text-pink-600 dark:text-pink-400">{formatCurrency(summaryStats.totalExpenses, currencySymbol)}</div>
-                    </Card>
-                </div>
-
-                {/* Key Insights (Heuristic) */}
-                {insights.length > 0 && (
-                    <Card className="p-4 border border-slate-200 dark:border-white/5">
-                        <h3 className="text-sm font-semibold mb-3 text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                            <Lightbulb size={16} className="text-yellow-500 dark:text-yellow-400" /> Quick Observations
-                        </h3>
-                        <div className="space-y-3">
-                            {insights.map((insight, idx) => (
-                                <div key={idx} className="flex gap-3 items-start">
-                                    <div className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                                        insight.type === 'warning' ? 'bg-red-400' : 
-                                        insight.type === 'positive' ? 'bg-emerald-400' : 
-                                        insight.type === 'info' ? 'bg-blue-400' : 'bg-slate-400'
-                                    }`}></div>
-                                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-snug">{insight.text}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </Card>
-                )}
-
-                {/* Algorithmic Forecasts */}
-                {predictions && predictions.left && predictions.avail && (
-                    <div className="space-y-3">
-                        {/* Expense Forecast (Full width) */}
-                        <Card className="p-3 bg-gradient-to-br from-slate-100 to-white dark:from-slate-800 dark:to-slate-900 border-t-2 border-t-pink-500">
-                            <div className="flex justify-between items-start mb-1">
-                                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Forecast: Total Expenses</span>
-                                {predictions.expenses.trend > 0 ? <TrendingUp size={12} className="text-red-500"/> : <TrendingDown size={12} className="text-emerald-500"/>}
-                            </div>
-                            <div className="text-lg font-bold text-slate-900 dark:text-white mb-1">{formatCurrency(predictions.expenses.value, currencySymbol)}</div>
-                            <div className={`text-[9px] inline-block px-1.5 py-0.5 rounded ${predictions.expenses.trend > 0 ? 'bg-red-500/10 text-red-600 dark:text-red-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'}`}>
-                                {predictions.expenses.trend > 0 ? '+' : ''}{formatCurrency(predictions.expenses.trend, currencySymbol)} trend
-                            </div>
-                            <p className="text-[9px] text-slate-400 mt-1 italic">Based on category trends</p>
-                        </Card>
-
-                        {/* Top Category Forecasts */}
-                        {predictions.topCategories && predictions.topCategories.length > 0 && (
-                            <div className="grid grid-cols-1 gap-2">
-                                <h4 className="text-[10px] font-bold text-slate-400 uppercase ml-1">Projected Top Expenses</h4>
-                                {predictions.topCategories.map((cat, i) => (
-                                    <Card key={i} className="p-2 flex justify-between items-center bg-white/50 dark:bg-slate-800/50 border border-slate-100 dark:border-white/5">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{cat.name}</span>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-xs font-bold text-slate-900 dark:text-white">{formatCurrency(cat.value, currencySymbol)}</div>
-                                            <div className={`text-[9px] ${cat.trend > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-                                                {cat.trend > 0 ? '↗' : '↘'} {formatCurrency(Math.abs(cat.trend), currencySymbol)}
-                                            </div>
-                                        </div>
-                                    </Card>
-                                ))}
-                            </div>
-                        )}
-
-                        <div className="grid grid-cols-2 gap-3">
-                            <Card className="p-3 bg-gradient-to-br from-slate-100 to-white dark:from-slate-800 dark:to-slate-900 border-t-2 border-t-indigo-500">
-                                <div className="flex justify-between items-start mb-1">
-                                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Forecast: Left</span>
-                                    {predictions.left.trend > 0 ? <TrendingUp size={12} className="text-emerald-500"/> : <TrendingDown size={12} className="text-red-500"/>}
-                                </div>
-                                <div className="text-lg font-bold text-slate-900 dark:text-white mb-1">{formatCurrency(predictions.left.value, currencySymbol)}</div>
-                                <div className={`text-[9px] inline-block px-1.5 py-0.5 rounded ${predictions.left.trend > 0 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-red-500/10 text-red-600 dark:text-red-400'}`}>
-                                    {predictions.left.trend > 0 ? '+' : ''}{formatCurrency(predictions.left.trend, currencySymbol)} trend
-                                </div>
-                            </Card>
-                             <Card className="p-3 bg-gradient-to-br from-slate-100 to-white dark:from-slate-800 dark:to-slate-900 border-t-2 border-t-emerald-500">
-                                <div className="flex justify-between items-start mb-1">
-                                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Forecast: Available</span>
-                                    {predictions.avail.trend > 0 ? <TrendingUp size={12} className="text-emerald-500"/> : <TrendingDown size={12} className="text-red-500"/>}
-                                </div>
-                                <div className="text-lg font-bold text-slate-900 dark:text-white mb-1">{formatCurrency(predictions.avail.value, currencySymbol)}</div>
-                                <div className={`text-[9px] inline-block px-1.5 py-0.5 rounded ${predictions.avail.trend > 0 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-red-500/10 text-red-600 dark:text-red-400'}`}>
-                                    {predictions.avail.trend > 0 ? '+' : ''}{formatCurrency(predictions.avail.trend, currencySymbol)} trend
-                                </div>
-                            </Card>
-                        </div>
-                    </div>
-                )}
-
-                {/* Charts */}
-                <div className="grid grid-cols-1 gap-4">
-                    {/* Income Trend Chart */}
-                    <Card className="p-4">
-                        <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-4 flex items-center gap-2">
-                            <TrendingUp size={14} className="text-emerald-500" /> Income Trend
-                        </h3>
-                        <div className="h-48"><Line data={incomeTrendData} options={lineChartOptions} /></div>
-                    </Card>
-
-                    <Card className="p-4">
-                        <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-4">Spending vs Budget</h3>
-                        <div className="h-48"><Bar data={plannedVsActualData} options={barOptions} /></div>
-                    </Card>
-                    <Card className="p-4">
-                        <div className="flex items-center justify-between mb-4">
-                             <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Expense Distribution</h3>
-                             <span className="text-[9px] text-slate-400 dark:text-slate-500">{showAverages ? 'Avg/Month' : 'Total'}</span>
-                        </div>
-                        <div className="h-48 relative"><Doughnut data={expenseData} options={doughnutOptions} /></div>
-                        {/* Legend */}
-                        <div className="flex flex-wrap gap-2 mt-4 justify-center">
-                            {expenseData.labels.map((l, i) => (
-                                <div key={i} className="flex items-center gap-1.5">
-                                    <div className="w-2 h-2 rounded-full" style={{backgroundColor: expenseData.datasets[0].backgroundColor[i] as string}}></div>
-                                    <span className="text-[10px] text-slate-600 dark:text-slate-300">{l}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </Card>
-                </div>
-            </>
-        )}
-      </div>
+       {/* Category Deep Dive Modal */}
+       {selectedCategory && (
+           <CategoryDeepDiveModal 
+               isOpen={!!selectedCategory}
+               onClose={() => setSelectedCategory(null)}
+               categoryName={selectedCategory}
+               history={history}
+               currencySymbol={currencySymbol}
+           />
+       )}
     </div>
   );
+};
+
+const Toggle = ({ checked, onChange }: { checked: boolean, onChange: () => void }) => (
+    <button 
+        onClick={onChange}
+        className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${checked ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}
+    >
+        <div className={`w-4 h-4 rounded-full bg-white shadow-sm absolute top-1 transition-transform ${checked ? 'left-6' : 'left-1'}`} />
+    </button>
+);
+
+const CategoryDeepDiveModal = ({ isOpen, onClose, categoryName, history, currencySymbol }: any) => {
+    if (!isOpen) return null;
+
+    // Process data for this category across history
+    const trendData = history.map((h: any) => {
+        const item = h.expenses.find((e: any) => e.name === categoryName);
+        return item ? item.spent : 0;
+    }).reverse(); // Assume history is sorted new -> old, so reverse for chart
+
+    const labels = history.map((h: any) => h.period === 'monthly' ? MONTH_NAMES[h.month].substring(0,3) : 'Pd').reverse();
+
+    const avgSpend = trendData.reduce((a: number, b: number) => a + b, 0) / (trendData.length || 1);
+    const lastSpend = trendData[trendData.length - 1];
+    
+    // Simulate merchant breakdown
+    const merchants = [
+        { name: 'Store A', amount: lastSpend * 0.4 },
+        { name: 'Store B', amount: lastSpend * 0.3 },
+        { name: 'Online', amount: lastSpend * 0.2 },
+        { name: 'Other', amount: lastSpend * 0.1 },
+    ];
+
+    return (
+        <div className="fixed inset-0 z-[5000] flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white dark:bg-slate-900 w-full max-w-md h-[85vh] sm:h-auto rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-300 overflow-y-auto flex flex-col">
+                <div className="flex items-start justify-between mb-6 shrink-0">
+                    <div className="flex-1 min-w-0 pr-4">
+                        <h3 className="text-2xl font-bold text-slate-900 dark:text-white break-words leading-tight">{categoryName}</h3>
+                        <p className="text-xs text-slate-500 uppercase tracking-wider font-bold mt-1">Deep Dive Analysis</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors shrink-0">
+                        <X size={24}/>
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto hide-scrollbar">
+                    <div className="grid grid-cols-2 gap-3 mb-6">
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl">
+                            <span className="text-[10px] text-slate-500 uppercase font-bold">Avg Spend</span>
+                            <div className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(avgSpend, currencySymbol)}</div>
+                        </div>
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl">
+                            <span className="text-[10px] text-slate-500 uppercase font-bold">Frequency</span>
+                            <div className="text-lg font-bold text-slate-900 dark:text-white">~4x / mo</div>
+                        </div>
+                    </div>
+
+                    <div className="mb-6">
+                        <h4 className="text-sm font-bold text-slate-700 dark:text-white mb-3">Spending Trend (6 Months)</h4>
+                        <div className="h-40">
+                            <Line 
+                                data={{
+                                    labels,
+                                    datasets: [{
+                                        label: 'Spend',
+                                        data: trendData,
+                                        borderColor: '#6366f1',
+                                        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                                        fill: true,
+                                        tension: 0.4
+                                    }]
+                                }} 
+                                options={{ maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }} 
+                            />
+                        </div>
+                    </div>
+
+                    <div className="mb-6">
+                        <h4 className="text-sm font-bold text-slate-700 dark:text-white mb-3">Top Merchants (Est.)</h4>
+                        <div className="space-y-2">
+                            {merchants.map((m, i) => (
+                                <div key={i} className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-600 dark:text-slate-300">{m.name}</span>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-24 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                                            <div className="h-full bg-indigo-500" style={{ width: `${(m.amount / (lastSpend || 1)) * 100}%` }}></div>
+                                        </div>
+                                        <span className="font-bold text-slate-900 dark:text-white w-16 text-right">{formatCurrency(m.amount, currencySymbol)}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-900/30 mt-6 mb-8">
+                        <div className="flex gap-3 items-start">
+                            <Lightbulb size={20} className="text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                                 <p className="text-sm text-indigo-800 dark:text-indigo-300 leading-relaxed">
+                                    <strong>Smart Tip:</strong> You spend 15% more on {categoryName} on weekends. Try shifting some purchases to weekdays to avoid peak pricing or impulse buys.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 };

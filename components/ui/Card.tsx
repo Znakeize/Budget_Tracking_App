@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface CardProps {
@@ -5,10 +6,11 @@ interface CardProps {
   className?: string;
   gradient?: string;
   onClick?: () => void;
+  overflowHidden?: boolean;
 }
 
-export const Card: React.FC<CardProps> = ({ children, className = '', gradient, onClick }) => {
-  const baseClasses = "glass-panel rounded-2xl p-5 shadow-lg relative overflow-hidden transition-all duration-300";
+export const Card: React.FC<CardProps> = ({ children, className = '', gradient, onClick, overflowHidden = true }) => {
+  const baseClasses = `glass-panel rounded-2xl p-5 shadow-lg relative ${overflowHidden ? 'overflow-hidden' : ''} transition-all duration-300`;
   // If gradient is provided, it overrides bg-white/5. If not, use white/5 in dark and white in light.
   const bgClasses = gradient ? `bg-gradient-to-br ${gradient}` : "bg-white dark:bg-white/5";
   

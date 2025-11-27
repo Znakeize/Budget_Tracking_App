@@ -4,7 +4,7 @@ import { Card } from '../components/ui/Card';
 import { 
   History, Wrench, CalendarHeart, Settings, 
   LifeBuoy, FileText, MessageSquare, ChevronRight, 
-  Bell, BellRing, UserCircle, Users, Crown, ShoppingCart 
+  Bell, BellRing, UserCircle, Users, Crown, ShoppingCart, Calculator 
 } from 'lucide-react';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
 
@@ -36,9 +36,10 @@ export const MenuView: React.FC<MenuViewProps> = ({ onNavigate, notificationCoun
   }, []);
 
   const menuItems = [
+    { id: 'calculators', label: 'Calculators', icon: Calculator, color: 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400', desc: 'Loan, SIP & Tax' },
     { id: 'shopping-list', label: 'Shopping', icon: ShoppingCart, color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400', desc: 'Lists & Shared' },
     { id: 'history', label: 'History', icon: History, color: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400', desc: 'Past Budgets' },
-    { id: 'tools', label: 'Tools', icon: Wrench, color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400', desc: 'Export & Data' },
+    { id: 'tools', label: 'Data Tools', icon: Wrench, color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400', desc: 'Export & Backup' },
     { id: 'community-links', label: 'Connect', icon: Users, color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400', desc: 'Join Us' },
   ];
 

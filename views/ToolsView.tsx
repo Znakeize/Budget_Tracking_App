@@ -1,10 +1,17 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { BudgetData } from '../types';
 import { CURRENCY_SYMBOLS, MONTH_NAMES } from '../constants';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import { Card } from '../components/ui/Card';
-import { Download, FileText, Table, Trash2, Save, Moon, Sun, Bell, BellRing, ChevronLeft, ChevronRight, Upload, X, Shield, Globe, DollarSign, Check, Calendar } from 'lucide-react';
+import { 
+  Download, FileText, Table, Trash2, Save, Moon, Sun, 
+  Bell, BellRing, ChevronLeft, ChevronRight, Upload, X, 
+  Shield, Globe, DollarSign, Check, Calendar, Mail, 
+  PieChart, TrendingUp, ShoppingCart, Users, CalendarHeart, Zap, 
+  CreditCard, Activity, RefreshCcw, Cloud, Lock, Database, RefreshCw, Server, Loader2, HardDrive
+} from 'lucide-react';
 import { calculateTotals } from '../utils/calculations';
 
 interface ToolsViewProps {
@@ -42,9 +49,37 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
 
   // Settings State
   const [activeSetting, setActiveSetting] = useState<'notifications' | 'security' | 'language' | 'currency' | 'period' | null>(null);
-  const [notifSettings, setNotifSettings] = useState({ push: true, email: false, bills: true });
+  
+  // Advanced Notification State
+  const [notifSettings, setNotifSettings] = useState({
+      // Channels
+      push: true,
+      email: false,
+      // Categories
+      bills: true,
+      budget: true,
+      investments: true,
+      social: true,
+      shopping: true,
+      events: true,
+      analysis: true,
+      simulator: true,
+      // AI
+      ai: true,
+      updates: true
+  });
+
   const [securitySettings, setSecuritySettings] = useState({ biometrics: false });
   const [language, setLanguage] = useState('English');
+
+  // Cloud Backup State
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [lastBackup, setLastBackup] = useState<string | null>(localStorage.getItem('lastBackupDate'));
+  const [cloudSettings, setCloudSettings] = useState({
+      provider: 'firebase',
+      encryption: true,
+      auto: false
+  });
 
   useEffect(() => {
     const savedUser = localStorage.getItem('budget_user_session');
@@ -64,6 +99,22 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
       newData.currencySymbol = CURRENCY_SYMBOLS[value as string];
     }
     updateData(newData);
+  };
+
+  const updateNotif = (key: keyof typeof notifSettings, value: boolean) => {
+      setNotifSettings(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleCloudBackup = () => {
+      setIsBackingUp(true);
+      // Simulate network request / encryption process
+      const timeout = cloudSettings.provider === 'gdrive' || cloudSettings.provider === 'icloud' ? 3500 : 2500;
+      setTimeout(() => {
+          const date = new Date().toLocaleString();
+          setLastBackup(date);
+          localStorage.setItem('lastBackupDate', date);
+          setIsBackingUp(false);
+      }, timeout);
   };
 
   const exportPDF = () => {
@@ -221,13 +272,55 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
 
     switch (activeSetting) {
       case 'notifications':
-        title = 'Notifications';
+        title = 'Smart Notification Center';
         content = (
-          <div className="space-y-4">
-               <ToggleRow label="Push Notifications" checked={notifSettings.push} onChange={v => setNotifSettings({...notifSettings, push: v})} />
-               <ToggleRow label="Email Digest" checked={notifSettings.email} onChange={v => setNotifSettings({...notifSettings, email: v})} />
-               <ToggleRow label="Bill Due Alerts" checked={notifSettings.bills} onChange={v => setNotifSettings({...notifSettings, bills: v})} />
-               <p className="text-xs text-slate-400 mt-4">You will receive alerts based on your device settings.</p>
+          <div className="space-y-6 max-h-[60vh] overflow-y-auto custom-scrollbar pr-1">
+               {/* Delivery Channels */}
+               <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl border border-indigo-100 dark:border-indigo-500/20">
+                   <h4 className="text-xs font-bold text-indigo-900 dark:text-indigo-300 uppercase mb-3">Global Channels</h4>
+                   <div className="space-y-3">
+                        <ToggleRow label="Push Notifications" icon={Bell} checked={notifSettings.push} onChange={v => updateNotif('push', v)} />
+                        <ToggleRow label="Email Digest" icon={Mail} checked={notifSettings.email} onChange={v => updateNotif('email', v)} />
+                   </div>
+               </div>
+
+               {/* Core Modules */}
+               <div>
+                   <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-3 px-1">Core Modules</h4>
+                   <div className="space-y-1">
+                       <ToggleRow label="Budget & Spending" sub="Over-budget alerts & daily summaries" icon={PieChart} checked={notifSettings.budget} onChange={v => updateNotif('budget', v)} />
+                       <ToggleRow label="Bills & Debt" sub="Upcoming due dates & payment reminders" icon={Calendar} checked={notifSettings.bills} onChange={v => updateNotif('bills', v)} />
+                       <ToggleRow label="Shopping Lists" sub="Location reminders & shared updates" icon={ShoppingCart} checked={notifSettings.shopping} onChange={v => updateNotif('shopping', v)} />
+                   </div>
+               </div>
+
+               {/* Advanced Modules */}
+               <div>
+                   <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-3 px-1 mt-4">Advanced Modules</h4>
+                   <div className="space-y-1">
+                       <ToggleRow label="Investments" sub="Price volatility, targets & dividend alerts" icon={TrendingUp} checked={notifSettings.investments} onChange={v => updateNotif('investments', v)} color="text-violet-500" />
+                       <ToggleRow label="Collaboration" sub="Group expenses, settlements & messages" icon={Users} checked={notifSettings.social} onChange={v => updateNotif('social', v)} color="text-amber-500" />
+                       <ToggleRow label="Event Planner" sub="Deadlines, vendor payments & RSVPs" icon={CalendarHeart} checked={notifSettings.events} onChange={v => updateNotif('events', v)} color="text-pink-500" />
+                   </div>
+               </div>
+
+               {/* Intelligence & Analytics */}
+               <div>
+                   <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-3 px-1 mt-4">Intelligence</h4>
+                   <div className="space-y-1">
+                       <ToggleRow label="Deep Analysis" sub="Weekly insights & trend anomalies" icon={Activity} checked={notifSettings.analysis} onChange={v => updateNotif('analysis', v)} color="text-emerald-500" />
+                       <ToggleRow label="Life Simulator" sub="Scenario completion & projection updates" icon={RefreshCcw} checked={notifSettings.simulator} onChange={v => updateNotif('simulator', v)} color="text-fuchsia-500" />
+                       <ToggleRow label="AI Advisor" sub="Smart saving tips & financial nudges" icon={Zap} checked={notifSettings.ai} onChange={v => updateNotif('ai', v)} color="text-yellow-500" />
+                   </div>
+               </div>
+
+               {/* System */}
+               <div>
+                   <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-3 px-1 mt-4">System</h4>
+                   <div className="space-y-1">
+                       <ToggleRow label="System Updates" sub="New features & security alerts" icon={Shield} checked={notifSettings.updates} onChange={v => updateNotif('updates', v)} />
+                   </div>
+               </div>
           </div>
         );
         break;
@@ -235,7 +328,7 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
          title = 'Security';
          content = (
            <div className="space-y-4">
-              <ToggleRow label="Biometric ID" checked={securitySettings.biometrics} onChange={v => setSecuritySettings({...securitySettings, biometrics: v})} />
+              <ToggleRow label="Biometric ID" icon={Shield} checked={securitySettings.biometrics} onChange={v => setSecuritySettings({...securitySettings, biometrics: v})} />
               <button className="w-full py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-left px-4">Change PIN</button>
               <button className="w-full py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-left px-4">Two-Factor Authentication</button>
            </div>
@@ -407,6 +500,92 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
                     Note: Importing will overwrite the currently active budget period with the data from the file.
                 </p>
             </Card>
+
+            {/* Advanced Backup System */}
+            <Card className="border-cyan-500/20 bg-gradient-to-br from-white to-cyan-50 dark:from-slate-800 dark:to-slate-900/50">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 rounded-lg">
+                        <Cloud size={20} />
+                    </div>
+                    <div>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">Cloud Sync & Backup</h3>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">Encrypted Secure Storage</p>
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    {/* Provider Selection */}
+                    <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                            {cloudSettings.provider === 'gdrive' ? <Globe size={18} className="text-blue-500" /> :
+                             cloudSettings.provider === 'icloud' ? <Cloud size={18} className="text-sky-500" /> :
+                             cloudSettings.provider === 'sqlite' ? <Database size={18} className="text-slate-400" /> :
+                             <Server size={18} className="text-indigo-500" />}
+                            <div>
+                                <p className="text-xs font-bold text-slate-700 dark:text-slate-300">Storage Provider</p>
+                                <p className="text-[10px] text-slate-500">
+                                    {cloudSettings.provider === 'firebase' ? 'Firebase Secure Cloud' : 
+                                     cloudSettings.provider === 'gdrive' ? 'Google Drive (Personal)' :
+                                     cloudSettings.provider === 'icloud' ? 'Apple iCloud Backup' :
+                                     'Local SQLite Encrypted'}
+                                </p>
+                            </div>
+                        </div>
+                        <select 
+                            value={cloudSettings.provider}
+                            onChange={(e) => setCloudSettings({...cloudSettings, provider: e.target.value})}
+                            className="text-xs font-bold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg px-2 py-1 outline-none border-none max-w-[100px]"
+                        >
+                            <option value="firebase">Firebase</option>
+                            <option value="gdrive">Google Drive</option>
+                            <option value="icloud">iCloud</option>
+                            <option value="sqlite">SQLite (Local)</option>
+                        </select>
+                    </div>
+
+                    {/* Toggles */}
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between px-1">
+                            <div className="flex items-center gap-2">
+                                <Lock size={14} className={cloudSettings.encryption ? "text-emerald-500" : "text-slate-400"} />
+                                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">End-to-End Encryption (AES-256)</span>
+                            </div>
+                            <Toggle checked={cloudSettings.encryption} onChange={() => setCloudSettings({...cloudSettings, encryption: !cloudSettings.encryption})} />
+                        </div>
+                        <div className="flex items-center justify-between px-1">
+                            <div className="flex items-center gap-2">
+                                <RefreshCw size={14} className="text-blue-500" />
+                                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Auto-Backup Daily</span>
+                            </div>
+                            <Toggle checked={cloudSettings.auto} onChange={() => setCloudSettings({...cloudSettings, auto: !cloudSettings.auto})} />
+                        </div>
+                    </div>
+
+                    {/* Action Area */}
+                    <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex justify-between items-center mb-3">
+                            <span className="text-[10px] text-slate-400">Last Backup: {lastBackup || 'Never'}</span>
+                            {lastBackup && <span className="text-[10px] text-emerald-500 flex items-center gap-1"><Check size={10} /> Synced</span>}
+                        </div>
+                        <button 
+                            onClick={handleCloudBackup}
+                            disabled={isBackingUp}
+                            className="w-full py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-xl shadow-lg shadow-cyan-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+                        >
+                            {isBackingUp ? <Loader2 size={18} className="animate-spin" /> : <Cloud size={18} />}
+                            {isBackingUp ? `Syncing to ${cloudSettings.provider === 'gdrive' ? 'Drive' : cloudSettings.provider === 'icloud' ? 'iCloud' : 'Cloud'}...` : 'Backup Now'}
+                        </button>
+                    </div>
+                </div>
+            </Card>
+
+            {/* Danger Zone */}
+            <Card className="border-red-500/20">
+                <h3 className="text-sm font-semibold mb-4 text-red-500 dark:text-red-400">Danger Zone</h3>
+                <button onClick={() => { if(confirm('Reset all data? This will clear all history and settings.')) resetData() }} className="w-full py-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 active:scale-[0.99]">
+                    <Trash2 size={18} /> Reset All Data
+                </button>
+            </Card>
         </div>
       )}
 
@@ -499,14 +678,6 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
                     </button>
                 </div>
             </Card>
-
-            {/* Danger Zone */}
-            <Card className="border-red-500/20">
-                <h3 className="text-sm font-semibold mb-4 text-red-500 dark:text-red-400">Danger Zone</h3>
-                <button onClick={() => { if(confirm('Reset all data? This will clear all history and settings.')) resetData() }} className="w-full py-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 active:scale-[0.99]">
-                    <Trash2 size={18} /> Reset All Data
-                </button>
-            </Card>
         </div>
       )}
       
@@ -517,14 +688,33 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
   );
 };
 
-const ToggleRow = ({ label, checked, onChange }: { label: string, checked: boolean, onChange: (v: boolean) => void }) => (
-    <div className="flex items-center justify-between py-2 px-1">
-        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{label}</span>
+const ToggleRow = ({ label, sub, icon: Icon, checked, onChange, color }: { label: string, sub?: string, icon?: any, checked: boolean, onChange: (v: boolean) => void, color?: string }) => (
+    <div className="flex items-center justify-between py-2 px-1 hover:bg-slate-50 dark:hover:bg-slate-800/30 rounded-lg transition-colors">
+        <div className="flex items-center gap-3">
+            {Icon && (
+                <div className={`p-2 rounded-lg ${checked ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                    <Icon size={18} className={color} />
+                </div>
+            )}
+            <div>
+                <span className={`text-sm font-bold ${checked ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>{label}</span>
+                {sub && <p className="text-[10px] text-slate-400 leading-tight">{sub}</p>}
+            </div>
+        </div>
         <button 
             onClick={() => onChange(!checked)}
-            className={`w-11 h-6 rounded-full transition-colors relative ${checked ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}
+            className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${checked ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}
         >
             <div className={`w-4 h-4 rounded-full bg-white shadow-sm absolute top-1 transition-transform ${checked ? 'left-6' : 'left-1'}`} />
         </button>
     </div>
+);
+
+const Toggle = ({ checked, onChange }: { checked: boolean, onChange: () => void }) => (
+    <button 
+        onClick={onChange}
+        className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${checked ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}
+    >
+        <div className={`w-4 h-4 rounded-full bg-white shadow-sm absolute top-1 transition-transform ${checked ? 'left-6' : 'left-1'}`} />
+    </button>
 );

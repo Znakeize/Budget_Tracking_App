@@ -26,6 +26,7 @@ import { ProMembershipView } from './views/ProMembershipView';
 import { MembershipManagementView } from './views/MembershipManagementView';
 import { FeatureSubscriptionView } from './views/FeatureSubscriptionView';
 import { ShoppingListView } from './views/ShoppingListView';
+import { AdvancedCalculatorsView } from './views/AdvancedCalculatorsView';
 import { BudgetData, PeriodType, EventData, ShoppingListData, SharedGroup, ShopMember, SharedMember, InvestmentGoal, GoalItem, InvestmentAlert } from './types';
 import { INITIAL_DATA, SAMPLE_EVENTS, SAMPLE_SHOPPING_LISTS, MOCK_GROUPS, CURRENCY_SYMBOLS, SAMPLE_INVESTMENT_GOALS } from './constants';
 import { generateId, calculateTotals, getNotifications, NotificationItem, formatCurrency, getShoppingNotifications, getCollaborativeNotifications, getInvestmentNotifications } from './utils/calculations';
@@ -342,7 +343,7 @@ const App: React.FC = () => {
   };
 
   if (!loaded) return <div className="h-screen bg-slate-900 text-white flex items-center justify-center">Loading...</div>;
-  const isMenuSubView = ['history', 'tools', 'settings', 'support', 'legal', 'feedback', 'collaborative', 'community-links', 'profile', 'personal-info', 'email-prefs', 'security', 'pro-membership', 'membership-management', 'feature-subscription', 'shopping-list'].includes(activeTab);
+  const isMenuSubView = ['history', 'tools', 'settings', 'support', 'legal', 'feedback', 'collaborative', 'community-links', 'profile', 'personal-info', 'email-prefs', 'security', 'pro-membership', 'membership-management', 'feature-subscription', 'shopping-list', 'calculators'].includes(activeTab);
 
   return (
     <Layout>
@@ -356,6 +357,7 @@ const App: React.FC = () => {
         {activeTab === 'social' && <CollaborativeView onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick} groups={groups} onUpdateGroups={handleUpdateGroups} onCreateShoppingList={handleCreateShoppingListFromGroup} />}
         {activeTab === 'collaborative' && <CollaborativeView onBack={() => setActiveTab('menu')} onProfileClick={handleProfileClick} groups={groups} onUpdateGroups={handleUpdateGroups} onCreateShoppingList={handleCreateShoppingListFromGroup} />}
         {activeTab === 'shopping-list' && <ShoppingListView onBack={() => setActiveTab('menu')} onProfileClick={handleProfileClick} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} shoppingLists={shoppingLists} onUpdateLists={handleUpdateShopping} onSyncToBudget={handleSyncShoppingToBudget} focusListId={shoppingFocus?.listId} focusShopId={shoppingFocus?.shopId} clearFocus={() => setShoppingFocus(null)} />}
+        {activeTab === 'calculators' && <AdvancedCalculatorsView onBack={() => setActiveTab('menu')} currencySymbol={budgetData.currencySymbol} onProfileClick={handleProfileClick} />}
         {activeTab === 'community-links' && <CommunityLinksView onBack={() => setActiveTab('menu')} />}
         {activeTab === 'events' && <EventsView events={events} onUpdateEvents={handleUpdateEvents} currencySymbol={budgetData.currencySymbol} onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick} focusEventId={eventFocus?.id} focusTab={eventFocus?.tab} onCreateShoppingList={handleCreateShoppingListFromEvent} />}
         {activeTab === 'simulator' && <LifeSimulatorView currentData={budgetData} currencySymbol={budgetData.currencySymbol} onBack={() => setActiveTab('ai')} onApplyScenario={handleApplyScenario} onProfileClick={handleProfileClick} />}
