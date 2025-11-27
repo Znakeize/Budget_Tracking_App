@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { X, AlertCircle, Bell, Calendar, TrendingDown, PiggyBank, Crown, CalendarHeart, MinusCircle, Users } from 'lucide-react';
+import { X, AlertCircle, Bell, Calendar, TrendingDown, PiggyBank, Crown, CalendarHeart, MinusCircle, Users, TrendingUp } from 'lucide-react';
 import { Card } from './Card';
 import { NotificationItem } from '../../utils/calculations';
 
@@ -20,6 +20,7 @@ export const NotificationPopup: React.FC<NotificationPopupProps> = ({ notificati
           case 'System': return <Crown size={14} />;
           case 'Event': return <CalendarHeart size={14} />;
           case 'Collaboration': return <Users size={14} />;
+          case 'Investment': return <TrendingUp size={14} />;
           default: return <AlertCircle size={14} />;
       }
   };
@@ -57,7 +58,9 @@ export const NotificationPopup: React.FC<NotificationPopupProps> = ({ notificati
                                         ? 'bg-fuchsia-50/50 dark:bg-fuchsia-900/10 border-fuchsia-100 dark:border-fuchsia-500/20 hover:bg-fuchsia-50 dark:hover:bg-fuchsia-900/20'
                                         : notif.category === 'Collaboration'
                                             ? 'bg-amber-50/50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-500/20 hover:bg-amber-50 dark:hover:bg-amber-900/20'
-                                            : 'bg-white dark:bg-black/20 border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/10'
+                                            : notif.category === 'Investment'
+                                                ? 'bg-violet-50/50 dark:bg-violet-900/10 border-violet-100 dark:border-violet-500/20 hover:bg-violet-50 dark:hover:bg-violet-900/20'
+                                                : 'bg-white dark:bg-black/20 border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/10'
                             }`}
                             onClick={() => {
                                 onNotificationClick(notif);
@@ -89,6 +92,7 @@ export const NotificationPopup: React.FC<NotificationPopupProps> = ({ notificati
                                           notif.category === 'System' ? 'text-indigo-900 dark:text-indigo-200' : 
                                           notif.category === 'Event' ? 'text-fuchsia-900 dark:text-fuchsia-200' :
                                           notif.category === 'Collaboration' ? 'text-amber-900 dark:text-amber-200' :
+                                          notif.category === 'Investment' ? 'text-violet-900 dark:text-violet-200' :
                                           notif.type === 'danger' ? 'text-slate-900 dark:text-white font-bold' : 
                                           'text-slate-700 dark:text-slate-200'
                                       }`}>

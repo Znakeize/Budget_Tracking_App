@@ -18,6 +18,7 @@ interface AIViewProps {
   onViewSocial: () => void;
   eventNotificationCount?: number;
   socialNotificationCount?: number;
+  investmentNotificationCount?: number;
   onProfileClick: () => void;
   user: any;
   onNavigate: (tab: string) => void;
@@ -36,6 +37,7 @@ export const AIView: React.FC<AIViewProps> = ({
   onViewSocial,
   eventNotificationCount = 0,
   socialNotificationCount = 0,
+  investmentNotificationCount = 0,
   onProfileClick,
   user,
   onNavigate,
@@ -186,6 +188,19 @@ export const AIView: React.FC<AIViewProps> = ({
                             <Lock size={16} className="text-slate-900 dark:text-white" />
                         </div>
                     )}
+                    
+                    {/* Notification Icon */}
+                    {investmentNotificationCount > 0 && (
+                        <div className="absolute top-3 right-3 animate-in zoom-in duration-300 z-10">
+                            <div className="relative drop-shadow-md">
+                                <Hexagon size={22} className="text-red-500" fill="currentColor" strokeWidth={0} />
+                                <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white">
+                                    {investmentNotificationCount > 9 ? '!' : investmentNotificationCount}
+                                </span>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="w-10 h-10 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-violet-600 dark:text-violet-400 mb-3 group-hover:scale-110 transition-transform duration-300">
                         <PieChart size={20} />
                     </div>

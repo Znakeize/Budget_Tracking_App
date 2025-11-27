@@ -1,5 +1,5 @@
 
-import { BudgetData, ShoppingListData, SharedGroup } from '../types';
+import { BudgetData, ShoppingListData, SharedGroup, InvestmentAlert, InvestmentItem } from '../types';
 
 export const calculateTotals = (data: BudgetData) => {
   const totalIncome = data.income.reduce((sum, item) => sum + item.actual, 0);
@@ -72,7 +72,7 @@ export interface NotificationItem {
   type: 'danger' | 'warning' | 'info' | 'success';
   message: string;
   date: string;
-  category: 'Bill' | 'Debt' | 'Budget' | 'Savings' | 'System' | 'Event' | 'Shopping' | 'Collaboration';
+  category: 'Bill' | 'Debt' | 'Budget' | 'Savings' | 'System' | 'Event' | 'Shopping' | 'Collaboration' | 'Investment';
   actionLabel?: string;
   data?: any; // Stores context like listId, shopId for navigation
 }
@@ -360,4 +360,68 @@ export const getCollaborativeNotifications = (groups: SharedGroup[]): Notificati
         }
     });
     return notifs;
+};
+
+export const getInvestmentNotifications = (investments: InvestmentItem[], alerts: InvestmentAlert[], currencySymbol: string): NotificationItem[] => {
+    const generated: NotificationItem[] = [];
+    const today = new Date().toISOString().split('T')[0];
+
+    // 1. Process User Alerts
+    alerts.forEach(alert => {
+        if(!alert.active) return;
+        const asset = investments.find(i => i.id === alert.assetId || i.name === alert.assetName);
+        
+        if (alert.type === 'date') {
+            if (alert.value === 'Monthly' || alert.value === today) {
+                 generated.push({
+                     id: `alert-${alert.id}`,
+                     type: 'info',
+                     message: `${alert.assetName}: ${alert.value} Reminder`,
+                     date: today,
+                     category: 'Investment'
+                 });
+            }
+        } else if (asset) {
+            const val = alert.value as number;
+            if (alert.type === 'price_above' && asset.amount >= val) {
+                generated.push({
+                     id: `alert-${alert.id}`,
+                     type: 'success',
+                     message: `${asset.name} value is above ${formatCurrency(val, currencySymbol)}`,
+                     date: today,
+                     category: 'Investment'
+                 });
+            } else if (alert.type === 'price_below' && asset.amount <= val) {
+                generated.push({
+                     id: `alert-${alert.id}`,
+                     type: 'warning',
+                     message: `${asset.name} dropped below ${formatCurrency(val, currencySymbol)}`,
+                     date: today,
+                     category: 'Investment'
+                 });
+            }
+        }
+    });
+
+    // 2. Auto-generated Insights
+    const topMover = [...investments].sort((a,b) => {
+        const gainA = (a.amount - (a.initialValue || a.amount));
+        const gainB = (b.amount - (b.initialValue || b.amount));
+        return Math.abs(gainB) - Math.abs(gainA);
+    })[0];
+
+    if (topMover) {
+        const gain = topMover.amount - (topMover.initialValue || topMover.amount);
+        if (Math.abs(gain) > 100) {
+             generated.push({
+                 id: 'auto-mover',
+                 type: gain > 0 ? 'success' : 'danger',
+                 message: `${topMover.name} has moved ${formatCurrency(gain, currencySymbol)} all time.`,
+                 date: today,
+                 category: 'Investment'
+             });
+        }
+    }
+
+    return generated;
 };

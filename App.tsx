@@ -26,9 +26,9 @@ import { ProMembershipView } from './views/ProMembershipView';
 import { MembershipManagementView } from './views/MembershipManagementView';
 import { FeatureSubscriptionView } from './views/FeatureSubscriptionView';
 import { ShoppingListView } from './views/ShoppingListView';
-import { BudgetData, PeriodType, EventData, ShoppingListData, SharedGroup, ShopMember, SharedMember, InvestmentGoal } from './types';
+import { BudgetData, PeriodType, EventData, ShoppingListData, SharedGroup, ShopMember, SharedMember, InvestmentGoal, GoalItem, InvestmentAlert } from './types';
 import { INITIAL_DATA, SAMPLE_EVENTS, SAMPLE_SHOPPING_LISTS, MOCK_GROUPS, CURRENCY_SYMBOLS, SAMPLE_INVESTMENT_GOALS } from './constants';
-import { generateId, calculateTotals, getNotifications, NotificationItem, formatCurrency, getShoppingNotifications, getCollaborativeNotifications } from './utils/calculations';
+import { generateId, calculateTotals, getNotifications, NotificationItem, formatCurrency, getShoppingNotifications, getCollaborativeNotifications, getInvestmentNotifications } from './utils/calculations';
 import { NewPeriodModal } from './components/ui/NewPeriodModal';
 import { NotificationPopup } from './components/ui/NotificationPopup';
 
@@ -56,6 +56,10 @@ const App: React.FC = () => {
   const [shoppingLists, setShoppingLists] = useState<ShoppingListData[]>([]);
   const [groups, setGroups] = useState<SharedGroup[]>([]);
   const [investmentGoals, setInvestmentGoals] = useState<InvestmentGoal[]>(SAMPLE_INVESTMENT_GOALS);
+  const [investmentAlerts, setInvestmentAlerts] = useState<InvestmentAlert[]>([
+      { id: 'a1', assetName: 'Tesla Stock', type: 'price_below', value: 180, active: true },
+      { id: 'a2', assetName: 'Dividend Reminder', type: 'date', value: 'Monthly', active: true }
+  ]);
   
   // App State
   const [loaded, setLoaded] = useState(false);
@@ -77,6 +81,11 @@ const App: React.FC = () => {
   const [calculatedRollover, setCalculatedRollover] = useState(0);
   const [nextPeriodDefaults, setNextPeriodDefaults] = useState({ month: 0, year: 0 });
 
+  // Calculate investment notifications
+  const investmentNotifications = useMemo(() => {
+      return getInvestmentNotifications(budgetData.investments, investmentAlerts, budgetData.currencySymbol);
+  }, [budgetData.investments, investmentAlerts, budgetData.currencySymbol]);
+
   // Combine persistent system notifications with calculated budget and event alerts
   const notifications = useMemo(() => {
       const budgetAlerts = getNotifications(budgetData, history);
@@ -84,7 +93,7 @@ const App: React.FC = () => {
       const shoppingAlerts = getShoppingNotifications(shoppingLists);
       const collabAlerts = getCollaborativeNotifications(groups);
       
-      const allNotifications = [...systemNotifications, ...budgetAlerts, ...eventAlerts, ...shoppingAlerts, ...collabAlerts];
+      const allNotifications = [...systemNotifications, ...budgetAlerts, ...eventAlerts, ...shoppingAlerts, ...collabAlerts, ...investmentNotifications];
       
       // Filter dismissed notifications
       const activeNotifications = allNotifications.filter(n => !dismissedIds.includes(n.id));
@@ -95,10 +104,11 @@ const App: React.FC = () => {
           if (a.type !== b.type) return priority[a.type] - priority[b.type];
           return b.date.localeCompare(a.date); // Newest date first
       });
-  }, [budgetData, history, systemNotifications, events, shoppingLists, groups, dismissedIds]);
+  }, [budgetData, history, systemNotifications, events, shoppingLists, groups, investmentNotifications, dismissedIds]);
 
   const eventNotificationCount = useMemo(() => getEventNotifications(events, budgetData.currencySymbol).length, [events, budgetData.currencySymbol]);
   const socialNotificationCount = useMemo(() => getCollaborativeNotifications(groups).length, [groups]);
+  const investmentNotificationCount = investmentNotifications.length;
 
   // Helper to add system notification
   const addSystemNotification = useCallback((message: string, type: 'success' | 'warning' | 'info' | 'danger') => {
@@ -140,6 +150,7 @@ const App: React.FC = () => {
     const savedUser = localStorage.getItem('budget_user_session');
     const savedSysNotifs = localStorage.getItem('systemNotifications');
     const savedInvestGoals = localStorage.getItem('investmentGoals');
+    const savedInvestAlerts = localStorage.getItem('investmentAlerts');
 
     if (savedHistory) {
       try {
@@ -179,6 +190,12 @@ const App: React.FC = () => {
             setInvestmentGoals(JSON.parse(savedInvestGoals));
         } catch (e) { setInvestmentGoals(SAMPLE_INVESTMENT_GOALS); }
     } else setInvestmentGoals(SAMPLE_INVESTMENT_GOALS);
+
+    if (savedInvestAlerts) {
+        try {
+            setInvestmentAlerts(JSON.parse(savedInvestAlerts));
+        } catch (e) { console.error("Failed to parse investment alerts", e); }
+    }
 
     if (savedSysNotifs) {
         try {
@@ -247,6 +264,7 @@ const App: React.FC = () => {
   const handleUpdateShopping = useCallback((newLists: ShoppingListData[]) => { setShoppingLists(newLists); localStorage.setItem('budgetShopping', JSON.stringify(newLists)); }, []);
   const handleUpdateGroups = useCallback((newGroups: SharedGroup[]) => { setGroups(newGroups); localStorage.setItem('budgetGroups', JSON.stringify(newGroups)); }, []);
   const handleUpdateInvestGoals = useCallback((newGoals: InvestmentGoal[]) => { setInvestmentGoals(newGoals); localStorage.setItem('investmentGoals', JSON.stringify(newGoals)); }, []);
+  const handleUpdateInvestAlerts = useCallback((newAlerts: InvestmentAlert[]) => { setInvestmentAlerts(newAlerts); localStorage.setItem('investmentAlerts', JSON.stringify(newAlerts)); }, []);
 
   const handleCreateShoppingListFromBudget = useCallback((name: string, budget: number) => {
         const newList: ShoppingListData = { id: generateId(), name: name, shops: [], members: [{ id: 'me', name: 'You', role: 'owner', avatarColor: 'bg-indigo-500' }], created: Date.now(), currencySymbol: budgetData.currencySymbol, color: 'bg-pink-500', budget: budget, lastModified: Date.now() };
@@ -282,17 +300,46 @@ const App: React.FC = () => {
   const handleCreatePeriod = useCallback((data: { period: PeriodType, month: number, year: number, startDate?: string, endDate?: string, rollover: number }) => { setUndoStack([]); setRedoStack([]); const newPeriod: BudgetData = { ...budgetData, id: generateId(), period: data.period, month: data.month, year: data.year, startDate: data.startDate, endDate: data.endDate, created: Date.now(), income: budgetData.income.map(i => ({ ...i, actual: 0 })), expenses: budgetData.expenses.map(e => ({ ...e, spent: 0 })), bills: budgetData.bills.map(b => ({ ...b, paid: false, dueDate: shiftDate(b.dueDate, data.month, data.year) })), goals: budgetData.goals.map(g => ({ ...g, checked: false })), savings: budgetData.savings.map(s => ({ ...s, paid: false, amount: 0 })), debts: budgetData.debts.map(d => ({ ...d, paid: false, payment: d.payment, dueDate: d.dueDate ? shiftDate(d.dueDate, data.month, data.year) : undefined })), investments: budgetData.investments.map(i => ({ ...i, contributed: false })), rollover: data.rollover }; setBudgetData(newPeriod); setHistory(prev => { const newHistory = [...prev, newPeriod]; localStorage.setItem('budgetHistory', JSON.stringify(newHistory)); return newHistory; }); localStorage.setItem('activePeriodId', newPeriod.id); setActiveTab('dashboard'); setIsNewPeriodModalOpen(false); }, [budgetData]);
   const handleDuplicatePeriod = useCallback((id: string) => { setHistory(prev => { const periodToDuplicate = prev.find(h => h.id === id); if (!periodToDuplicate) return prev; const newPeriod: BudgetData = { ...periodToDuplicate, id: generateId(), created: Date.now() }; const newHistory = [...prev, newPeriod]; localStorage.setItem('budgetHistory', JSON.stringify(newHistory)); return newHistory; }); }, []);
   const handleDeletePeriod = useCallback((id: string) => { if (!window.confirm('Are you sure you want to delete this period?')) return; if (history.length <= 1) { alert("Cannot delete the only remaining period."); return; } const newHistory = history.filter(h => h.id !== id); setHistory(newHistory); localStorage.setItem('budgetHistory', JSON.stringify(newHistory)); if (budgetData.id === id) { const sortedRemaining = [...newHistory].sort((a, b) => b.created - a.created); const nextActive = sortedRemaining[0]; if (nextActive) { setBudgetData(nextActive); setUndoStack([]); setRedoStack([]); localStorage.setItem('activePeriodId', nextActive.id); } } }, [history, budgetData.id]);
-  const handleReset = () => { localStorage.clear(); setBudgetData(INITIAL_DATA); setHistory([INITIAL_DATA]); setEvents([]); setUndoStack([]); setRedoStack([]); setUser(null); setSystemNotifications([]); setShoppingLists([]); setGroups([]); setInvestmentGoals(SAMPLE_INVESTMENT_GOALS); window.location.reload(); };
+  const handleReset = () => { localStorage.clear(); setBudgetData(INITIAL_DATA); setHistory([INITIAL_DATA]); setEvents([]); setUndoStack([]); setRedoStack([]); setUser(null); setSystemNotifications([]); setShoppingLists([]); setGroups([]); setInvestmentGoals(SAMPLE_INVESTMENT_GOALS); setInvestmentAlerts([]); window.location.reload(); };
 
   const handleNotificationClick = (notif: NotificationItem) => {
       if (notif.category === 'System') { removeSystemNotification(notif.id); setActiveTab('membership-management'); setShowNotifications(false); return; }
       if (notif.category === 'Event') { const parts = notif.id.split('-'); const eventId = parts[1]; let initialTab = 'dashboard'; if (notif.id.includes('vendor')) initialTab = 'vendors'; if (notif.id.includes('budget')) initialTab = 'budget'; setEventFocus({ id: eventId, tab: initialTab }); setActiveTab('events'); setShowNotifications(false); return; }
       if (notif.category === 'Shopping') { if (notif.data?.listId) { setShoppingFocus({ listId: notif.data.listId, shopId: notif.data.shopId }); } setActiveTab('shopping-list'); setShowNotifications(false); return; }
       if (notif.data?.groupId) { setActiveTab('social'); setShowNotifications(false); return; }
+      if (notif.category === 'Investment') { setActiveTab('investments'); setShowNotifications(false); return; }
       setActiveTab('budget'); let section = ''; let itemId = ''; const parts = notif.id.split('-'); if (notif.category === 'Bill') { section = 'bills'; itemId = notif.id.replace('Bill-', ''); } else if (notif.category === 'Debt') { section = 'debts'; itemId = notif.id.replace('Debt-', ''); } else if (notif.category === 'Budget') { section = 'expenses'; if (notif.id.startsWith('budget-warn-')) itemId = notif.id.replace('budget-warn-', ''); else if (notif.id.startsWith('budget-over-')) itemId = notif.id.replace('budget-over-', ''); else itemId = parts[parts.length - 1]; } else if (notif.category === 'Savings') { section = 'savings'; if (notif.id === 'savings-win') section = 'savings'; } if (section) setBudgetFocusTarget({ section, itemId }); setShowNotifications(false);
   };
 
   const handleApplyScenario = (changes: Partial<BudgetData>) => { const updated = { ...budgetData, ...changes }; handleUpdateBudget(updated); setActiveTab('budget'); };
+
+  // --- New Handlers for Budget <-> Investment Sync ---
+
+  const handleAddInvestmentGoalFromBudget = (goal: InvestmentGoal) => {
+      // Add to investment goals list
+      const newGoals = [...investmentGoals, goal];
+      handleUpdateInvestGoals(newGoals);
+      addSystemNotification(`Goal "${goal.name}" synced to Investment Goals`, 'success');
+  };
+
+  const handleAddBudgetGoalFromInvestment = (goal: GoalItem) => {
+      // Add to budget goals list
+      const updatedGoals = [...budgetData.goals, goal];
+      handleUpdateBudget({ ...budgetData, goals: updatedGoals });
+      addSystemNotification(`Investment goal synced to Budget`, 'success');
+  };
+
+  const handleBudgetGoalUpdate = (updatedGoal: GoalItem) => {
+      // Sync update from Budget -> Investment Goal (Real-time sync)
+      // Find investment goal with same ID (or name if ID mismatch due to legacy)
+      const updatedInvestmentGoals = investmentGoals.map(ig => {
+          if (ig.id === updatedGoal.id || ig.name === updatedGoal.name) {
+              return { ...ig, currentAmount: updatedGoal.current };
+          }
+          return ig;
+      });
+      handleUpdateInvestGoals(updatedInvestmentGoals);
+  };
 
   if (!loaded) return <div className="h-screen bg-slate-900 text-white flex items-center justify-center">Loading...</div>;
   const isMenuSubView = ['history', 'tools', 'settings', 'support', 'legal', 'feedback', 'collaborative', 'community-links', 'profile', 'personal-info', 'email-prefs', 'security', 'pro-membership', 'membership-management', 'feature-subscription', 'shopping-list'].includes(activeTab);
@@ -302,10 +349,10 @@ const App: React.FC = () => {
       <main className="flex-1 flex flex-col relative z-10 h-full">
         {activeTab === 'auth' && <AuthView onLogin={handleLogin} onBack={() => setActiveTab('dashboard')} />}
         {activeTab === 'dashboard' && <DashboardView data={budgetData} setTab={setActiveTab} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} onProfileClick={handleProfileClick} />}
-        {activeTab === 'budget' && <BudgetView data={budgetData} updateData={handleUpdateBudget} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} onUndo={handleUndo} onRedo={handleRedo} canUndo={undoStack.length > 0} canRedo={redoStack.length > 0} focusTarget={budgetFocusTarget} clearFocusTarget={() => setBudgetFocusTarget(null)} onProfileClick={handleProfileClick} onCreateShoppingList={handleCreateShoppingListFromBudget} />}
-        {activeTab === 'ai' && <AIView history={history} currencySymbol={budgetData.currencySymbol} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} onViewAnalysis={() => setActiveTab('analysis')} onViewInvestments={() => setActiveTab('investments')} onViewEvents={() => setActiveTab('events')} onViewSocial={() => setActiveTab('social')} onViewSimulator={() => setActiveTab('simulator')} eventNotificationCount={eventNotificationCount} socialNotificationCount={socialNotificationCount} onProfileClick={handleProfileClick} user={user} onNavigate={setActiveTab} onViewFeature={handleViewFeature} />}
+        {activeTab === 'budget' && <BudgetView data={budgetData} updateData={handleUpdateBudget} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} onUndo={handleUndo} onRedo={handleRedo} canUndo={undoStack.length > 0} canRedo={redoStack.length > 0} focusTarget={budgetFocusTarget} clearFocusTarget={() => setBudgetFocusTarget(null)} onProfileClick={handleProfileClick} onCreateShoppingList={handleCreateShoppingListFromBudget} onAddInvestmentGoal={handleAddInvestmentGoalFromBudget} onGoalUpdate={handleBudgetGoalUpdate} />}
+        {activeTab === 'ai' && <AIView history={history} currencySymbol={budgetData.currencySymbol} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} onViewAnalysis={() => setActiveTab('analysis')} onViewInvestments={() => setActiveTab('investments')} onViewEvents={() => setActiveTab('events')} onViewSocial={() => setActiveTab('social')} onViewSimulator={() => setActiveTab('simulator')} eventNotificationCount={eventNotificationCount} socialNotificationCount={socialNotificationCount} investmentNotificationCount={investmentNotificationCount} onProfileClick={handleProfileClick} user={user} onNavigate={setActiveTab} onViewFeature={handleViewFeature} />}
         {activeTab === 'analysis' && <AnalysisView history={history} currencySymbol={budgetData.currencySymbol} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick} />}
-        {activeTab === 'investments' && <InvestmentAnalysisView history={history} currencySymbol={budgetData.currencySymbol} onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick} onUpdateData={handleUpdateBudget} investmentGoals={investmentGoals} onUpdateGoals={handleUpdateInvestGoals} />}
+        {activeTab === 'investments' && <InvestmentAnalysisView history={history} currencySymbol={budgetData.currencySymbol} onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick} onUpdateData={handleUpdateBudget} investmentGoals={investmentGoals} onUpdateGoals={handleUpdateInvestGoals} onAddBudgetGoal={handleAddBudgetGoalFromInvestment} alerts={investmentAlerts} onUpdateAlerts={handleUpdateInvestAlerts} notifications={investmentNotifications} />}
         {activeTab === 'social' && <CollaborativeView onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick} groups={groups} onUpdateGroups={handleUpdateGroups} onCreateShoppingList={handleCreateShoppingListFromGroup} />}
         {activeTab === 'collaborative' && <CollaborativeView onBack={() => setActiveTab('menu')} onProfileClick={handleProfileClick} groups={groups} onUpdateGroups={handleUpdateGroups} onCreateShoppingList={handleCreateShoppingListFromGroup} />}
         {activeTab === 'shopping-list' && <ShoppingListView onBack={() => setActiveTab('menu')} onProfileClick={handleProfileClick} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} shoppingLists={shoppingLists} onUpdateLists={handleUpdateShopping} onSyncToBudget={handleSyncShoppingToBudget} focusListId={shoppingFocus?.listId} focusShopId={shoppingFocus?.shopId} clearFocus={() => setShoppingFocus(null)} />}
@@ -327,7 +374,7 @@ const App: React.FC = () => {
         {(activeTab === 'tools' || activeTab === 'settings') && <ToolsView data={budgetData} updateData={handleUpdateBudget} resetData={handleReset} isDarkMode={isDarkMode} toggleTheme={() => setIsDarkMode(!isDarkMode)} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} onBack={() => setActiveTab('menu')} initialTab={activeTab === 'settings' ? 'settings' : 'tools'} />}
       </main>
       
-      {activeTab !== 'auth' && <Navigation activeTab={isMenuSubView || activeTab === 'menu' ? 'menu' : (['analysis', 'investments', 'social', 'events', 'simulator'].includes(activeTab) ? 'ai' : activeTab)} onTabChange={setActiveTab} onAdd={handleOpenNewPeriodModal} badgeTabs={(eventNotificationCount > 0 || socialNotificationCount > 0) ? ['ai'] : []} />}
+      {activeTab !== 'auth' && <Navigation activeTab={isMenuSubView || activeTab === 'menu' ? 'menu' : (['analysis', 'investments', 'social', 'events', 'simulator'].includes(activeTab) ? 'ai' : activeTab)} onTabChange={setActiveTab} onAdd={handleOpenNewPeriodModal} badgeTabs={(eventNotificationCount > 0 || socialNotificationCount > 0 || investmentNotificationCount > 0) ? ['ai'] : []} />}
       <NewPeriodModal isOpen={isNewPeriodModalOpen} onClose={() => setIsNewPeriodModalOpen(false)} onConfirm={handleCreatePeriod} defaultMonth={nextPeriodDefaults.month} defaultYear={nextPeriodDefaults.year} calculatedRollover={calculatedRollover} currencySymbol={budgetData.currencySymbol} />
       {showNotifications && <NotificationPopup notifications={notifications} onClose={() => setShowNotifications(false)} onNotificationClick={handleNotificationClick} onDismiss={handleDismissNotification} />}
     </Layout>

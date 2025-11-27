@@ -92,6 +92,15 @@ export interface InvestmentGoal {
   type: 'value' | 'roi' | 'income';
 }
 
+export interface InvestmentAlert {
+  id: string;
+  assetName: string; // or assetId
+  type: 'price_above' | 'price_below' | 'date';
+  value: number | string;
+  active: boolean;
+  assetId?: string;
+}
+
 // --- Main Data Structure ---
 
 export interface BudgetData {

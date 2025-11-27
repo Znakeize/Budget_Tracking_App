@@ -1,6 +1,5 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
-import { BudgetData } from '../types';
+import { BudgetData, InvestmentGoal, GoalItem } from '../types';
 import { formatCurrency, generateId } from '../utils/calculations';
 import { 
   Plus, Trash2, ChevronDown, ChevronRight, Calendar, Bell, BellRing, 
@@ -49,6 +48,8 @@ interface BudgetViewProps {
   clearFocusTarget?: () => void;
   onProfileClick: () => void;
   onCreateShoppingList?: (name: string, budget: number) => void;
+  onAddInvestmentGoal?: (goal: InvestmentGoal) => void;
+  onGoalUpdate?: (goal: GoalItem) => void;
 }
 
 export const BudgetView: React.FC<BudgetViewProps> = ({ 
@@ -63,7 +64,9 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
   focusTarget,
   clearFocusTarget,
   onProfileClick,
-  onCreateShoppingList
+  onCreateShoppingList,
+  onAddInvestmentGoal,
+  onGoalUpdate
 }) => {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [expandedInvestmentId, setExpandedInvestmentId] = useState<string | null>(null);
@@ -95,6 +98,11 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
     const list = newData[collection] as any[];
     list[index] = { ...list[index], [field]: value };
     updateData(newData);
+    
+    // If updating a goal current amount, trigger sync
+    if (collection === 'goals' && field === 'current' && onGoalUpdate) {
+        onGoalUpdate(list[index]);
+    }
   };
 
   const deleteItem = (collection: keyof BudgetData, index: number) => {
@@ -108,8 +116,49 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
     if (!addingCollection) return;
     const newData = { ...data };
     const list = newData[addingCollection] as any[];
-    list.push({ ...itemData, id: generateId() });
+    
+    // Process specific fields based on collection if needed
+    if (addingCollection === 'investments') {
+        // Ensure default type is 'personal' so it appears in the Personal Investment section
+        itemData.type = 'personal';
+        itemData.category = 'Other';
+        // Set initial value to current amount to avoid massive gain calculation
+        itemData.initialValue = itemData.amount;
+    }
+
+    // Generate ID once to share if needed
+    const newId = generateId();
+    list.push({ ...itemData, id: newId });
     updateData(newData);
+
+    // Sync to Investment Goals
+    if (addingCollection === 'goals' && onAddInvestmentGoal) {
+        const now = new Date();
+        let daysToAdd = 365; // Default 1 year
+        const tf = (itemData.timeframe || '').toLowerCase();
+        
+        const match = tf.match(/(\d+)\s*(month|year|week|day)/);
+        if (match) {
+            const num = parseInt(match[1]);
+            const unit = match[2];
+            if (unit.startsWith('year')) daysToAdd = num * 365;
+            else if (unit.startsWith('month')) daysToAdd = num * 30;
+            else if (unit.startsWith('week')) daysToAdd = num * 7;
+            else if (unit.startsWith('day')) daysToAdd = num;
+        }
+
+        const deadlineDate = new Date(now.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+        
+        onAddInvestmentGoal({
+            id: newId, // Use same ID for linking
+            name: itemData.name,
+            targetAmount: parseFloat(itemData.target) || 0,
+            currentAmount: parseFloat(itemData.current) || 0,
+            deadline: deadlineDate.toISOString().split('T')[0],
+            type: 'value'
+        });
+    }
+
     setAddingCollection(null);
   };
 
@@ -143,6 +192,11 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
     }
     
     updateData(newData);
+    
+    // Sync update to parent/other views
+    if (onGoalUpdate) {
+        onGoalUpdate(goal);
+    }
   };
 
   const toggleDebtPaid = (index: number, isPaid: boolean) => {
@@ -191,13 +245,41 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
     const newInvestments = [...newData.investments];
     const item = { ...newInvestments[index] };
     const contribution = item.monthly || 0;
+    const today = new Date().toISOString().split('T')[0];
 
     item.contributed = isContributed;
+    
     if (isContributed) {
+        // Increase Current Value
         item.amount = (item.amount || 0) + contribution;
+        // Increase Cost Basis (Initial Value) so Profit % doesn't spike artificially
+        item.initialValue = (item.initialValue || 0) + contribution;
+        
+        // Auto-add to history for chart sync
+        if (!item.history) item.history = [];
+        item.history.push({ date: today, amount: item.amount });
     } else {
+        // Revert Value
         const newAmount = (item.amount || 0) - contribution;
         item.amount = newAmount < 0 ? 0 : newAmount;
+        
+        // Revert Cost Basis
+        const newInitial = (item.initialValue || 0) - contribution;
+        item.initialValue = newInitial < 0 ? 0 : newInitial;
+
+        // Remove today's history entry if exists (undo logic)
+        if (item.history && item.history.length > 0) {
+            const lastEntry = item.history[item.history.length - 1];
+            // Simple check: if last entry matches today and approximate amount, remove it
+            if (lastEntry.date === today) {
+                item.history.pop();
+            }
+        }
+    }
+
+    // Ensure history is sorted
+    if (item.history) {
+        item.history.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     }
 
     newInvestments[index] = item;
@@ -243,7 +325,10 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
     savings: data.savings.reduce((acc, item) => ({ planned: acc.planned + item.planned, amount: acc.amount + item.amount }), { planned: 0, amount: 0 }),
     debts: data.debts.reduce((acc, item) => ({ balance: acc.balance + item.balance, payment: acc.payment + item.payment }), { balance: 0, payment: 0 }),
     goals: data.goals.reduce((sum, item) => sum + item.monthly, 0),
-    investments: data.investments.reduce((sum, item) => sum + item.amount, 0)
+    // Only count personal investments in the budget view
+    investments: data.investments
+      .filter(i => i.type === 'personal' || !i.type)
+      .reduce((sum, item) => sum + item.amount, 0)
   };
 
   // Configuration for the cards
@@ -652,6 +737,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                         </div>
 
                         {data.investments.map((item, idx) => {
+                            if (item.type === 'business') return null; // Don't show business assets in Budget Tracker
                             const progress = item.target && item.target > 0 ? (item.amount / item.target) * 100 : 0;
                             return (
                                 <div key={item.id} id={item.id} className={`bg-white dark:bg-slate-800/50 rounded-xl p-4 border shadow-sm transition-all duration-300 ${item.contributed ? 'border-violet-500/30' : 'border-slate-200 dark:border-slate-700'}`}>
@@ -848,8 +934,12 @@ const InvestmentSparkline = ({ amount, history }: { amount: number, history?: { 
         if (history && history.length > 0) {
             points = history.map(h => h.amount);
             labels = history.map(h => h.date);
-            points.push(amount);
-            labels.push('Now');
+            // Ensure the very current amount is represented as the last point if it differs from history
+            // or just always append current state for real-time feel
+            if (history[history.length - 1].amount !== amount) {
+                points.push(amount);
+                labels.push('Now');
+            }
         } else {
              const steps = 6;
              let current = amount * 0.8;

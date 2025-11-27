@@ -726,7 +726,12 @@ const ShopItemsView: React.FC<{
         handleUpdateShop({ ...shop, items: updatedItems });
     };
 
-    const filteredItems = shop.items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+    const filteredItems = shop.items
+        .filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
+        .sort((a, b) => {
+            if (a.checked === b.checked) return 0;
+            return a.checked ? 1 : -1;
+        });
 
     return (
         <div className="flex flex-col h-full relative bg-slate-50 dark:bg-slate-900">
