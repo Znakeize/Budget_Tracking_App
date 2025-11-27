@@ -10,7 +10,7 @@ import {
   Smartphone, Bell, Camera, FileText, Shield, Mail, Percent,
   Calculator, RefreshCw, Award, Map, TrendingDown, Flame,
   Pencil, Trash2, Receipt, ScanLine, Image as ImageIcon, Keyboard,
-  BellRing
+  BellRing, ShoppingBag, Check
 } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement } from 'chart.js';
 import { Doughnut, Bar, Line } from 'react-chartjs-2';
@@ -28,18 +28,23 @@ interface CollaborativeViewProps {
   onProfileClick: () => void;
   groups: SharedGroup[];
   onUpdateGroups: (groups: SharedGroup[]) => void;
+  onCreateShoppingList?: (groupName: string, expenseName: string, amount: number, members: SharedMember[]) => void;
 }
 
 // --- Main View Component ---
 
-export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, onProfileClick, groups, onUpdateGroups }) => {
+export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, onProfileClick, groups, onUpdateGroups, onCreateShoppingList }) => {
   const [activeTab, setActiveTab] = useState<'groups' | 'settle' | 'community'>('groups');
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [dismissedIds, setDismissedIds] = useState<string[]>([]);
 
-  const notifications = useMemo(() => getCollaborativeNotifications(groups), [groups]);
+  const notifications = useMemo(() => {
+      const all = getCollaborativeNotifications(groups);
+      return all.filter(n => !dismissedIds.includes(n.id));
+  }, [groups, dismissedIds]);
 
   // Helper to get active group
   const activeGroup = useMemo(() => groups.find(g => g.id === activeGroupId), [groups, activeGroupId]);
@@ -80,6 +85,10 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, on
           setActiveGroupId(notif.data.groupId);
       }
       setShowNotifications(false);
+  };
+
+  const handleDismiss = (id: string) => {
+      setDismissedIds(prev => [...prev, id]);
   };
 
   // View Controller
@@ -157,12 +166,13 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, on
                notifications={notifications} 
                onClose={() => setShowNotifications(false)} 
                onNotificationClick={handleNotificationClick} 
+               onDismiss={handleDismiss}
            />
        )}
 
       <div className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-28">
         {activeGroupId && activeGroup ? (
-          <GroupDetailView group={activeGroup} onUpdate={handleUpdateGroup} />
+          <GroupDetailView group={activeGroup} onUpdate={handleUpdateGroup} onCreateShoppingList={onCreateShoppingList} />
         ) : (
           <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-300">
             {activeTab === 'groups' && (
@@ -264,12 +274,420 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, on
   );
 };
 
-// ... (Rest of the file content: SettlementsView, CommunityInsightsView, GroupAIView, GroupDetailView, etc. preserved but using the new props/types)
-// To save space in this output block, I am ensuring the main CollaborativeView component is fully replaced and uses the new props correctly.
-// The helper components remain the same but rely on the types imported.
+// ... GroupDetailView, SettlementsView, CommunityInsightsView, GroupAIView ...
+
+const GroupDetailView: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup) => void, onCreateShoppingList?: (groupName: string, expenseName: string, amount: number, members: SharedMember[]) => void }> = ({ group, onUpdate, onCreateShoppingList }) => {
+  const [tab, setTab] = useState<'overview' | 'expenses' | 'members' | 'reports'>('overview');
+  const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+  const [isEditGroupOpen, setIsEditGroupOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<SharedExpense | null>(null);
+  const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
+
+  const totalSpent = group.expenses.filter(e => e.type === 'expense').reduce((sum, e) => sum + e.amount, 0);
+  const remaining = group.totalBudget - totalSpent;
+  const progress = group.totalBudget > 0 ? (totalSpent / group.totalBudget) * 100 : 0;
+
+  const handleSaveExpense = (expense: SharedExpense) => {
+    const isEdit = !!editingExpense;
+    
+    let updatedExpenses: SharedExpense[];
+    let logText = '';
+
+    if (isEdit) {
+        updatedExpenses = group.expenses.map(e => e.id === expense.id ? expense : e);
+        logText = `edited ${expense.title}`;
+    } else {
+        updatedExpenses = [expense, ...group.expenses];
+        logText = `added ${expense.title}`;
+    }
+
+    const newActivity: GroupActivity = {
+        id: Math.random().toString(36).substr(2,9),
+        type: isEdit ? 'edit' : 'expense',
+        text: logText,
+        date: 'Just now',
+        user: 'You',
+        amount: expense.amount
+    };
+
+    onUpdate({ 
+        ...group, 
+        expenses: updatedExpenses,
+        activityLog: [newActivity, ...group.activityLog] 
+    });
+    setIsExpenseModalOpen(false);
+    setEditingExpense(null);
+  };
+
+  const handleDeleteExpense = (id: string) => {
+      if (confirm("Are you sure you want to delete this expense?")) {
+          onUpdate({
+              ...group,
+              expenses: group.expenses.filter(e => e.id !== id)
+          });
+          setExpandedExpenseId(null);
+      }
+  };
+
+  const openAddModal = () => {
+      setEditingExpense(null);
+      setIsExpenseModalOpen(true);
+  };
+
+  const openEditModal = (expense: SharedExpense) => {
+      setEditingExpense(expense);
+      setIsExpenseModalOpen(true);
+  };
+
+  return (
+    <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+      
+      {/* Group Header & Progress */}
+      <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="flex justify-between items-start mb-4">
+              <div className="flex-1">
+                  <h2 className="text-2xl font-bold text-slate-900 dark:text-white leading-tight">{group.name}</h2>
+                  <div className="flex items-center gap-2 mt-2">
+                      <div className="flex -space-x-2">
+                          {group.members.map((m, i) => (
+                              <div key={i} className={`w-7 h-7 rounded-full ${m.avatarColor} border-2 border-white dark:border-slate-800 flex items-center justify-center text-[9px] text-white font-bold`}>
+                                  {m.name.charAt(0)}
+                              </div>
+                          ))}
+                      </div>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">{group.members.length} members</span>
+                  </div>
+              </div>
+              <div className="relative flex gap-1">
+                  <button 
+                      onClick={() => setIsEditGroupOpen(true)}
+                      className="relative p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus:outline-none text-slate-400 hover:text-indigo-500"
+                  >
+                      <Pencil size={20} />
+                  </button>
+              </div>
+          </div>
+
+          <div>
+              <div className="flex justify-between text-xs font-bold mb-1.5">
+                  <span className="text-slate-600 dark:text-slate-300">Budget Used: {Math.round(progress)}%</span>
+                  <span className="text-slate-900 dark:text-white">{group.currency} {totalSpent.toLocaleString()} <span className="text-slate-400 font-normal">/ {group.totalBudget.toLocaleString()}</span></span>
+              </div>
+              <div className="h-3 w-full bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden">
+                  <div 
+                      className={`h-full rounded-full transition-all duration-500 ${progress > 100 ? 'bg-red-500' : progress > 85 ? 'bg-orange-500' : 'bg-indigo-600'}`}
+                      style={{ width: `${Math.min(progress, 100)}%` }}
+                  ></div>
+              </div>
+          </div>
+      </div>
+
+      {/* Group Tabs */}
+      <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-2">
+        {[
+          { id: 'overview', label: 'Overview', icon: PieChart },
+          { id: 'expenses', label: 'Expenses', icon: Wallet },
+          { id: 'members', label: 'Members', icon: Users },
+          { id: 'reports', label: 'Reports', icon: BarChart2 },
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id as any)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors border ${
+              tab === t.id 
+                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent' 
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+            }`}
+          >
+            <t.icon size={14} /> {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'overview' && (
+        <div className="space-y-4 animate-in fade-in">
+          {/* Category Spending Chart */}
+          <Card className="p-4">
+            <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4">Category Spending</h3>
+            <div className="h-40 relative">
+              <Doughnut 
+                data={{
+                  labels: group.categories,
+                  datasets: [{
+                    data: group.categories.map(cat => group.expenses.filter(e => e.category === cat && e.type === 'expense').reduce((sum, e) => sum + e.amount, 0)),
+                    backgroundColor: ['#f59e0b', '#ef4444', '#3b82f6', '#10b981', '#8b5cf6'],
+                    borderWidth: 0
+                  }]
+                }}
+                options={{ maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '75%' }}
+              />
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold">Remaining</span>
+                  <span className="text-lg font-bold text-slate-900 dark:text-white">{group.currency} {remaining.toLocaleString()}</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap justify-center gap-3 mt-4">
+                {group.categories.slice(0, 4).map((cat, i) => (
+                    <div key={i} className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full" style={{backgroundColor: ['#f59e0b', '#ef4444', '#3b82f6', '#10b981', '#8b5cf6'][i]}}></div>
+                        <span className="text-[10px] text-slate-600 dark:text-slate-300">{cat}</span>
+                    </div>
+                ))}
+            </div>
+          </Card>
+
+          {/* Recent Transactions Summary */}
+          <Card className="p-4">
+              <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-sm font-bold text-slate-700 dark:text-white">Recent Shared Activity</h3>
+                  <button onClick={() => setTab('expenses')} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">View All</button>
+              </div>
+              <div className="space-y-3">
+                  {group.expenses.slice(0, 3).map(expense => {
+                      const payer = group.members.find(m => m.id === expense.paidBy);
+                      const isReminder = expense.type === 'reminder';
+                      const isSettlement = expense.type === 'settlement';
+                      
+                      return (
+                          <div key={expense.id} className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2 last:border-0 last:pb-0">
+                              <div className="flex items-center gap-3">
+                                  <div className={`w-8 h-8 rounded-full ${payer?.avatarColor} flex items-center justify-center text-white font-bold text-[10px]`}>
+                                      {payer?.name.charAt(0)}
+                                  </div>
+                                  <div>
+                                      <div className="text-xs font-bold text-slate-900 dark:text-white">{expense.title}</div>
+                                      <div className="text-[10px] text-slate-500">
+                                          {isReminder ? `${payer?.name} sent reminder` : isSettlement ? `${payer?.name} settled` : `${payer?.name} paid`} • {expense.category}
+                                      </div>
+                                  </div>
+                              </div>
+                              <div className={`text-sm font-bold ${isSettlement ? 'text-emerald-500' : isReminder ? 'text-orange-500' : 'text-slate-900 dark:text-white'}`}>
+                                  {group.currency} {expense.amount.toLocaleString()}
+                              </div>
+                          </div>
+                      );
+                  })}
+              </div>
+          </Card>
+        </div>
+      )}
+
+      {tab === 'expenses' && (
+        <div className="space-y-4 animate-in fade-in">
+          <button 
+            onClick={openAddModal}
+            className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-indigo-600/20"
+          >
+            <Plus size={18} /> Add Expense
+          </button>
+
+          <div className="space-y-2">
+            {group.expenses.map(expense => {
+                const payer = group.members.find(m => m.id === expense.paidBy);
+                const isExpanded = expandedExpenseId === expense.id;
+                const isReminder = expense.type === 'reminder';
+                const isSettlement = expense.type === 'settlement';
+
+                return (
+                  <Card 
+                    key={expense.id} 
+                    className={`transition-all duration-300 overflow-hidden ${isExpanded ? 'ring-2 ring-indigo-500/20' : 'active:scale-[0.99]'} ${isReminder ? 'border-orange-200 dark:border-orange-500/20' : ''}`}
+                  >
+                    {/* Header - Clickable */}
+                    <div 
+                        className="p-3 flex justify-between items-center cursor-pointer"
+                        onClick={() => setExpandedExpenseId(isExpanded ? null : expense.id)}
+                    >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-full ${payer?.avatarColor || 'bg-slate-400'} flex items-center justify-center text-white font-bold text-xs`}>
+                            {payer?.name.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-900 dark:text-white text-sm">{expense.title}</div>
+                            <div className="text-[10px] text-slate-500">
+                              {isReminder ? 'Reminder Sent' : `${payer?.name} paid`} • {new Date(expense.date).toLocaleDateString()}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                            <div className={`font-bold text-sm ${isSettlement ? 'text-emerald-500' : isReminder ? 'text-orange-500' : 'text-slate-900 dark:text-white'}`}>
+                            {group.currency} {expense.amount.toLocaleString()}
+                            </div>
+                            <div className="flex items-center justify-end gap-1 text-[10px] text-slate-400">
+                                {isSettlement ? 'Settlement' : isReminder ? 'Reminder' : `Shared with ${expense.sharedWith.length}`}
+                                {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Expanded Details */}
+                    {isExpanded && (
+                        <div className="px-3 pb-3 pt-0 animate-in slide-in-from-top-2">
+                            <div className="h-px w-full bg-slate-100 dark:bg-slate-800 mb-3"></div>
+                            
+                            <div className="space-y-3 text-xs">
+                                {/* Meta Row with Actions */}
+                                <div className="flex justify-between items-center">
+                                    <div className="flex gap-2">
+                                        <span className={`px-2 py-1 rounded-md font-bold ${isReminder ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
+                                            {expense.category}
+                                        </span>
+                                        {isSettlement && (
+                                            <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-md font-bold">
+                                                Payment
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {!isSettlement && !isReminder && (
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); openEditModal(expense); }}
+                                                className="flex items-center gap-1 px-2 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors font-bold"
+                                            >
+                                                <Pencil size={10} /> Edit
+                                            </button>
+                                        )}
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteExpense(expense.id); }}
+                                            className="flex items-center gap-1 px-2 py-1 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors font-bold"
+                                        >
+                                            <Trash2 size={10} /> Delete
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Notes */}
+                                {expense.notes && (
+                                    <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg text-slate-500 italic">
+                                        "{expense.notes}"
+                                    </div>
+                                )}
+
+                                {/* Split Breakdown */}
+                                {!isSettlement && !isReminder && (
+                                    <div>
+                                        <p className="font-bold text-slate-500 uppercase text-[10px] mb-2">Split Details</p>
+                                        <div className="space-y-2">
+                                            {Object.entries(expense.split).map(([userId, amount]) => {
+                                                const member = group.members.find(m => m.id === userId);
+                                                return (
+                                                    <div key={userId} className="flex justify-between items-center">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className={`w-5 h-5 rounded-full ${member?.avatarColor || 'bg-slate-300'} flex items-center justify-center text-[8px] text-white font-bold`}>
+                                                                {member?.name.charAt(0)}
+                                                            </div>
+                                                            <span className="text-slate-700 dark:text-slate-300">{member?.name || 'Unknown'}</span>
+                                                        </div>
+                                                        <span className="font-bold text-slate-900 dark:text-white">
+                                                            {group.currency} {amount.toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                  </Card>
+                );
+            })}
+            {group.expenses.length === 0 && <p className="text-center text-xs text-slate-400 py-8">No shared expenses yet.</p>}
+          </div>
+        </div>
+      )}
+
+      {tab === 'members' && (
+          <GroupMembersTab group={group} onUpdate={onUpdate} />
+      )}
+
+      {tab === 'reports' && (
+          <div className="space-y-4 animate-in fade-in">
+              {/* Group Financial Summary */}
+              <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-2xl">
+                  <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-3 flex items-center gap-2">
+                      <BarChart2 size={16} className="text-indigo-500" /> Group Financial Summary
+                  </h3>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="bg-white dark:bg-slate-700 p-2 rounded-lg shadow-sm">
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Total Exp.</p>
+                          <p className="text-sm font-bold text-slate-900 dark:text-white">{group.currency} {(totalSpent/1000).toFixed(1)}k</p>
+                      </div>
+                      <div className="bg-white dark:bg-slate-700 p-2 rounded-lg shadow-sm">
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Pending</p>
+                          <p className="text-sm font-bold text-orange-500">{group.currency} 12.5k</p>
+                      </div>
+                      <div className="bg-white dark:bg-slate-700 p-2 rounded-lg shadow-sm">
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Settled</p>
+                          <p className="text-sm font-bold text-emerald-500">{group.currency} 5.0k</p>
+                      </div>
+                  </div>
+              </div>
+
+              {/* AI Tip Section */}
+              <Card className="p-4 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20">
+                  <div className="flex gap-3">
+                      <Sparkles className="text-indigo-500 shrink-0 mt-1" size={18} />
+                      <div>
+                          <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase mb-1">AI Savings Tip</h4>
+                          <p className="text-sm text-slate-700 dark:text-slate-300 italic">
+                              "Your group could save 12% by reducing outside dining. Try cooking together next weekend!"
+                          </p>
+                      </div>
+                  </div>
+              </Card>
+
+              <GroupAIView group={group} />
+              
+              {/* Contribution Chart */}
+              <Card className="p-4">
+                  <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4">Contributions by Member</h3>
+                  <div className="h-48">
+                      <Bar 
+                        data={{
+                            labels: group.members.map(m => m.name),
+                            datasets: [{
+                                label: 'Paid',
+                                data: group.members.map(m => group.expenses.filter(e => e.paidBy === m.id && e.type === 'expense').reduce((sum, e) => sum + e.amount, 0)),
+                                backgroundColor: ['#6366f1', '#10b981', '#ec4899', '#f59e0b'],
+                                borderRadius: 4
+                            }]
+                        }}
+                        options={{
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: { x: { grid: { display: false } }, y: { display: false } }
+                        }}
+                      />
+                  </div>
+              </Card>
+          </div>
+      )}
+
+      <AddSharedExpenseModal 
+        isOpen={isExpenseModalOpen} 
+        onClose={() => setIsExpenseModalOpen(false)} 
+        onConfirm={handleSaveExpense}
+        group={group}
+        initialData={editingExpense}
+        onCreateShoppingList={onCreateShoppingList}
+      />
+
+      <CreateGroupModal 
+        isOpen={isEditGroupOpen}
+        onClose={() => setIsEditGroupOpen(false)}
+        onConfirm={(updatedGroup: SharedGroup) => {
+            onUpdate(updatedGroup);
+            setIsEditGroupOpen(false);
+        }}
+        initialData={group}
+      />
+    </div>
+  );
+};
 
 const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: SharedGroup) => void }> = ({ groups, onUpdateGroup }) => {
-  // ... (Same implementation as before, using groups prop)
   const [settleModalOpen, setSettleModalOpen] = useState(false);
   const [selectedSettlement, setSelectedSettlement] = useState<any>(null);
   const [filterGroupId, setFilterGroupId] = useState<string>('all');
@@ -306,7 +724,7 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
                     netBalances[e.paidBy] = (netBalances[e.paidBy] || 0) + e.amount;
                     netBalances[receiverId] = (netBalances[receiverId] || 0) - e.amount;
                 }
-            } else {
+            } else if (e.type === 'expense') {
                 netBalances[e.paidBy] = (netBalances[e.paidBy] || 0) + e.amount; 
                 if (e.split) {
                     Object.entries(e.split).forEach(([userId, share]) => {
@@ -314,6 +732,7 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
                     });
                 }
             }
+            // Ignore reminders for balance calculation
         });
 
         const debtors: {id: string, amount: number}[] = [];
@@ -379,31 +798,63 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
       
       const group = groups.find(g => g.id === selectedSettlement.groupId);
       if (group) {
-          const payerId = group.members.find(m => (selectedSettlement.from === 'You' ? m.id === 'me' : m.name === selectedSettlement.from))?.id;
-          const receiverId = group.members.find(m => (selectedSettlement.to === 'You' ? m.id === 'me' : m.name === selectedSettlement.to))?.id;
+          if (selectedSettlement.from === 'You') {
+              // I am the payer -> Record Payment (Settlement)
+              const payerId = group.members.find(m => m.id === 'me')?.id;
+              const receiverId = group.members.find(m => m.name === selectedSettlement.to)?.id;
 
-          if (payerId && receiverId) {
-              const settlementExpense: SharedExpense = {
+              if (payerId && receiverId) {
+                  const settlementExpense: SharedExpense = {
+                      id: Math.random().toString(36).substr(2, 9),
+                      title: 'Settlement Payment',
+                      amount: selectedSettlement.amount,
+                      paidBy: payerId,
+                      sharedWith: [receiverId],
+                      category: 'Settlement',
+                      date: new Date().toISOString().split('T')[0],
+                      split: { [receiverId]: selectedSettlement.amount },
+                      type: 'settlement',
+                  };
+                  
+                  onUpdateGroup({
+                      ...group,
+                      expenses: [settlementExpense, ...group.expenses],
+                      activityLog: [{
+                          id: Math.random().toString(36).substr(2, 9),
+                          type: 'settlement',
+                          text: `settled ${group.currency} ${selectedSettlement.amount.toLocaleString()} with ${selectedSettlement.to}`,
+                          date: 'Just now',
+                          user: 'You'
+                      }, ...group.activityLog]
+                  });
+              }
+          } else {
+              // I am the receiver -> Send Reminder (Create Reminder Expense)
+              // Debt remains, just logs it as a reminder expense type
+              const debtorName = selectedSettlement.from;
+              const debtorId = selectedSettlement.fromId;
+
+              const reminderExpense: SharedExpense = {
                   id: Math.random().toString(36).substr(2, 9),
-                  title: 'Settlement Payment',
+                  title: `Reminder to ${debtorName}`,
                   amount: selectedSettlement.amount,
-                  paidBy: payerId,
-                  sharedWith: [receiverId],
-                  category: 'Settlement',
+                  paidBy: 'me',
+                  sharedWith: [debtorId],
+                  category: 'Reminder',
                   date: new Date().toISOString().split('T')[0],
-                  split: { [receiverId]: selectedSettlement.amount },
-                  type: 'settlement',
+                  split: {}, // No split impact
+                  type: 'reminder',
               };
-              
+
               onUpdateGroup({
                   ...group,
-                  expenses: [settlementExpense, ...group.expenses],
+                  expenses: [reminderExpense, ...group.expenses],
                   activityLog: [{
                       id: Math.random().toString(36).substr(2, 9),
-                      type: 'settlement',
-                      text: `settled ${group.currency} ${selectedSettlement.amount.toLocaleString()} with ${selectedSettlement.to}`,
+                      type: 'edit',
+                      text: `sent a reminder to ${debtorName}`,
                       date: 'Just now',
-                      user: selectedSettlement.from
+                      user: 'You'
                   }, ...group.activityLog]
               });
           }
@@ -417,7 +868,7 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
       if (!group) return [];
 
       return group.expenses.filter(e => {
-          if (e.type === 'settlement') return false; 
+          if (e.type === 'settlement' || e.type === 'reminder') return false; 
           
           const payerId = e.paidBy;
           const involvedIds = [settlement.fromId, settlement.toId];
@@ -565,13 +1016,7 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
   );
 };
 
-// Re-export the helper components that were part of the original file but now depend on updated props
-// (The helper components CommunityInsightsView, GroupAIView, GroupDetailView, etc. are implied to be included
-// in the full file content but I will only include their definitions if they changed or if the file structure requires it.
-// Since I am replacing the file content, I must include everything.)
-
 const CommunityInsightsView: React.FC = () => {
-  // ... (Unchanged from original file, just included for completeness)
   const [activeTab, setActiveTab] = useState<'insights' | 'challenges' | 'trends' | 'leaderboard'>('insights');
   const [challenges, setChallenges] = useState([
       { id: 'c1', title: 'No Takeout Week', target: 100, current: 60, joined: false, days: 3, count: 1240, icon: '🥦' },
@@ -586,7 +1031,6 @@ const CommunityInsightsView: React.FC = () => {
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-        
         {/* Sub-Navigation */}
         <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-2">
             {[
@@ -900,409 +1344,6 @@ const GroupAIView: React.FC<{ group: SharedGroup }> = ({ group }) => {
     );
 };
 
-const GroupDetailView: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup) => void }> = ({ group, onUpdate }) => {
-  const [tab, setTab] = useState<'overview' | 'expenses' | 'members' | 'reports'>('overview');
-  const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
-  const [isEditGroupOpen, setIsEditGroupOpen] = useState(false);
-  const [editingExpense, setEditingExpense] = useState<SharedExpense | null>(null);
-  const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
-
-  const totalSpent = group.expenses.filter(e => e.type === 'expense').reduce((sum, e) => sum + e.amount, 0);
-  const remaining = group.totalBudget - totalSpent;
-  const progress = group.totalBudget > 0 ? (totalSpent / group.totalBudget) * 100 : 0;
-
-  const handleSaveExpense = (expense: SharedExpense) => {
-    const isEdit = !!editingExpense;
-    
-    let updatedExpenses: SharedExpense[];
-    let logText = '';
-
-    if (isEdit) {
-        updatedExpenses = group.expenses.map(e => e.id === expense.id ? expense : e);
-        logText = `edited ${expense.title}`;
-    } else {
-        updatedExpenses = [expense, ...group.expenses];
-        logText = `added ${expense.title}`;
-    }
-
-    const newActivity: GroupActivity = {
-        id: Math.random().toString(36).substr(2,9),
-        type: isEdit ? 'edit' : 'expense',
-        text: logText,
-        date: 'Just now',
-        user: 'You',
-        amount: expense.amount
-    };
-
-    onUpdate({ 
-        ...group, 
-        expenses: updatedExpenses,
-        activityLog: [newActivity, ...group.activityLog] 
-    });
-    setIsExpenseModalOpen(false);
-    setEditingExpense(null);
-  };
-
-  const handleDeleteExpense = (id: string) => {
-      if (confirm("Are you sure you want to delete this expense?")) {
-          onUpdate({
-              ...group,
-              expenses: group.expenses.filter(e => e.id !== id)
-          });
-          setExpandedExpenseId(null);
-      }
-  };
-
-  const openAddModal = () => {
-      setEditingExpense(null);
-      setIsExpenseModalOpen(true);
-  };
-
-  const openEditModal = (expense: SharedExpense) => {
-      setEditingExpense(expense);
-      setIsExpenseModalOpen(true);
-  };
-
-  return (
-    <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-      
-      {/* Group Header & Progress */}
-      <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
-          <div className="flex justify-between items-start mb-4">
-              <div className="flex-1">
-                  <h2 className="text-2xl font-bold text-slate-900 dark:text-white leading-tight">{group.name}</h2>
-                  <div className="flex items-center gap-2 mt-2">
-                      <div className="flex -space-x-2">
-                          {group.members.map((m, i) => (
-                              <div key={i} className={`w-7 h-7 rounded-full ${m.avatarColor} border-2 border-white dark:border-slate-800 flex items-center justify-center text-[9px] text-white font-bold`}>
-                                  {m.name.charAt(0)}
-                              </div>
-                          ))}
-                      </div>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">{group.members.length} members</span>
-                  </div>
-              </div>
-              <div className="relative flex gap-1">
-                  <button 
-                      onClick={() => setIsEditGroupOpen(true)}
-                      className="relative p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus:outline-none text-slate-400 hover:text-indigo-500"
-                  >
-                      <Pencil size={20} />
-                  </button>
-              </div>
-          </div>
-
-          <div>
-              <div className="flex justify-between text-xs font-bold mb-1.5">
-                  <span className="text-slate-600 dark:text-slate-300">Budget Used: {Math.round(progress)}%</span>
-                  <span className="text-slate-900 dark:text-white">{group.currency} {totalSpent.toLocaleString()} <span className="text-slate-400 font-normal">/ {group.totalBudget.toLocaleString()}</span></span>
-              </div>
-              <div className="h-3 w-full bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden">
-                  <div 
-                      className={`h-full rounded-full transition-all duration-500 ${progress > 100 ? 'bg-red-500' : progress > 85 ? 'bg-orange-500' : 'bg-indigo-600'}`}
-                      style={{ width: `${Math.min(progress, 100)}%` }}
-                  ></div>
-              </div>
-          </div>
-      </div>
-
-      {/* Group Tabs */}
-      <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-2">
-        {[
-          { id: 'overview', label: 'Overview', icon: PieChart },
-          { id: 'expenses', label: 'Expenses', icon: Wallet },
-          { id: 'members', label: 'Members', icon: Users },
-          { id: 'reports', label: 'Reports', icon: BarChart2 },
-        ].map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id as any)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors border ${
-              tab === t.id 
-                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent' 
-                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-            }`}
-          >
-            <t.icon size={14} /> {t.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'overview' && (
-        <div className="space-y-4 animate-in fade-in">
-          {/* Category Spending Chart */}
-          <Card className="p-4">
-            <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4">Category Spending</h3>
-            <div className="h-40 relative">
-              <Doughnut 
-                data={{
-                  labels: group.categories,
-                  datasets: [{
-                    data: group.categories.map(cat => group.expenses.filter(e => e.category === cat && e.type === 'expense').reduce((sum, e) => sum + e.amount, 0)),
-                    backgroundColor: ['#f59e0b', '#ef4444', '#3b82f6', '#10b981', '#8b5cf6'],
-                    borderWidth: 0
-                  }]
-                }}
-                options={{ maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '75%' }}
-              />
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold">Remaining</span>
-                  <span className="text-lg font-bold text-slate-900 dark:text-white">{group.currency} {remaining.toLocaleString()}</span>
-              </div>
-            </div>
-            <div className="flex flex-wrap justify-center gap-3 mt-4">
-                {group.categories.slice(0, 4).map((cat, i) => (
-                    <div key={i} className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full" style={{backgroundColor: ['#f59e0b', '#ef4444', '#3b82f6', '#10b981', '#8b5cf6'][i]}}></div>
-                        <span className="text-[10px] text-slate-600 dark:text-slate-300">{cat}</span>
-                    </div>
-                ))}
-            </div>
-          </Card>
-
-          {/* Recent Transactions Summary */}
-          <Card className="p-4">
-              <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-sm font-bold text-slate-700 dark:text-white">Recent Shared Activity</h3>
-                  <button onClick={() => setTab('expenses')} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">View All</button>
-              </div>
-              <div className="space-y-3">
-                  {group.expenses.slice(0, 3).map(expense => {
-                      const payer = group.members.find(m => m.id === expense.paidBy);
-                      return (
-                          <div key={expense.id} className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2 last:border-0 last:pb-0">
-                              <div className="flex items-center gap-3">
-                                  <div className={`w-8 h-8 rounded-full ${payer?.avatarColor} flex items-center justify-center text-white font-bold text-[10px]`}>
-                                      {payer?.name.charAt(0)}
-                                  </div>
-                                  <div>
-                                      <div className="text-xs font-bold text-slate-900 dark:text-white">{expense.title}</div>
-                                      <div className="text-[10px] text-slate-500">{payer?.name} {expense.type === 'settlement' ? 'settled' : 'paid'} • {expense.category}</div>
-                                  </div>
-                              </div>
-                              <div className={`text-sm font-bold ${expense.type === 'settlement' ? 'text-emerald-500' : 'text-slate-900 dark:text-white'}`}>
-                                  {group.currency} {expense.amount.toLocaleString()}
-                              </div>
-                          </div>
-                      );
-                  })}
-              </div>
-          </Card>
-        </div>
-      )}
-
-      {tab === 'expenses' && (
-        <div className="space-y-4 animate-in fade-in">
-          <button 
-            onClick={openAddModal}
-            className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-indigo-600/20"
-          >
-            <Plus size={18} /> Add Expense
-          </button>
-
-          <div className="space-y-2">
-            {group.expenses.map(expense => {
-                const payer = group.members.find(m => m.id === expense.paidBy);
-                const isExpanded = expandedExpenseId === expense.id;
-
-                return (
-                  <Card 
-                    key={expense.id} 
-                    className={`transition-all duration-300 overflow-hidden ${isExpanded ? 'ring-2 ring-indigo-500/20' : 'active:scale-[0.99]'}`}
-                  >
-                    {/* Header - Clickable */}
-                    <div 
-                        className="p-3 flex justify-between items-center cursor-pointer"
-                        onClick={() => setExpandedExpenseId(isExpanded ? null : expense.id)}
-                    >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-full ${payer?.avatarColor || 'bg-slate-400'} flex items-center justify-center text-white font-bold text-xs`}>
-                            {payer?.name.charAt(0)}
-                          </div>
-                          <div>
-                            <div className="font-bold text-slate-900 dark:text-white text-sm">{expense.title}</div>
-                            <div className="text-[10px] text-slate-500">
-                              {payer?.name} paid • {new Date(expense.date).toLocaleDateString()}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                            <div className={`font-bold text-sm ${expense.type === 'settlement' ? 'text-emerald-500' : 'text-slate-900 dark:text-white'}`}>
-                            {group.currency} {expense.amount.toLocaleString()}
-                            </div>
-                            <div className="flex items-center justify-end gap-1 text-[10px] text-slate-400">
-                                {expense.type === 'settlement' ? 'Settlement' : `Shared with ${expense.sharedWith.length}`}
-                                {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Expanded Details */}
-                    {isExpanded && (
-                        <div className="px-3 pb-3 pt-0 animate-in slide-in-from-top-2">
-                            <div className="h-px w-full bg-slate-100 dark:bg-slate-800 mb-3"></div>
-                            
-                            <div className="space-y-3 text-xs">
-                                {/* Meta Row with Actions */}
-                                <div className="flex justify-between items-center">
-                                    <div className="flex gap-2">
-                                        <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md font-bold text-slate-600 dark:text-slate-300">
-                                            {expense.category}
-                                        </span>
-                                        {expense.type === 'settlement' && (
-                                            <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-md font-bold">
-                                                Payment
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="flex gap-2">
-                                        {expense.type !== 'settlement' && (
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); openEditModal(expense); }}
-                                                className="flex items-center gap-1 px-2 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors font-bold"
-                                            >
-                                                <Pencil size={10} /> Edit
-                                            </button>
-                                        )}
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); handleDeleteExpense(expense.id); }}
-                                            className="flex items-center gap-1 px-2 py-1 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors font-bold"
-                                        >
-                                            <Trash2 size={10} /> Delete
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Notes */}
-                                {expense.notes && (
-                                    <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg text-slate-500 italic">
-                                        "{expense.notes}"
-                                    </div>
-                                )}
-
-                                {/* Split Breakdown */}
-                                {expense.type !== 'settlement' && (
-                                    <div>
-                                        <p className="font-bold text-slate-500 uppercase text-[10px] mb-2">Split Details</p>
-                                        <div className="space-y-2">
-                                            {Object.entries(expense.split).map(([userId, amount]) => {
-                                                const member = group.members.find(m => m.id === userId);
-                                                return (
-                                                    <div key={userId} className="flex justify-between items-center">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className={`w-5 h-5 rounded-full ${member?.avatarColor || 'bg-slate-300'} flex items-center justify-center text-[8px] text-white font-bold`}>
-                                                                {member?.name.charAt(0)}
-                                                            </div>
-                                                            <span className="text-slate-700 dark:text-slate-300">{member?.name || 'Unknown'}</span>
-                                                        </div>
-                                                        <span className="font-bold text-slate-900 dark:text-white">
-                                                            {group.currency} {amount.toLocaleString()}
-                                                        </span>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                  </Card>
-                );
-            })}
-            {group.expenses.length === 0 && <p className="text-center text-xs text-slate-400 py-8">No shared expenses yet.</p>}
-          </div>
-        </div>
-      )}
-
-      {tab === 'members' && (
-          <GroupMembersTab group={group} onUpdate={onUpdate} />
-      )}
-
-      {tab === 'reports' && (
-          <div className="space-y-4 animate-in fade-in">
-              {/* Group Financial Summary */}
-              <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-2xl">
-                  <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-3 flex items-center gap-2">
-                      <BarChart2 size={16} className="text-indigo-500" /> Group Financial Summary
-                  </h3>
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                      <div className="bg-white dark:bg-slate-700 p-2 rounded-lg shadow-sm">
-                          <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Total Exp.</p>
-                          <p className="text-sm font-bold text-slate-900 dark:text-white">{group.currency} {(totalSpent/1000).toFixed(1)}k</p>
-                      </div>
-                      <div className="bg-white dark:bg-slate-700 p-2 rounded-lg shadow-sm">
-                          <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Pending</p>
-                          <p className="text-sm font-bold text-orange-500">{group.currency} 12.5k</p>
-                      </div>
-                      <div className="bg-white dark:bg-slate-700 p-2 rounded-lg shadow-sm">
-                          <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Settled</p>
-                          <p className="text-sm font-bold text-emerald-500">{group.currency} 5.0k</p>
-                      </div>
-                  </div>
-              </div>
-
-              {/* AI Tip Section */}
-              <Card className="p-4 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20">
-                  <div className="flex gap-3">
-                      <Sparkles className="text-indigo-500 shrink-0 mt-1" size={18} />
-                      <div>
-                          <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase mb-1">AI Savings Tip</h4>
-                          <p className="text-sm text-slate-700 dark:text-slate-300 italic">
-                              "Your group could save 12% by reducing outside dining. Try cooking together next weekend!"
-                          </p>
-                      </div>
-                  </div>
-              </Card>
-
-              <GroupAIView group={group} />
-              
-              {/* Contribution Chart */}
-              <Card className="p-4">
-                  <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4">Contributions by Member</h3>
-                  <div className="h-48">
-                      <Bar 
-                        data={{
-                            labels: group.members.map(m => m.name),
-                            datasets: [{
-                                label: 'Paid',
-                                data: group.members.map(m => group.expenses.filter(e => e.paidBy === m.id && e.type === 'expense').reduce((sum, e) => sum + e.amount, 0)),
-                                backgroundColor: ['#6366f1', '#10b981', '#ec4899', '#f59e0b'],
-                                borderRadius: 4
-                            }]
-                        }}
-                        options={{
-                            maintainAspectRatio: false,
-                            plugins: { legend: { display: false } },
-                            scales: { x: { grid: { display: false } }, y: { display: false } }
-                        }}
-                      />
-                  </div>
-              </Card>
-          </div>
-      )}
-
-      <AddSharedExpenseModal 
-        isOpen={isExpenseModalOpen} 
-        onClose={() => setIsExpenseModalOpen(false)} 
-        onConfirm={handleSaveExpense}
-        group={group}
-        initialData={editingExpense}
-      />
-
-      <CreateGroupModal 
-        isOpen={isEditGroupOpen}
-        onClose={() => setIsEditGroupOpen(false)}
-        onConfirm={(updatedGroup: SharedGroup) => {
-            onUpdate(updatedGroup);
-            setIsEditGroupOpen(false);
-        }}
-        initialData={group}
-      />
-    </div>
-  );
-};
-
 const GroupMembersTab: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup) => void }> = ({ group, onUpdate }) => {
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
@@ -1408,10 +1449,6 @@ const GroupMembersTab: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup)
         </div>
     );
 };
-
-// ... (Helper Modals - SettleUpModal, CreateGroupModal, InviteMemberModal, AddSharedExpenseModal, QRScannerModal and formatCurrency function from original file are preserved here)
-// I am omitting them for brevity in this output as they are unchanged logic-wise, but they MUST be included in the final file content.
-// I will include them below to ensure the file is complete.
 
 const SettleUpModal = ({ isOpen, onClose, onConfirm, data }: any) => {
     const [method, setMethod] = useState('cash');
@@ -1658,13 +1695,14 @@ const InviteMemberModal = ({ isOpen, onClose, onConfirm }: any) => {
     );
 };
 
-const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData }: any) => {
+const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData, onCreateShoppingList }: any) => {
     const [title, setTitle] = useState('');
     const [amount, setAmount] = useState('');
     const [paidBy, setPaidBy] = useState('me');
     const [category, setCategory] = useState('General');
     const [notes, setNotes] = useState('');
     const [splitType, setSplitType] = useState<'equal' | 'amount' | 'percent'>('equal');
+    const [shouldCreateList, setShouldCreateList] = useState(false);
     
     const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
     
@@ -1679,6 +1717,7 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData 
                 setPaidBy(initialData.paidBy);
                 setCategory(initialData.category);
                 setNotes(initialData.notes || '');
+                setShouldCreateList(false);
                 
                 setSelectedMembers(initialData.sharedWith);
                 
@@ -1703,6 +1742,7 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData 
                 setTitle(''); setAmount(''); setPaidBy('me'); setNotes('');
                 setCategory(group.categories[0] || 'General');
                 setSplitType('equal');
+                setShouldCreateList(false);
                 
                 const allIds = group.members.map((m: any) => m.id);
                 setSelectedMembers(allIds);
@@ -1761,6 +1801,10 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData 
             return;
         }
 
+        if (shouldCreateList && onCreateShoppingList && group) {
+             onCreateShoppingList(group.name, title, total, group.members);
+        }
+
         onConfirm({
             id: initialData ? initialData.id : Math.random().toString(36).substr(2, 9),
             title,
@@ -1795,6 +1839,21 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData 
                     <select className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 transition-colors" value={category} onChange={e => setCategory(e.target.value)}>
                         {group.categories.map((c: string) => <option key={c} value={c}>{c}</option>)}
                     </select>
+
+                    {/* Shopping List Link Checkbox */}
+                    <div 
+                        className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${shouldCreateList ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}
+                        onClick={() => setShouldCreateList(!shouldCreateList)}
+                    >
+                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${shouldCreateList ? 'bg-emerald-500 border-emerald-500' : 'bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600'}`}>
+                            {shouldCreateList && <Check size={14} className="text-white" strokeWidth={3} />}
+                        </div>
+                        <div className="flex-1">
+                            <div className={`text-xs font-bold ${shouldCreateList ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}>Create Linked Shopping List</div>
+                            <div className="text-[10px] text-slate-400">Add budget & members to Shopping</div>
+                        </div>
+                        <ShoppingBag size={18} className={shouldCreateList ? 'text-emerald-500' : 'text-slate-400'} />
+                    </div>
 
                     <div>
                         <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Paid By</label>

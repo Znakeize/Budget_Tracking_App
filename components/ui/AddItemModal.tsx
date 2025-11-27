@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, ShoppingBag, Check } from 'lucide-react';
 import { BudgetData } from '../../types';
 
 interface AddItemModalProps {
@@ -9,6 +9,7 @@ interface AddItemModalProps {
   onConfirm: (item: any) => void;
   collection: keyof BudgetData | null;
   currencySymbol: string;
+  onCreateShoppingList?: (name: string, budget: number) => void;
 }
 
 export const AddItemModal: React.FC<AddItemModalProps> = ({
@@ -16,7 +17,8 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
   onClose,
   onConfirm,
   collection,
-  currencySymbol
+  currencySymbol,
+  onCreateShoppingList
 }) => {
   const [name, setName] = useState('');
   
@@ -26,6 +28,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
   const [val3, setVal3] = useState(''); // Amount 3 (Monthly Contribution for goals)
   const [dateVal, setDateVal] = useState('');
   const [textVal, setTextVal] = useState(''); // Text input (Timeframe)
+  const [createList, setCreateList] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -35,6 +38,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
       setVal3('');
       setDateVal(new Date().toISOString().split('T')[0]);
       setTextVal('');
+      setCreateList(false);
     }
   }, [isOpen, collection]);
 
@@ -130,6 +134,9 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
     } else if (collection === 'expenses') {
         item.budgeted = num1;
         item.spent = num2;
+        if (createList && onCreateShoppingList) {
+            onCreateShoppingList(name, num1);
+        }
     } else if (collection === 'bills') {
         item.amount = num1;
         item.dueDate = dateVal;
@@ -208,6 +215,22 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                     </div>
                 </div>
             ))}
+
+            {collection === 'expenses' && (
+                <div 
+                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${createList ? 'bg-pink-50 dark:bg-pink-900/20 border-pink-200 dark:border-pink-800' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}
+                    onClick={() => setCreateList(!createList)}
+                >
+                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${createList ? 'bg-pink-500 border-pink-500' : 'bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600'}`}>
+                        {createList && <Check size={14} className="text-white" strokeWidth={3} />}
+                    </div>
+                    <div className="flex-1">
+                        <div className={`text-xs font-bold ${createList ? 'text-pink-700 dark:text-pink-400' : 'text-slate-600 dark:text-slate-400'}`}>Create Shopping List</div>
+                        <div className="text-[10px] text-slate-400">Link budget category to Shopping</div>
+                    </div>
+                    <ShoppingBag size={18} className={createList ? 'text-pink-500' : 'text-slate-400'} />
+                </div>
+            )}
 
             <button 
                 onClick={handleSubmit}

@@ -213,6 +213,10 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
       setShowNotifications(false);
   };
 
+  const handleDismissNotification = (id: string) => {
+      setDismissedNotifIds(prev => [...prev, id]);
+  };
+
   // Render Logic based on depth
   if (activeListId && activeList && activeShopId && activeShop) {
       return (
@@ -284,6 +288,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
                notifications={activeNotifications} 
                onClose={() => setShowNotifications(false)} 
                onNotificationClick={handleNotificationClick} 
+               onDismiss={handleDismissNotification}
            />
        )}
 
@@ -1041,17 +1046,25 @@ const CreateListModal = ({ isOpen, onClose, onConfirm }: any) => {
 const EditListModal = ({ isOpen, onClose, onConfirm, initialData }: any) => {
     const [name, setName] = useState('');
     const [budget, setBudget] = useState('');
-    useEffect(() => { if (isOpen && initialData) { setName(initialData.name); setBudget(initialData.budget ? initialData.budget.toString() : ''); } }, [isOpen, initialData]);
+
+    useEffect(() => {
+        if (isOpen && initialData) {
+            setName(initialData.name);
+            setBudget(initialData.budget ? initialData.budget.toString() : '');
+        }
+    }, [isOpen, initialData]);
+
     if (!isOpen) return null;
+
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
             <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Edit List Details</h3>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Edit List</h3>
                 <div className="space-y-3">
-                    <input className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none" placeholder="List Name" value={name} onChange={e => setName(e.target.value)} autoFocus />
-                    <div className="relative"><span className="absolute left-3 top-3 text-slate-500 font-bold">$</span><input className="w-full p-3 pl-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none" placeholder="Budget Limit (Optional)" type="number" value={budget} onChange={e => setBudget(e.target.value)} /></div>
-                    <button onClick={() => onConfirm(name, parseFloat(budget) || 0)} disabled={!name} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl mt-2 disabled:opacity-50">Save Changes</button>
+                    <input className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none" placeholder="List Name" value={name} onChange={e => setName(e.target.value)} />
+                    <div className="relative"><span className="absolute left-3 top-3 text-slate-500 font-bold">$</span><input className="w-full p-3 pl-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none" placeholder="Budget Limit" type="number" value={budget} onChange={e => setBudget(e.target.value)} /></div>
+                    <button onClick={() => onConfirm(name, parseFloat(budget) || 0)} disabled={!name} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl mt-2 disabled:opacity-50">Save Changes</button>
                 </div>
             </div>
         </div>
@@ -1061,18 +1074,43 @@ const EditListModal = ({ isOpen, onClose, onConfirm, initialData }: any) => {
 const AddShopModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol }: any) => {
     const [name, setName] = useState('');
     const [budget, setBudget] = useState('');
-    useEffect(() => { if (isOpen && initialData) { setName(initialData.name); setBudget(initialData.budget ? initialData.budget.toString() : ''); } else if (isOpen) { setName(''); setBudget(''); } }, [isOpen, initialData]);
+
+    useEffect(() => {
+        if (isOpen) {
+            if (initialData) {
+                setName(initialData.name);
+                setBudget(initialData.budget ? initialData.budget.toString() : '');
+            } else {
+                setName('');
+                setBudget('');
+            }
+        }
+    }, [isOpen, initialData]);
+
     if (!isOpen) return null;
-    const handleSubmit = () => { onConfirm({ id: initialData ? initialData.id : generateId(), name, budget: parseFloat(budget) || 0, items: initialData ? initialData.items : [] }); setName(''); setBudget(''); };
+
+    const handleSubmit = () => {
+        if (initialData) {
+            onConfirm({ name, budget: parseFloat(budget) || 0 });
+        } else {
+            onConfirm({
+                id: generateId(),
+                name,
+                budget: parseFloat(budget) || 0,
+                items: []
+            });
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
             <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">{initialData ? 'Edit Shop' : 'Add Shop'}</h3>
                 <div className="space-y-3">
-                    <input className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none" placeholder="Shop Name" value={name} onChange={e => setName(e.target.value)} autoFocus />
-                    <div className="relative"><span className="absolute left-3 top-3 text-slate-500 font-bold">{currencySymbol || '$'}</span><input className="w-full p-3 pl-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none" placeholder="Estimated Budget" type="number" value={budget} onChange={e => setBudget(e.target.value)} /></div>
-                    <button onClick={handleSubmit} disabled={!name} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl disabled:opacity-50">{initialData ? 'Save Changes' : 'Add Shop'}</button>
+                    <input className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none" placeholder="Shop Name (e.g. Target)" value={name} onChange={e => setName(e.target.value)} autoFocus />
+                    <div className="relative"><span className="absolute left-3 top-3 text-slate-500 font-bold">{currencySymbol}</span><input className="w-full p-3 pl-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none" placeholder="Shop Budget (Optional)" type="number" value={budget} onChange={e => setBudget(e.target.value)} /></div>
+                    <button onClick={handleSubmit} disabled={!name} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl mt-2 disabled:opacity-50">{initialData ? 'Update' : 'Add Shop'}</button>
                 </div>
             </div>
         </div>
@@ -1081,14 +1119,43 @@ const AddShopModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol 
 
 const ShareListModal = ({ isOpen, onClose, onConfirm, members }: any) => {
     const [email, setEmail] = useState('');
+    
     if (!isOpen) return null;
+
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
             <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
-                <div className="flex justify-between items-center mb-4"><h3 className="text-lg font-bold text-slate-900 dark:text-white">Share List</h3><button onClick={onClose}><X size={20} className="text-slate-400" /></button></div>
-                <div className="mb-4"><p className="text-xs font-bold text-slate-500 uppercase mb-2">Current Members</p><div className="space-y-2">{members.map((m: any) => (<div key={m.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300"><div className={`w-6 h-6 rounded-full ${m.avatarColor} flex items-center justify-center text-[10px] text-white font-bold`}>{m.name.charAt(0)}</div><span>{m.name} <span className="text-slate-400 text-xs">({m.role})</span></span></div>))}</div></div>
-                <div className="space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4"><input className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-sm" placeholder="Enter email to invite..." value={email} onChange={e => setEmail(e.target.value)} /><button onClick={() => onConfirm(email)} disabled={!email} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl disabled:opacity-50">Send Invite</button></div>
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Share List</h3>
+                    <button onClick={onClose} className="text-slate-400"><X size={20}/></button>
+                </div>
+                
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Current Members</label>
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                            {members.map((m: any) => (
+                                <div key={m.id} className="flex items-center gap-3 p-2 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                                    <div className={`w-8 h-8 rounded-full ${m.avatarColor} flex items-center justify-center text-white font-bold text-xs`}>{m.name.charAt(0)}</div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-sm font-bold text-slate-900 dark:text-white truncate">{m.name}</div>
+                                        <div className="text-[10px] text-slate-500 truncate">{m.email || 'Owner'}</div>
+                                    </div>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase">{m.role}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Invite Person</label>
+                        <div className="flex gap-2">
+                            <input className="flex-1 p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-sm" placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} />
+                            <button onClick={() => { if(email) onConfirm(email); setEmail(''); }} disabled={!email} className="px-4 bg-indigo-600 text-white rounded-xl font-bold disabled:opacity-50">Invite</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );

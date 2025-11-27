@@ -26,8 +26,8 @@ import { ProMembershipView } from './views/ProMembershipView';
 import { MembershipManagementView } from './views/MembershipManagementView';
 import { FeatureSubscriptionView } from './views/FeatureSubscriptionView';
 import { ShoppingListView } from './views/ShoppingListView';
-import { BudgetData, PeriodType, EventData, ShoppingListData, SharedGroup } from './types';
-import { INITIAL_DATA, SAMPLE_EVENTS, SAMPLE_SHOPPING_LISTS, MOCK_GROUPS } from './constants';
+import { BudgetData, PeriodType, EventData, ShoppingListData, SharedGroup, ShopMember, SharedMember, InvestmentGoal } from './types';
+import { INITIAL_DATA, SAMPLE_EVENTS, SAMPLE_SHOPPING_LISTS, MOCK_GROUPS, CURRENCY_SYMBOLS, SAMPLE_INVESTMENT_GOALS } from './constants';
 import { generateId, calculateTotals, getNotifications, NotificationItem, formatCurrency, getShoppingNotifications, getCollaborativeNotifications } from './utils/calculations';
 import { NewPeriodModal } from './components/ui/NewPeriodModal';
 import { NotificationPopup } from './components/ui/NotificationPopup';
@@ -55,6 +55,7 @@ const App: React.FC = () => {
   const [events, setEvents] = useState<EventData[]>([]);
   const [shoppingLists, setShoppingLists] = useState<ShoppingListData[]>([]);
   const [groups, setGroups] = useState<SharedGroup[]>([]);
+  const [investmentGoals, setInvestmentGoals] = useState<InvestmentGoal[]>(SAMPLE_INVESTMENT_GOALS);
   
   // App State
   const [loaded, setLoaded] = useState(false);
@@ -138,6 +139,7 @@ const App: React.FC = () => {
     const savedGroups = localStorage.getItem('budgetGroups');
     const savedUser = localStorage.getItem('budget_user_session');
     const savedSysNotifs = localStorage.getItem('systemNotifications');
+    const savedInvestGoals = localStorage.getItem('investmentGoals');
 
     if (savedHistory) {
       try {
@@ -151,50 +153,32 @@ const App: React.FC = () => {
     if (savedEvents) {
         try { 
             const parsed = JSON.parse(savedEvents);
-            if (parsed && parsed.length > 0) {
-                setEvents(parsed);
-            } else {
-                setEvents(SAMPLE_EVENTS);
-            }
-        } catch (e) { 
-            console.error("Failed to parse events", e);
-            setEvents(SAMPLE_EVENTS);
-        }
-    } else {
-        setEvents(SAMPLE_EVENTS);
-    }
+            if (parsed && parsed.length > 0) setEvents(parsed);
+            else setEvents(SAMPLE_EVENTS);
+        } catch (e) { console.error("Failed to parse events", e); setEvents(SAMPLE_EVENTS); }
+    } else setEvents(SAMPLE_EVENTS);
 
     if (savedShopping) {
         try { 
-            const parsedShopping = JSON.parse(savedShopping);
-            if (parsedShopping && parsedShopping.length > 0) {
-                setShoppingLists(parsedShopping);
-            } else {
-                setShoppingLists(SAMPLE_SHOPPING_LISTS);
-            }
-        } catch (e) { 
-            console.error("Failed to parse shopping", e);
-            setShoppingLists(SAMPLE_SHOPPING_LISTS);
-        }
-    } else {
-        setShoppingLists(SAMPLE_SHOPPING_LISTS);
-    }
+            const parsed = JSON.parse(savedShopping);
+            if (parsed && parsed.length > 0) setShoppingLists(parsed);
+            else setShoppingLists(SAMPLE_SHOPPING_LISTS);
+        } catch (e) { console.error("Failed to parse shopping", e); setShoppingLists(SAMPLE_SHOPPING_LISTS); }
+    } else setShoppingLists(SAMPLE_SHOPPING_LISTS);
 
     if (savedGroups) {
         try { 
-            const parsedGroups = JSON.parse(savedGroups);
-            if (parsedGroups && parsedGroups.length > 0) {
-                setGroups(parsedGroups);
-            } else {
-                setGroups(MOCK_GROUPS);
-            }
-        } catch (e) { 
-            console.error("Failed to parse groups", e);
-            setGroups(MOCK_GROUPS);
-        }
-    } else {
-        setGroups(MOCK_GROUPS);
-    }
+            const parsed = JSON.parse(savedGroups);
+            if (parsed && parsed.length > 0) setGroups(parsed);
+            else setGroups(MOCK_GROUPS);
+        } catch (e) { console.error("Failed to parse groups", e); setGroups(MOCK_GROUPS); }
+    } else setGroups(MOCK_GROUPS);
+
+    if (savedInvestGoals) {
+        try {
+            setInvestmentGoals(JSON.parse(savedInvestGoals));
+        } catch (e) { setInvestmentGoals(SAMPLE_INVESTMENT_GOALS); }
+    } else setInvestmentGoals(SAMPLE_INVESTMENT_GOALS);
 
     if (savedSysNotifs) {
         try {
@@ -206,26 +190,16 @@ const App: React.FC = () => {
         try { 
             const parsedUser = JSON.parse(savedUser);
             setUser(parsedUser); 
-            
-            // Simulate Payment Reminder check on load
             if (parsedUser.isPro) {
                 const today = new Date();
-                // Check if near end of month (reminder for 1st) or start of month
                 if (today.getDate() >= 25 || today.getDate() <= 5) {
-                    // Check if we already have a reminder for this month
                     const reminderId = `renew-${today.getFullYear()}-${today.getMonth()}`;
                     const existingNotifs = savedSysNotifs ? JSON.parse(savedSysNotifs) : [];
                     const hasReminder = existingNotifs.some((n: NotificationItem) => n.id === reminderId);
-                    
                     if (!hasReminder) {
                         const newNotif: NotificationItem = {
-                            id: reminderId,
-                            type: 'info',
-                            message: "Upcoming subscription renewal on the 1st.",
-                            date: today.toISOString().split('T')[0],
-                            category: 'System'
+                            id: reminderId, type: 'info', message: "Upcoming subscription renewal on the 1st.", date: today.toISOString().split('T')[0], category: 'System'
                         };
-                        // Use functional update to ensure we don't overwrite if other effect fired
                         setSystemNotifications(prev => {
                             const updated = [newNotif, ...prev];
                             localStorage.setItem('systemNotifications', JSON.stringify(updated));
@@ -234,17 +208,10 @@ const App: React.FC = () => {
                     }
                 }
             }
-        } catch (e) { 
-            console.error("Failed to parse user", e);
-            setActiveTab('auth'); // Error parsing user, force re-auth
-        }
-    } else {
-        // No user session found, redirect to Auth
-        setActiveTab('auth');
-    }
+        } catch (e) { console.error("Failed to parse user", e); setActiveTab('auth'); }
+    } else setActiveTab('auth');
     
     if (savedTheme) setIsDarkMode(savedTheme === 'dark');
-
     setLoaded(true);
   }, []);
 
@@ -258,483 +225,111 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
-  // --- Auth Handlers ---
-  const handleLogin = (userData: any) => {
-      setUser(userData);
-      localStorage.setItem('budget_user_session', JSON.stringify(userData));
-      setActiveTab('dashboard');
-  };
+  // --- Handlers ---
+  const handleLogin = (userData: any) => { setUser(userData); localStorage.setItem('budget_user_session', JSON.stringify(userData)); setActiveTab('dashboard'); };
+  const handleLogout = () => { setUser(null); localStorage.removeItem('budget_user_session'); setActiveTab('auth'); };
+  const handleProfileClick = () => { if (user) setActiveTab('profile'); else setActiveTab('auth'); };
+  const handleUpdateUser = (updatedUser: any) => { setUser(updatedUser); localStorage.setItem('budget_user_session', JSON.stringify(updatedUser)); };
+  
+  const handleUpgradeUser = () => { if (user) { const upgradedUser = { ...user, isPro: true }; handleUpdateUser(upgradedUser); addSystemNotification("Welcome to Pro! Premium features unlocked.", "success"); } };
+  const handleCancelSubscription = () => { if (user) { const downgradedUser = { ...user, isPro: false }; handleUpdateUser(downgradedUser); addSystemNotification("Subscription cancelled. You have access until the end of the billing period.", "warning"); } };
+  const handleUnlockFeature = (featureId: string) => { if (user) { const currentUnlocks = user.unlockedFeatures || []; if (!currentUnlocks.includes(featureId)) { const updatedUser = { ...user, unlockedFeatures: [...currentUnlocks, featureId] }; handleUpdateUser(updatedUser); addSystemNotification(`${featureId.charAt(0).toUpperCase() + featureId.slice(1)} module unlocked successfully!`, "success"); } } };
+  const handleViewFeature = (featureId: string) => { setSelectedFeatureId(featureId); setActiveTab('feature-subscription'); };
+  const handleOpenFeature = (featureId: string) => { const map: Record<string, string> = { 'simulator': 'simulator', 'analysis': 'analysis', 'investments': 'investments', 'events': 'events', 'social': 'social' }; const tab = map[featureId]; if (tab) setActiveTab(tab); };
 
-  const handleLogout = () => {
-      setUser(null);
-      localStorage.removeItem('budget_user_session');
-      setActiveTab('auth');
-  };
-
-  const handleProfileClick = () => {
-      if (user) setActiveTab('profile');
-      else setActiveTab('auth');
-  };
-
-  const handleUpdateUser = (updatedUser: any) => {
-      setUser(updatedUser);
-      localStorage.setItem('budget_user_session', JSON.stringify(updatedUser));
-  };
-
-  const handleUpgradeUser = () => {
-      if (user) {
-          const upgradedUser = { ...user, isPro: true };
-          handleUpdateUser(upgradedUser);
-          addSystemNotification("Welcome to Pro! Premium features unlocked.", "success");
-      }
-  };
-
-  const handleCancelSubscription = () => {
-      if (user) {
-          const downgradedUser = { ...user, isPro: false };
-          handleUpdateUser(downgradedUser);
-          addSystemNotification("Subscription cancelled. You have access until the end of the billing period.", "warning");
-      }
-  };
-
-  const handleUnlockFeature = (featureId: string) => {
-      if (user) {
-          const currentUnlocks = user.unlockedFeatures || [];
-          if (!currentUnlocks.includes(featureId)) {
-              const updatedUser = { 
-                  ...user, 
-                  unlockedFeatures: [...currentUnlocks, featureId] 
-              };
-              handleUpdateUser(updatedUser);
-              addSystemNotification(`${featureId.charAt(0).toUpperCase() + featureId.slice(1)} module unlocked successfully!`, "success");
-          }
-      }
-  };
-
-  const handleViewFeature = (featureId: string) => {
-      setSelectedFeatureId(featureId);
-      setActiveTab('feature-subscription');
-  };
-
-  const handleOpenFeature = (featureId: string) => {
-      const map: Record<string, string> = {
-          'simulator': 'simulator',
-          'analysis': 'analysis',
-          'investments': 'investments',
-          'events': 'events',
-          'social': 'social'
-      };
-      const tab = map[featureId];
-      if (tab) setActiveTab(tab);
-  };
-
-  // --- Budget Handlers ---
   const handleUpdateBudget = useCallback((newData: BudgetData) => {
-    setUndoStack(prev => {
-        const newStack = [...prev, budgetData];
-        if (newStack.length > 50) newStack.shift();
-        return newStack;
-    });
-    setRedoStack([]);
-    setBudgetData(newData);
-    setHistory(prevHistory => {
-        const updatedHistory = prevHistory.map(h => h.id === newData.id ? newData : h);
-        if (!prevHistory.find(h => h.id === newData.id)) updatedHistory.push(newData);
-        localStorage.setItem('budgetHistory', JSON.stringify(updatedHistory));
-        return updatedHistory;
-    });
+    setUndoStack(prev => { const newStack = [...prev, budgetData]; if (newStack.length > 50) newStack.shift(); return newStack; });
+    setRedoStack([]); setBudgetData(newData);
+    setHistory(prevHistory => { const updatedHistory = prevHistory.map(h => h.id === newData.id ? newData : h); if (!prevHistory.find(h => h.id === newData.id)) updatedHistory.push(newData); localStorage.setItem('budgetHistory', JSON.stringify(updatedHistory)); return updatedHistory; });
   }, [budgetData]);
 
-  const handleUpdateEvents = useCallback((newEvents: EventData[]) => {
-      setEvents(newEvents);
-      localStorage.setItem('budgetEvents', JSON.stringify(newEvents));
-  }, []);
+  const handleUpdateEvents = useCallback((newEvents: EventData[]) => { setEvents(newEvents); localStorage.setItem('budgetEvents', JSON.stringify(newEvents)); }, []);
+  const handleUpdateShopping = useCallback((newLists: ShoppingListData[]) => { setShoppingLists(newLists); localStorage.setItem('budgetShopping', JSON.stringify(newLists)); }, []);
+  const handleUpdateGroups = useCallback((newGroups: SharedGroup[]) => { setGroups(newGroups); localStorage.setItem('budgetGroups', JSON.stringify(newGroups)); }, []);
+  const handleUpdateInvestGoals = useCallback((newGoals: InvestmentGoal[]) => { setInvestmentGoals(newGoals); localStorage.setItem('investmentGoals', JSON.stringify(newGoals)); }, []);
 
-  const handleUpdateShopping = useCallback((newLists: ShoppingListData[]) => {
-      setShoppingLists(newLists);
-      localStorage.setItem('budgetShopping', JSON.stringify(newLists));
-  }, []);
+  const handleCreateShoppingListFromBudget = useCallback((name: string, budget: number) => {
+        const newList: ShoppingListData = { id: generateId(), name: name, shops: [], members: [{ id: 'me', name: 'You', role: 'owner', avatarColor: 'bg-indigo-500' }], created: Date.now(), currencySymbol: budgetData.currencySymbol, color: 'bg-pink-500', budget: budget, lastModified: Date.now() };
+        setShoppingLists(prev => { const updated = [...prev, newList]; localStorage.setItem('budgetShopping', JSON.stringify(updated)); return updated; });
+        addSystemNotification(`Created shopping list: ${name}`, 'success');
+  }, [budgetData.currencySymbol, addSystemNotification]);
 
-  const handleUpdateGroups = useCallback((newGroups: SharedGroup[]) => {
-      setGroups(newGroups);
-      localStorage.setItem('budgetGroups', JSON.stringify(newGroups));
-  }, []);
+  const handleCreateShoppingListFromEvent = useCallback((name: string, budget: number, eventMembers: any[]) => {
+        const members: ShopMember[] = eventMembers.map(m => ({ id: m.id, name: m.name, role: m.role === 'admin' ? 'owner' : 'editor', avatarColor: 'bg-blue-500' }));
+        const newList: ShoppingListData = { id: generateId(), name: name, shops: [], members: members, created: Date.now(), currencySymbol: budgetData.currencySymbol, color: 'bg-indigo-500', budget: budget, lastModified: Date.now() };
+        setShoppingLists(prev => { const updated = [...prev, newList]; localStorage.setItem('budgetShopping', JSON.stringify(updated)); return updated; });
+        addSystemNotification(`Created shopping list: ${name}`, 'success');
+  }, [budgetData.currencySymbol, addSystemNotification]);
+
+  const handleCreateShoppingListFromGroup = useCallback((groupName: string, expenseName: string, amount: number, groupMembers: SharedMember[]) => {
+        const members: ShopMember[] = groupMembers.map(m => ({ id: m.id, name: m.name, email: m.email, role: m.role.toLowerCase() === 'owner' ? 'owner' : 'editor', avatarColor: m.avatarColor }));
+        const listName = `${groupName} - ${expenseName}`;
+        const newList: ShoppingListData = { id: generateId(), name: listName, shops: [], members: members, created: Date.now(), currencySymbol: budgetData.currencySymbol, color: 'bg-amber-500', budget: amount, lastModified: Date.now() };
+        setShoppingLists(prev => { const updated = [...prev, newList]; localStorage.setItem('budgetShopping', JSON.stringify(updated)); return updated; });
+        addSystemNotification(`Created shopping list: ${listName}`, 'success');
+  }, [budgetData.currencySymbol, addSystemNotification]);
 
   const handleSyncShoppingToBudget = useCallback((amount: number, shopName: string) => {
-      const newExpense = {
-          id: generateId(),
-          name: shopName,
-          budgeted: 0,
-          spent: amount
-      };
-      // Append to expenses list
-      const updatedData = {
-          ...budgetData,
-          expenses: [...budgetData.expenses, newExpense]
-      };
-      handleUpdateBudget(updatedData);
-      addSystemNotification(`Added ${formatCurrency(amount, budgetData.currencySymbol)} expense for ${shopName}`, 'success');
-      setActiveTab('budget');
+      const newExpense = { id: generateId(), name: shopName, budgeted: 0, spent: amount };
+      const updatedData = { ...budgetData, expenses: [...budgetData.expenses, newExpense] };
+      handleUpdateBudget(updatedData); addSystemNotification(`Added ${formatCurrency(amount, budgetData.currencySymbol)} expense for ${shopName}`, 'success'); setActiveTab('budget');
   }, [budgetData, handleUpdateBudget, addSystemNotification]);
 
-  const handleUndo = useCallback(() => {
-    if (undoStack.length === 0) return;
-    const previousState = undoStack[undoStack.length - 1];
-    const newUndoStack = undoStack.slice(0, -1);
-    setRedoStack(prev => [...prev, budgetData]);
-    setUndoStack(newUndoStack);
-    setBudgetData(previousState);
-    setHistory(prev => {
-        const updated = prev.map(h => h.id === previousState.id ? previousState : h);
-        localStorage.setItem('budgetHistory', JSON.stringify(updated));
-        return updated;
-    });
-  }, [undoStack, budgetData]);
+  const handleUndo = useCallback(() => { if (undoStack.length === 0) return; const previousState = undoStack[undoStack.length - 1]; const newUndoStack = undoStack.slice(0, -1); setRedoStack(prev => [...prev, budgetData]); setUndoStack(newUndoStack); setBudgetData(previousState); setHistory(prev => { const updated = prev.map(h => h.id === previousState.id ? previousState : h); localStorage.setItem('budgetHistory', JSON.stringify(updated)); return updated; }); }, [undoStack, budgetData]);
+  const handleRedo = useCallback(() => { if (redoStack.length === 0) return; const nextState = redoStack[redoStack.length - 1]; const newRedoStack = redoStack.slice(0, -1); setUndoStack(prev => [...prev, budgetData]); setRedoStack(newRedoStack); setBudgetData(nextState); setHistory(prev => { const updated = prev.map(h => h.id === nextState.id ? nextState : h); localStorage.setItem('budgetHistory', JSON.stringify(updated)); return updated; }); }, [redoStack, budgetData]);
 
-  const handleRedo = useCallback(() => {
-    if (redoStack.length === 0) return;
-    const nextState = redoStack[redoStack.length - 1];
-    const newRedoStack = redoStack.slice(0, -1);
-    setUndoStack(prev => [...prev, budgetData]);
-    setRedoStack(newRedoStack);
-    setBudgetData(nextState);
-    setHistory(prev => {
-        const updated = prev.map(h => h.id === nextState.id ? nextState : h);
-        localStorage.setItem('budgetHistory', JSON.stringify(updated));
-        return updated;
-    });
-  }, [redoStack, budgetData]);
-
-  const handleOpenNewPeriodModal = () => {
-    const totals = calculateTotals(budgetData);
-    setCalculatedRollover(totals.leftToSpend);
-    let nextMonth = budgetData.month + 1;
-    let nextYear = budgetData.year;
-    if (nextMonth > 11) { nextMonth = 0; nextYear++; }
-    setNextPeriodDefaults({ month: nextMonth, year: nextYear });
-    setIsNewPeriodModalOpen(true);
-  };
-
-  const handleCreatePeriod = useCallback((data: { period: PeriodType, month: number, year: number, startDate?: string, endDate?: string, rollover: number }) => {
-    setUndoStack([]); setRedoStack([]);
-    const newPeriod: BudgetData = {
-        ...budgetData, id: generateId(), period: data.period, month: data.month, year: data.year,
-        startDate: data.startDate, endDate: data.endDate, created: Date.now(),
-        income: budgetData.income.map(i => ({ ...i, actual: 0 })),
-        expenses: budgetData.expenses.map(e => ({ ...e, spent: 0 })),
-        bills: budgetData.bills.map(b => ({ ...b, paid: false, dueDate: shiftDate(b.dueDate, data.month, data.year) })),
-        goals: budgetData.goals.map(g => ({ ...g, checked: false })),
-        savings: budgetData.savings.map(s => ({ ...s, paid: false, amount: 0 })),
-        debts: budgetData.debts.map(d => ({ ...d, paid: false, payment: d.payment, dueDate: d.dueDate ? shiftDate(d.dueDate, data.month, data.year) : undefined })),
-        investments: budgetData.investments.map(i => ({ ...i, contributed: false })),
-        rollover: data.rollover
-    };
-    setBudgetData(newPeriod);
-    setHistory(prev => {
-        const newHistory = [...prev, newPeriod];
-        localStorage.setItem('budgetHistory', JSON.stringify(newHistory));
-        return newHistory;
-    });
-    localStorage.setItem('activePeriodId', newPeriod.id);
-    setActiveTab('dashboard');
-    setIsNewPeriodModalOpen(false);
-  }, [budgetData]);
-
-  const handleDuplicatePeriod = useCallback((id: string) => {
-    setHistory(prev => {
-        const periodToDuplicate = prev.find(h => h.id === id);
-        if (!periodToDuplicate) return prev;
-        const newPeriod: BudgetData = { ...periodToDuplicate, id: generateId(), created: Date.now() };
-        const newHistory = [...prev, newPeriod];
-        localStorage.setItem('budgetHistory', JSON.stringify(newHistory));
-        return newHistory;
-    });
-  }, []);
-
-  const handleDeletePeriod = useCallback((id: string) => {
-    if (!window.confirm('Are you sure you want to delete this period?')) return;
-    if (history.length <= 1) { alert("Cannot delete the only remaining period."); return; }
-    const newHistory = history.filter(h => h.id !== id);
-    setHistory(newHistory);
-    localStorage.setItem('budgetHistory', JSON.stringify(newHistory));
-    if (budgetData.id === id) {
-        const sortedRemaining = [...newHistory].sort((a, b) => b.created - a.created);
-        const nextActive = sortedRemaining[0];
-        if (nextActive) {
-            setBudgetData(nextActive); setUndoStack([]); setRedoStack([]);
-            localStorage.setItem('activePeriodId', nextActive.id);
-        }
-    }
-  }, [history, budgetData.id]);
-
-  const handleReset = () => {
-    localStorage.clear();
-    setBudgetData(INITIAL_DATA); setHistory([INITIAL_DATA]); setEvents([]);
-    setUndoStack([]); setRedoStack([]); setUser(null); setSystemNotifications([]); setShoppingLists([]); setGroups([]);
-    window.location.reload();
-  };
+  const handleOpenNewPeriodModal = () => { const totals = calculateTotals(budgetData); setCalculatedRollover(totals.leftToSpend); let nextMonth = budgetData.month + 1; let nextYear = budgetData.year; if (nextMonth > 11) { nextMonth = 0; nextYear++; } setNextPeriodDefaults({ month: nextMonth, year: nextYear }); setIsNewPeriodModalOpen(true); };
+  const handleCreatePeriod = useCallback((data: { period: PeriodType, month: number, year: number, startDate?: string, endDate?: string, rollover: number }) => { setUndoStack([]); setRedoStack([]); const newPeriod: BudgetData = { ...budgetData, id: generateId(), period: data.period, month: data.month, year: data.year, startDate: data.startDate, endDate: data.endDate, created: Date.now(), income: budgetData.income.map(i => ({ ...i, actual: 0 })), expenses: budgetData.expenses.map(e => ({ ...e, spent: 0 })), bills: budgetData.bills.map(b => ({ ...b, paid: false, dueDate: shiftDate(b.dueDate, data.month, data.year) })), goals: budgetData.goals.map(g => ({ ...g, checked: false })), savings: budgetData.savings.map(s => ({ ...s, paid: false, amount: 0 })), debts: budgetData.debts.map(d => ({ ...d, paid: false, payment: d.payment, dueDate: d.dueDate ? shiftDate(d.dueDate, data.month, data.year) : undefined })), investments: budgetData.investments.map(i => ({ ...i, contributed: false })), rollover: data.rollover }; setBudgetData(newPeriod); setHistory(prev => { const newHistory = [...prev, newPeriod]; localStorage.setItem('budgetHistory', JSON.stringify(newHistory)); return newHistory; }); localStorage.setItem('activePeriodId', newPeriod.id); setActiveTab('dashboard'); setIsNewPeriodModalOpen(false); }, [budgetData]);
+  const handleDuplicatePeriod = useCallback((id: string) => { setHistory(prev => { const periodToDuplicate = prev.find(h => h.id === id); if (!periodToDuplicate) return prev; const newPeriod: BudgetData = { ...periodToDuplicate, id: generateId(), created: Date.now() }; const newHistory = [...prev, newPeriod]; localStorage.setItem('budgetHistory', JSON.stringify(newHistory)); return newHistory; }); }, []);
+  const handleDeletePeriod = useCallback((id: string) => { if (!window.confirm('Are you sure you want to delete this period?')) return; if (history.length <= 1) { alert("Cannot delete the only remaining period."); return; } const newHistory = history.filter(h => h.id !== id); setHistory(newHistory); localStorage.setItem('budgetHistory', JSON.stringify(newHistory)); if (budgetData.id === id) { const sortedRemaining = [...newHistory].sort((a, b) => b.created - a.created); const nextActive = sortedRemaining[0]; if (nextActive) { setBudgetData(nextActive); setUndoStack([]); setRedoStack([]); localStorage.setItem('activePeriodId', nextActive.id); } } }, [history, budgetData.id]);
+  const handleReset = () => { localStorage.clear(); setBudgetData(INITIAL_DATA); setHistory([INITIAL_DATA]); setEvents([]); setUndoStack([]); setRedoStack([]); setUser(null); setSystemNotifications([]); setShoppingLists([]); setGroups([]); setInvestmentGoals(SAMPLE_INVESTMENT_GOALS); window.location.reload(); };
 
   const handleNotificationClick = (notif: NotificationItem) => {
-      if (notif.category === 'System') {
-          removeSystemNotification(notif.id);
-          setActiveTab('membership-management');
-          setShowNotifications(false);
-          return;
-      }
-
-      if (notif.category === 'Event') {
-          const parts = notif.id.split('-');
-          const eventId = parts[1];
-          // Assuming IDs are like Event-{id}-budget-over
-          let initialTab = 'dashboard';
-          if (notif.id.includes('vendor')) initialTab = 'vendors';
-          if (notif.id.includes('budget')) initialTab = 'budget';
-          
-          setEventFocus({ id: eventId, tab: initialTab });
-          setActiveTab('events');
-          setShowNotifications(false);
-          return;
-      }
-
-      if (notif.category === 'Shopping') {
-          if (notif.data?.listId) {
-              setShoppingFocus({ listId: notif.data.listId, shopId: notif.data.shopId });
-          }
-          setActiveTab('shopping-list');
-          setShowNotifications(false);
-          return;
-      }
-
-      if (notif.data?.groupId) {
-          setActiveTab('social');
-          // Need a way to pass focus to collaborative view? For now just open tab
-          setShowNotifications(false);
-          return;
-      }
-
-      setActiveTab('budget');
-      let section = ''; let itemId = '';
-      const parts = notif.id.split('-');
-      if (notif.category === 'Bill') { section = 'bills'; itemId = notif.id.replace('Bill-', ''); } 
-      else if (notif.category === 'Debt') { section = 'debts'; itemId = notif.id.replace('Debt-', ''); } 
-      else if (notif.category === 'Budget') {
-          section = 'expenses';
-          if (notif.id.startsWith('budget-warn-')) itemId = notif.id.replace('budget-warn-', '');
-          else if (notif.id.startsWith('budget-over-')) itemId = notif.id.replace('budget-over-', '');
-          else itemId = parts[parts.length - 1];
-      } else if (notif.category === 'Savings') { section = 'savings'; if (notif.id === 'savings-win') section = 'savings'; }
-      if (section) setBudgetFocusTarget({ section, itemId });
-      setShowNotifications(false);
+      if (notif.category === 'System') { removeSystemNotification(notif.id); setActiveTab('membership-management'); setShowNotifications(false); return; }
+      if (notif.category === 'Event') { const parts = notif.id.split('-'); const eventId = parts[1]; let initialTab = 'dashboard'; if (notif.id.includes('vendor')) initialTab = 'vendors'; if (notif.id.includes('budget')) initialTab = 'budget'; setEventFocus({ id: eventId, tab: initialTab }); setActiveTab('events'); setShowNotifications(false); return; }
+      if (notif.category === 'Shopping') { if (notif.data?.listId) { setShoppingFocus({ listId: notif.data.listId, shopId: notif.data.shopId }); } setActiveTab('shopping-list'); setShowNotifications(false); return; }
+      if (notif.data?.groupId) { setActiveTab('social'); setShowNotifications(false); return; }
+      setActiveTab('budget'); let section = ''; let itemId = ''; const parts = notif.id.split('-'); if (notif.category === 'Bill') { section = 'bills'; itemId = notif.id.replace('Bill-', ''); } else if (notif.category === 'Debt') { section = 'debts'; itemId = notif.id.replace('Debt-', ''); } else if (notif.category === 'Budget') { section = 'expenses'; if (notif.id.startsWith('budget-warn-')) itemId = notif.id.replace('budget-warn-', ''); else if (notif.id.startsWith('budget-over-')) itemId = notif.id.replace('budget-over-', ''); else itemId = parts[parts.length - 1]; } else if (notif.category === 'Savings') { section = 'savings'; if (notif.id === 'savings-win') section = 'savings'; } if (section) setBudgetFocusTarget({ section, itemId }); setShowNotifications(false);
   };
 
-  const handleApplyScenario = (changes: Partial<BudgetData>) => {
-      const updated = { ...budgetData, ...changes };
-      handleUpdateBudget(updated);
-      setActiveTab('budget');
-  };
+  const handleApplyScenario = (changes: Partial<BudgetData>) => { const updated = { ...budgetData, ...changes }; handleUpdateBudget(updated); setActiveTab('budget'); };
 
   if (!loaded) return <div className="h-screen bg-slate-900 text-white flex items-center justify-center">Loading...</div>;
-
   const isMenuSubView = ['history', 'tools', 'settings', 'support', 'legal', 'feedback', 'collaborative', 'community-links', 'profile', 'personal-info', 'email-prefs', 'security', 'pro-membership', 'membership-management', 'feature-subscription', 'shopping-list'].includes(activeTab);
 
   return (
     <Layout>
       <main className="flex-1 flex flex-col relative z-10 h-full">
-        {activeTab === 'auth' && (
-            <AuthView onLogin={handleLogin} onBack={() => setActiveTab('dashboard')} />
-        )}
-        {activeTab === 'dashboard' && (
-            <DashboardView 
-                data={budgetData} 
-                setTab={setActiveTab} 
-                notificationCount={notifications.length}
-                onToggleNotifications={() => setShowNotifications(!showNotifications)}
-                onProfileClick={handleProfileClick}
-            />
-        )}
-        {activeTab === 'budget' && (
-            <BudgetView 
-                data={budgetData} 
-                updateData={handleUpdateBudget} 
-                notificationCount={notifications.length}
-                onToggleNotifications={() => setShowNotifications(!showNotifications)}
-                onUndo={handleUndo} onRedo={handleRedo} canUndo={undoStack.length > 0} canRedo={redoStack.length > 0}
-                focusTarget={budgetFocusTarget} clearFocusTarget={() => setBudgetFocusTarget(null)}
-                onProfileClick={handleProfileClick}
-            />
-        )}
-        {activeTab === 'ai' && (
-            <AIView 
-                history={history} currencySymbol={budgetData.currencySymbol} notificationCount={notifications.length}
-                onToggleNotifications={() => setShowNotifications(!showNotifications)}
-                onViewAnalysis={() => setActiveTab('analysis')} onViewInvestments={() => setActiveTab('investments')}
-                onViewEvents={() => setActiveTab('events')} onViewSocial={() => setActiveTab('social')}
-                onViewSimulator={() => setActiveTab('simulator')} 
-                eventNotificationCount={eventNotificationCount}
-                socialNotificationCount={socialNotificationCount}
-                onProfileClick={handleProfileClick}
-                user={user}
-                onNavigate={setActiveTab}
-                onViewFeature={handleViewFeature}
-            />
-        )}
-        {activeTab === 'analysis' && (
-            <AnalysisView 
-                history={history} currencySymbol={budgetData.currencySymbol} notificationCount={notifications.length}
-                onToggleNotifications={() => setShowNotifications(!showNotifications)} onBack={() => setActiveTab('ai')}
-                onProfileClick={handleProfileClick}
-            />
-        )}
-        {activeTab === 'investments' && (
-            <InvestmentAnalysisView 
-                history={history} currencySymbol={budgetData.currencySymbol} onBack={() => setActiveTab('ai')}
-                onProfileClick={handleProfileClick}
-            />
-        )}
-        {activeTab === 'social' && (
-            <CollaborativeView onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick} groups={groups} onUpdateGroups={handleUpdateGroups} />
-        )}
-        {activeTab === 'collaborative' && (
-            <CollaborativeView onBack={() => setActiveTab('menu')} onProfileClick={handleProfileClick} groups={groups} onUpdateGroups={handleUpdateGroups} />
-        )}
-        {activeTab === 'shopping-list' && (
-            <ShoppingListView 
-                onBack={() => setActiveTab('menu')} 
-                onProfileClick={handleProfileClick}
-                notificationCount={notifications.length}
-                onToggleNotifications={() => setShowNotifications(!showNotifications)}
-                shoppingLists={shoppingLists}
-                onUpdateLists={handleUpdateShopping}
-                onSyncToBudget={handleSyncShoppingToBudget}
-                focusListId={shoppingFocus?.listId}
-                focusShopId={shoppingFocus?.shopId}
-                clearFocus={() => setShoppingFocus(null)}
-            />
-        )}
-        {activeTab === 'community-links' && (
-            <CommunityLinksView onBack={() => setActiveTab('menu')} />
-        )}
-        {activeTab === 'events' && (
-            <EventsView 
-                events={events} onUpdateEvents={handleUpdateEvents} currencySymbol={budgetData.currencySymbol}
-                onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick}
-                focusEventId={eventFocus?.id}
-                focusTab={eventFocus?.tab}
-            />
-        )}
-        {activeTab === 'simulator' && (
-            <LifeSimulatorView 
-                currentData={budgetData} currencySymbol={budgetData.currencySymbol} onBack={() => setActiveTab('ai')}
-                onApplyScenario={handleApplyScenario} onProfileClick={handleProfileClick}
-            />
-        )}
-        {activeTab === 'menu' && (
-            <MenuView 
-                onNavigate={setActiveTab} notificationCount={notifications.length}
-                onToggleNotifications={() => setShowNotifications(!showNotifications)} onProfileClick={handleProfileClick}
-            />
-        )}
-        {activeTab === 'profile' && (
-            <ProfileView 
-                user={user}
-                onLogout={handleLogout}
-                onBack={() => setActiveTab('menu')}
-                onNavigate={setActiveTab}
-                notificationCount={notifications.length}
-                onToggleNotifications={() => setShowNotifications(!showNotifications)}
-            />
-        )}
-        {activeTab === 'pro-membership' && (
-            <ProMembershipView 
-                onBack={() => setActiveTab('profile')}
-                onUpgrade={handleUpgradeUser}
-                onUnlockFeature={handleUnlockFeature}
-                onProfileClick={handleProfileClick}
-                user={user}
-                onViewFeature={handleViewFeature}
-            />
-        )}
-        {activeTab === 'membership-management' && (
-            <MembershipManagementView 
-                user={user}
-                onBack={() => setActiveTab('profile')}
-                onCancelSubscription={handleCancelSubscription}
-                onProfileClick={handleProfileClick}
-                onUpdateUser={handleUpdateUser}
-                onNavigate={setActiveTab}
-            />
-        )}
-        {activeTab === 'feature-subscription' && selectedFeatureId && (
-            <FeatureSubscriptionView 
-                featureId={selectedFeatureId}
-                onBack={() => setActiveTab('pro-membership')}
-                onSubscribe={handleUnlockFeature}
-                onOpenFeature={handleOpenFeature}
-            />
-        )}
-        {activeTab === 'personal-info' && (
-            <PersonalInfoView 
-                user={user} onUpdateUser={handleUpdateUser} onBack={() => setActiveTab('profile')} onProfileClick={handleProfileClick}
-            />
-        )}
-        {activeTab === 'email-prefs' && (
-            <EmailPreferencesView 
-                onBack={() => setActiveTab('profile')} onProfileClick={handleProfileClick}
-            />
-        )}
-        {activeTab === 'security' && (
-            <SecurityView 
-                onBack={() => setActiveTab('profile')} onProfileClick={handleProfileClick}
-            />
-        )}
+        {activeTab === 'auth' && <AuthView onLogin={handleLogin} onBack={() => setActiveTab('dashboard')} />}
+        {activeTab === 'dashboard' && <DashboardView data={budgetData} setTab={setActiveTab} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} onProfileClick={handleProfileClick} />}
+        {activeTab === 'budget' && <BudgetView data={budgetData} updateData={handleUpdateBudget} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} onUndo={handleUndo} onRedo={handleRedo} canUndo={undoStack.length > 0} canRedo={redoStack.length > 0} focusTarget={budgetFocusTarget} clearFocusTarget={() => setBudgetFocusTarget(null)} onProfileClick={handleProfileClick} onCreateShoppingList={handleCreateShoppingListFromBudget} />}
+        {activeTab === 'ai' && <AIView history={history} currencySymbol={budgetData.currencySymbol} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} onViewAnalysis={() => setActiveTab('analysis')} onViewInvestments={() => setActiveTab('investments')} onViewEvents={() => setActiveTab('events')} onViewSocial={() => setActiveTab('social')} onViewSimulator={() => setActiveTab('simulator')} eventNotificationCount={eventNotificationCount} socialNotificationCount={socialNotificationCount} onProfileClick={handleProfileClick} user={user} onNavigate={setActiveTab} onViewFeature={handleViewFeature} />}
+        {activeTab === 'analysis' && <AnalysisView history={history} currencySymbol={budgetData.currencySymbol} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick} />}
+        {activeTab === 'investments' && <InvestmentAnalysisView history={history} currencySymbol={budgetData.currencySymbol} onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick} onUpdateData={handleUpdateBudget} investmentGoals={investmentGoals} onUpdateGoals={handleUpdateInvestGoals} />}
+        {activeTab === 'social' && <CollaborativeView onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick} groups={groups} onUpdateGroups={handleUpdateGroups} onCreateShoppingList={handleCreateShoppingListFromGroup} />}
+        {activeTab === 'collaborative' && <CollaborativeView onBack={() => setActiveTab('menu')} onProfileClick={handleProfileClick} groups={groups} onUpdateGroups={handleUpdateGroups} onCreateShoppingList={handleCreateShoppingListFromGroup} />}
+        {activeTab === 'shopping-list' && <ShoppingListView onBack={() => setActiveTab('menu')} onProfileClick={handleProfileClick} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} shoppingLists={shoppingLists} onUpdateLists={handleUpdateShopping} onSyncToBudget={handleSyncShoppingToBudget} focusListId={shoppingFocus?.listId} focusShopId={shoppingFocus?.shopId} clearFocus={() => setShoppingFocus(null)} />}
+        {activeTab === 'community-links' && <CommunityLinksView onBack={() => setActiveTab('menu')} />}
+        {activeTab === 'events' && <EventsView events={events} onUpdateEvents={handleUpdateEvents} currencySymbol={budgetData.currencySymbol} onBack={() => setActiveTab('ai')} onProfileClick={handleProfileClick} focusEventId={eventFocus?.id} focusTab={eventFocus?.tab} onCreateShoppingList={handleCreateShoppingListFromEvent} />}
+        {activeTab === 'simulator' && <LifeSimulatorView currentData={budgetData} currencySymbol={budgetData.currencySymbol} onBack={() => setActiveTab('ai')} onApplyScenario={handleApplyScenario} onProfileClick={handleProfileClick} />}
+        {activeTab === 'menu' && <MenuView onNavigate={setActiveTab} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} onProfileClick={handleProfileClick} />}
+        {activeTab === 'profile' && <ProfileView user={user} onLogout={handleLogout} onBack={() => setActiveTab('menu')} onNavigate={setActiveTab} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} />}
+        {activeTab === 'pro-membership' && <ProMembershipView onBack={() => setActiveTab('profile')} onUpgrade={handleUpgradeUser} onUnlockFeature={handleUnlockFeature} onProfileClick={handleProfileClick} user={user} onViewFeature={handleViewFeature} />}
+        {activeTab === 'membership-management' && <MembershipManagementView user={user} onBack={() => setActiveTab('profile')} onCancelSubscription={handleCancelSubscription} onProfileClick={handleProfileClick} onUpdateUser={handleUpdateUser} onNavigate={setActiveTab} />}
+        {activeTab === 'feature-subscription' && selectedFeatureId && <FeatureSubscriptionView featureId={selectedFeatureId} onBack={() => setActiveTab('pro-membership')} onSubscribe={handleUnlockFeature} onOpenFeature={handleOpenFeature} />}
+        {activeTab === 'personal-info' && <PersonalInfoView user={user} onUpdateUser={handleUpdateUser} onBack={() => setActiveTab('profile')} onProfileClick={handleProfileClick} />}
+        {activeTab === 'email-prefs' && <EmailPreferencesView onBack={() => setActiveTab('profile')} onProfileClick={handleProfileClick} />}
+        {activeTab === 'security' && <SecurityView onBack={() => setActiveTab('profile')} onProfileClick={handleProfileClick} />}
         {activeTab === 'support' && <SupportView onBack={() => setActiveTab('menu')} />}
         {activeTab === 'legal' && <LegalView onBack={() => setActiveTab('menu')} />}
         {activeTab === 'feedback' && <FeedbackView onBack={() => setActiveTab('menu')} />}
-        {activeTab === 'history' && (
-            <HistoryView 
-                currentData={budgetData} history={history} 
-                onLoadPeriod={(id) => {
-                    const selected = history.find(h => h.id === id);
-                    if(selected) { setBudgetData(selected); setUndoStack([]); setRedoStack([]); setActiveTab('dashboard'); localStorage.setItem('activePeriodId', selected.id); }
-                }}
-                onCreateNewPeriod={handleOpenNewPeriodModal} onDeletePeriod={handleDeletePeriod} onDuplicatePeriod={handleDuplicatePeriod}
-                notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)}
-                updateData={handleUpdateBudget} resetData={handleReset} isDarkMode={isDarkMode} toggleTheme={() => setIsDarkMode(!isDarkMode)}
-                onBack={() => setActiveTab('menu')}
-            />
-        )}
-        {(activeTab === 'tools' || activeTab === 'settings') && (
-            <ToolsView 
-                data={budgetData} updateData={handleUpdateBudget} resetData={handleReset} isDarkMode={isDarkMode}
-                toggleTheme={() => setIsDarkMode(!isDarkMode)} notificationCount={notifications.length}
-                onToggleNotifications={() => setShowNotifications(!showNotifications)} onBack={() => setActiveTab('menu')}
-                initialTab={activeTab === 'settings' ? 'settings' : 'tools'}
-            />
-        )}
+        {activeTab === 'history' && <HistoryView currentData={budgetData} history={history} onLoadPeriod={(id) => { const selected = history.find(h => h.id === id); if(selected) { setBudgetData(selected); setUndoStack([]); setRedoStack([]); setActiveTab('dashboard'); localStorage.setItem('activePeriodId', selected.id); } }} onCreateNewPeriod={handleOpenNewPeriodModal} onDeletePeriod={handleDeletePeriod} onDuplicatePeriod={handleDuplicatePeriod} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} updateData={handleUpdateBudget} resetData={handleReset} isDarkMode={isDarkMode} toggleTheme={() => setIsDarkMode(!isDarkMode)} onBack={() => setActiveTab('menu')} />}
+        {(activeTab === 'tools' || activeTab === 'settings') && <ToolsView data={budgetData} updateData={handleUpdateBudget} resetData={handleReset} isDarkMode={isDarkMode} toggleTheme={() => setIsDarkMode(!isDarkMode)} notificationCount={notifications.length} onToggleNotifications={() => setShowNotifications(!showNotifications)} onBack={() => setActiveTab('menu')} initialTab={activeTab === 'settings' ? 'settings' : 'tools'} />}
       </main>
       
-      {activeTab !== 'auth' && (
-          <Navigation 
-            activeTab={isMenuSubView || activeTab === 'menu' ? 'menu' : (['analysis', 'investments', 'social', 'events', 'simulator'].includes(activeTab) ? 'ai' : activeTab)} 
-            onTabChange={setActiveTab} 
-            onAdd={handleOpenNewPeriodModal} 
-            badgeTabs={(eventNotificationCount > 0 || socialNotificationCount > 0) ? ['ai'] : []}
-          />
-      )}
-      
-      <NewPeriodModal 
-        isOpen={isNewPeriodModalOpen} onClose={() => setIsNewPeriodModalOpen(false)} onConfirm={handleCreatePeriod}
-        defaultMonth={nextPeriodDefaults.month} defaultYear={nextPeriodDefaults.year} calculatedRollover={calculatedRollover} currencySymbol={budgetData.currencySymbol}
-      />
-
-      {showNotifications && (
-        <NotificationPopup 
-            notifications={notifications} 
-            onClose={() => setShowNotifications(false)} 
-            onNotificationClick={handleNotificationClick}
-            onDismiss={handleDismissNotification}
-        />
-      )}
+      {activeTab !== 'auth' && <Navigation activeTab={isMenuSubView || activeTab === 'menu' ? 'menu' : (['analysis', 'investments', 'social', 'events', 'simulator'].includes(activeTab) ? 'ai' : activeTab)} onTabChange={setActiveTab} onAdd={handleOpenNewPeriodModal} badgeTabs={(eventNotificationCount > 0 || socialNotificationCount > 0) ? ['ai'] : []} />}
+      <NewPeriodModal isOpen={isNewPeriodModalOpen} onClose={() => setIsNewPeriodModalOpen(false)} onConfirm={handleCreatePeriod} defaultMonth={nextPeriodDefaults.month} defaultYear={nextPeriodDefaults.year} calculatedRollover={calculatedRollover} currencySymbol={budgetData.currencySymbol} />
+      {showNotifications && <NotificationPopup notifications={notifications} onClose={() => setShowNotifications(false)} onNotificationClick={handleNotificationClick} onDismiss={handleDismissNotification} />}
     </Layout>
   );
 };

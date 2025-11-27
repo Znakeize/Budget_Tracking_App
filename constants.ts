@@ -1,5 +1,5 @@
 
-import { BudgetData, EventData, ShoppingListData, SharedGroup } from './types';
+import { BudgetData, EventData, ShoppingListData, SharedGroup, InvestmentGoal } from './types';
 
 export const CURRENCY_SYMBOLS: Record<string, string> = {
   'USD': '$', 'EUR': '€', 'GBP': '£', 'CAD': '$',
@@ -60,15 +60,36 @@ export const INITIAL_DATA: BudgetData = {
     { id: '4', name: 'Personal Loan', balance: 2500, payment: 200, paid: false, dueDate: '2025-01-25' }
   ],
   investments: [
-    { id: '1', name: '401(k) Contribution', amount: 500, target: 20000, monthly: 500, contributed: true },
-    { id: '2', name: 'Roth IRA', amount: 500, target: 6500, monthly: 500, contributed: false },
-    { id: '3', name: 'Stock Portfolio', amount: 300, target: 10000, monthly: 150, contributed: false },
-    { id: '4', name: 'Index Funds', amount: 200, target: 5000, monthly: 100, contributed: true },
-    { id: '5', name: 'Crypto', amount: 100, target: 1000, monthly: 50, contributed: false }
+    { 
+      id: '1', name: 'Tesla Stock', amount: 5500, initialValue: 4000, type: 'personal', category: 'Stocks', symbol: 'TSLA', quantity: 25, roi: 37.5, monthly: 0, contributed: false,
+      history: [{date: '2024-12-01', amount: 5000}], 
+      transactions: [{id: 't1', date: '2024-01-15', type: 'buy', amount: 4000, price: 160, quantity: 25}]
+    },
+    { 
+      id: '2', name: 'Bitcoin Wallet', amount: 12500, initialValue: 8000, type: 'personal', category: 'Crypto', symbol: 'BTC', quantity: 0.25, roi: 56.2, monthly: 100, contributed: true,
+      history: [{date: '2024-12-01', amount: 11000}],
+      transactions: [{id: 't2', date: '2023-06-20', type: 'buy', amount: 8000, price: 32000, quantity: 0.25}]
+    },
+    { 
+      id: '3', name: 'Rental Property A', amount: 250000, initialValue: 220000, type: 'business', category: 'RealEstate', roi: 13.6, monthlyCashFlow: 1200, monthly: 0, contributed: false,
+      transactions: [{id: 't3', date: '2025-01-01', type: 'income', amount: 1200, note: 'January Rent'}]
+    },
+    { 
+      id: '4', name: 'Tech Startup Equity', amount: 15000, initialValue: 15000, type: 'business', category: 'Equity', roi: 0, monthlyCashFlow: 0, monthly: 0, contributed: false 
+    },
+    { 
+      id: '5', name: 'High Yield Savings', amount: 8000, initialValue: 7000, type: 'personal', category: 'Savings', roi: 4.5, monthly: 500, contributed: true 
+    }
   ],
   rollover: 0,
   created: Date.now()
 };
+
+export const SAMPLE_INVESTMENT_GOALS: InvestmentGoal[] = [
+    { id: 'g1', name: 'Millionaire by 40', targetAmount: 1000000, currentAmount: 291000, deadline: '2030-01-01', type: 'value' },
+    { id: 'g2', name: 'Business Monthly Cashflow', targetAmount: 5000, currentAmount: 1200, deadline: '2025-12-31', type: 'income' },
+    { id: 'g3', name: 'Crypto 20% ROI', targetAmount: 20, currentAmount: 56.2, deadline: '2025-06-01', type: 'roi' }
+];
 
 export const SAMPLE_EVENTS: EventData[] = [
     {

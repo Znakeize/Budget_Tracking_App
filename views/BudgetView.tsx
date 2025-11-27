@@ -48,6 +48,7 @@ interface BudgetViewProps {
   focusTarget?: { section: string, itemId: string } | null;
   clearFocusTarget?: () => void;
   onProfileClick: () => void;
+  onCreateShoppingList?: (name: string, budget: number) => void;
 }
 
 export const BudgetView: React.FC<BudgetViewProps> = ({ 
@@ -61,7 +62,8 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
   canRedo,
   focusTarget,
   clearFocusTarget,
-  onProfileClick
+  onProfileClick,
+  onCreateShoppingList
 }) => {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [expandedInvestmentId, setExpandedInvestmentId] = useState<string | null>(null);
@@ -783,6 +785,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
         onConfirm={handleAddItem}
         collection={addingCollection}
         currencySymbol={data.currencySymbol}
+        onCreateShoppingList={onCreateShoppingList}
       />
     </div>
   );

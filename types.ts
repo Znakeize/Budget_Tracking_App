@@ -45,16 +45,54 @@ export interface DebtItem extends BaseItem {
   dueDate?: string;
 }
 
-export interface InvestmentItem extends BaseItem {
+// --- Investment Interfaces ---
+
+export type InvestmentType = 'personal' | 'business';
+export type AssetCategory = 'Stocks' | 'Crypto' | 'RealEstate' | 'MutualFunds' | 'Savings' | 'BusinessProject' | 'Equipment' | 'Equity' | 'Other';
+
+export interface InvestmentTransaction {
+  id: string;
+  date: string;
+  type: 'buy' | 'sell' | 'deposit' | 'withdraw' | 'dividend' | 'expense' | 'income';
   amount: number;
+  price?: number;
+  quantity?: number;
+  note?: string;
+}
+
+export interface InvestmentItem extends BaseItem {
+  // Common fields
+  amount: number; // Current Total Value
+  initialValue?: number; // Cost Basis / Capital Invested
   target?: number;
-  monthly?: number;
+  monthly?: number; // Monthly Contribution
   contributed?: boolean;
+  
+  // Advanced fields
+  type?: InvestmentType;
+  category?: AssetCategory;
+  quantity?: number; // For stocks/crypto
+  symbol?: string; // Ticker
+  roi?: number; // Calculated ROI percentage
+  monthlyCashFlow?: number; // For business/rental
+  transactions?: InvestmentTransaction[];
   history?: {
     date: string;
     amount: number;
   }[];
+  documents?: string[]; // Placeholder for file names
 }
+
+export interface InvestmentGoal {
+  id: string;
+  name: string;
+  targetAmount: number;
+  currentAmount: number;
+  deadline: string;
+  type: 'value' | 'roi' | 'income';
+}
+
+// --- Main Data Structure ---
 
 export interface BudgetData {
   id: string;
@@ -214,7 +252,7 @@ export interface SharedExpense {
   notes?: string;
   receipt?: string;
   split: Record<string, number>; // userId -> amount owed
-  type: 'expense' | 'settlement'; // Distinguish between regular expense and debt settlement
+  type: 'expense' | 'settlement' | 'reminder';
 }
 
 export interface GroupActivity {
