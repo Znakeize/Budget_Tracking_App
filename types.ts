@@ -102,6 +102,7 @@ export interface EventVendor {
     date: string;
     name: string;
     amount: number;
+    paidBy?: string;
   }[];
 }
 

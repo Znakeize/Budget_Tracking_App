@@ -9,7 +9,7 @@ import {
   ShoppingBag, CheckCircle, Clock, FileText, Send, Sparkles, 
   Trash2, TrendingUp, AlertCircle, Camera, Download, Share2,
   Pencil, Edit2, X, Briefcase, Layers, Receipt,
-  ArrowRight, DollarSign, CalendarHeart, Bell, BellRing
+  ArrowRight, DollarSign, CalendarHeart, Bell, BellRing, ChevronDown
 } from 'lucide-react';
 import { Doughnut } from 'react-chartjs-2';
 import { jsPDF } from 'jspdf';
@@ -24,6 +24,7 @@ interface EventsViewProps {
   onProfileClick: () => void;
   focusEventId?: string;
   focusTab?: string;
+  onCreateShoppingList?: (name: string, budget: number, members: EventMember[]) => void;
 }
 
 export const getEventNotifications = (events: EventData[], currencySymbol: string): NotificationItem[] => {
@@ -113,7 +114,8 @@ export const EventsView: React.FC<EventsViewProps> = ({
     onBack, 
     onProfileClick,
     focusEventId,
-    focusTab
+    focusTab,
+    onCreateShoppingList
 }) => {
   const [activeEventParams, setActiveEventParams] = useState<{id: string, initialTab?: string, focusItemId?: string} | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -171,6 +173,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
         initialTab={activeEventParams?.initialTab}
         focusItemId={activeEventParams?.focusItemId}
         onProfileClick={onProfileClick}
+        onCreateShoppingList={onCreateShoppingList}
       />
     );
   }
@@ -331,8 +334,9 @@ const EventDetailView: React.FC<{
     currencySymbol: string, 
     initialTab?: string, 
     focusItemId?: string,
-    onProfileClick: () => void
-}> = ({ event, onUpdate, onBack, currencySymbol, initialTab, focusItemId, onProfileClick }) => {
+    onProfileClick: () => void,
+    onCreateShoppingList?: (name: string, budget: number, members: EventMember[]) => void
+}> = ({ event, onUpdate, onBack, currencySymbol, initialTab, focusItemId, onProfileClick, onCreateShoppingList }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'budget' | 'vendors' | 'team' | 'ai'>((initialTab as any) || 'dashboard');
   const [isEditEventOpen, setIsEditEventOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -429,7 +433,7 @@ const EventDetailView: React.FC<{
 
        <div className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-28">
            {activeTab === 'dashboard' && <EventDashboardTab event={event} totalSpent={totalSpent} remaining={remaining} currencySymbol={currencySymbol} />}
-           {activeTab === 'budget' && <EventBudgetTab event={event} onUpdate={onUpdate} currencySymbol={currencySymbol} focusItemId={focusItemId} />}
+           {activeTab === 'budget' && <EventBudgetTab event={event} onUpdate={onUpdate} currencySymbol={currencySymbol} focusItemId={focusItemId} onCreateShoppingList={onCreateShoppingList} />}
            {activeTab === 'vendors' && <EventVendorsTab event={event} onUpdate={onUpdate} currencySymbol={currencySymbol} focusItemId={focusItemId} />}
            {activeTab === 'team' && <EventTeamTab event={event} onUpdate={onUpdate} currencySymbol={currencySymbol} />}
            {activeTab === 'ai' && <EventAITab event={event} />}
@@ -522,7 +526,7 @@ const EventDashboardTab = ({ event, totalSpent, remaining, currencySymbol }: any
     );
 };
 
-const EventBudgetTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) => {
+const EventBudgetTab = ({ event, onUpdate, currencySymbol, focusItemId, onCreateShoppingList }: any) => {
     const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
     const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
     const [editingCategory, setEditingCategory] = useState<EventCategory | null>(null);
@@ -663,6 +667,8 @@ const EventBudgetTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) =
                 onConfirm={handleAddExpense}
                 categories={event.categories}
                 currencySymbol={currencySymbol}
+                event={event}
+                onCreateShoppingList={onCreateShoppingList}
             />
 
             <AddCategoryModal 
@@ -716,19 +722,38 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
 
     const handleAddVendor = (vendor: any) => {
         const adv = vendor.advance || 0;
+        const vendorId = generateId();
+        const paymentId = generateId();
+
         const newVendor: EventVendor = {
-            id: generateId(),
+            id: vendorId,
             ...vendor,
             paidAmount: adv, 
             status: adv > 0 ? (adv >= vendor.totalAmount ? 'paid' : 'partial') : 'pending',
             paymentHistory: adv > 0 ? [{
-                id: generateId(),
+                id: paymentId,
                 date: new Date().toISOString().split('T')[0],
                 name: "Advance Payment",
-                amount: adv
+                amount: adv,
+                paidBy: 'me'
             }] : []
         };
-        onUpdate({ ...event, vendors: [...event.vendors, newVendor] });
+
+        let newExpenses = [...event.expenses];
+        if (adv > 0) {
+            const newExpense: EventExpense = {
+                id: paymentId,
+                name: `Advance to ${vendor.name}`,
+                amount: adv,
+                category: vendor.service,
+                date: new Date().toISOString(),
+                vendorId: vendorId,
+                paidBy: 'me'
+            };
+            newExpenses.push(newExpense);
+        }
+
+        onUpdate({ ...event, vendors: [...event.vendors, newVendor], expenses: newExpenses });
         setIsAddVendorOpen(false);
     };
 
@@ -744,23 +769,40 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
     };
 
     const handleDeleteVendor = (id: string) => {
-        if(confirm('Delete this vendor?')) {
+        if(confirm('Delete this vendor? This will also remove associated expenses.')) {
             const updatedVendors = event.vendors.filter((v: any) => v.id !== id);
-            onUpdate({ ...event, vendors: updatedVendors });
+            const updatedExpenses = event.expenses.filter((e: any) => e.vendorId !== id);
+            onUpdate({ ...event, vendors: updatedVendors, expenses: updatedExpenses });
             setEditingVendor(null);
         }
     };
 
     const handleUpdatePayment = (id: string, amount: number, note: string = "Payment") => {
+        const paymentId = generateId();
+        let newExpense: EventExpense | null = null;
+
         const updatedVendors = event.vendors.map((v: EventVendor) => {
             if (v.id === id) {
                 const newPaid = Math.min(v.paidAmount + amount, v.totalAmount);
                 const historyItem = {
-                    id: generateId(),
+                    id: paymentId,
                     date: new Date().toISOString().split('T')[0],
                     name: note,
-                    amount: amount
+                    amount: amount,
+                    paidBy: 'me'
                 };
+                
+                // Create corresponding expense
+                newExpense = {
+                    id: paymentId,
+                    name: `${note} to ${v.name}`,
+                    amount: amount,
+                    category: v.service,
+                    date: new Date().toISOString(),
+                    vendorId: v.id,
+                    paidBy: 'me'
+                };
+
                 return { 
                     ...v, 
                     paidAmount: newPaid,
@@ -770,7 +812,13 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
             }
             return v;
         });
-        onUpdate({ ...event, vendors: updatedVendors });
+
+        let newExpenses = [...event.expenses];
+        if (newExpense) {
+            newExpenses.push(newExpense);
+        }
+
+        onUpdate({ ...event, vendors: updatedVendors, expenses: newExpenses });
     };
 
     const handleRemovePayment = (vendorId: string, paymentId: string, amount: number, isAdvance: boolean) => {
@@ -794,7 +842,11 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
             }
             return v;
         });
-        onUpdate({ ...event, vendors: updatedVendors });
+
+        // Remove corresponding expense
+        const updatedExpenses = event.expenses.filter((e: any) => e.id !== paymentId);
+
+        onUpdate({ ...event, vendors: updatedVendors, expenses: updatedExpenses });
     };
 
     return (
@@ -892,6 +944,20 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
                                     <div className="space-y-1.5">
                                         {vendor.paymentHistory.map((h: any) => {
                                             const isAdvance = h.name === "Advance Payment";
+                                            // Determine payer name
+                                            let payerName = 'You';
+                                            if (h.paidBy && h.paidBy !== 'me') {
+                                                const member = event.members.find((m: any) => m.id === h.paidBy);
+                                                if (member) payerName = member.name;
+                                            } else if (!h.paidBy) {
+                                                // Fallback for legacy data
+                                                const exp = event.expenses.find((e: any) => e.id === h.id);
+                                                if (exp && exp.paidBy && exp.paidBy !== 'me') {
+                                                    const member = event.members.find((m: any) => m.id === exp.paidBy);
+                                                    if (member) payerName = member.name;
+                                                }
+                                            }
+
                                             return (
                                             <div key={h.id} className="flex justify-between items-center text-xs group hover:bg-slate-50 dark:hover:bg-white/5 p-2 rounded-lg transition-colors -mx-2 border border-transparent hover:border-slate-100 dark:hover:border-slate-800">
                                                 <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
@@ -903,7 +969,11 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
                                                             <span className="font-semibold">{h.name}</span>
                                                             {isAdvance && <span className="text-[8px] bg-indigo-100 text-indigo-600 px-1.5 rounded-full font-bold">ADVANCE</span>}
                                                         </div>
-                                                        <span className="text-[9px] text-slate-400">{h.date}</span>
+                                                        <div className="flex items-center gap-1 text-[9px] text-slate-400">
+                                                            <span>{h.date}</span>
+                                                            <span>•</span>
+                                                            <span>Paid by {payerName}</span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-3">
@@ -946,6 +1016,7 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
                 onClose={() => setIsAddVendorOpen(false)}
                 onConfirm={handleAddVendor}
                 currencySymbol={currencySymbol}
+                categories={event.categories}
             />
 
             <EditVendorModal 
@@ -955,6 +1026,7 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
                 onDelete={handleDeleteVendor}
                 vendor={editingVendor}
                 currencySymbol={currencySymbol}
+                categories={event.categories}
             />
         </div>
     );
@@ -1242,7 +1314,7 @@ const EditEventModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbo
     );
 };
 
-const AddEventExpenseModal = ({ isOpen, onClose, onConfirm, categories, currencySymbol }: any) => {
+const AddEventExpenseModal = ({ isOpen, onClose, onConfirm, categories, currencySymbol, event, onCreateShoppingList }: any) => {
     const [name, setName] = useState('');
     const [amount, setAmount] = useState('');
     const [category, setCategory] = useState(categories[0]?.name || '');
@@ -1277,6 +1349,20 @@ const AddEventExpenseModal = ({ isOpen, onClose, onConfirm, categories, currency
                     <select className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={category} onChange={e => setCategory(e.target.value)}>
                         {categories.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
                     </select>
+                    
+                    <button 
+                        onClick={() => {
+                            if (onCreateShoppingList && event) {
+                                const listName = `${event.name} - ${name || 'Expense'}`;
+                                onCreateShoppingList(listName, parseFloat(amount) || 0, event.members);
+                                onClose();
+                            }
+                        }}
+                        className="w-full py-3 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 font-bold rounded-xl mt-2 flex items-center justify-center gap-2 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors"
+                    >
+                        <ShoppingBag size={18} /> Create Shopping List & Link
+                    </button>
+
                     <button onClick={() => onConfirm({ name, amount: parseFloat(amount), category })} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Save</button>
                 </div>
             </div>
@@ -1396,7 +1482,7 @@ const EditCategoryModal = ({ isOpen, onClose, onConfirm, category, currencySymbo
     );
 };
 
-const AddVendorModal = ({ isOpen, onClose, onConfirm, currencySymbol }: any) => {
+const AddVendorModal = ({ isOpen, onClose, onConfirm, currencySymbol, categories }: any) => {
     const [name, setName] = useState('');
     const [service, setService] = useState('');
     const [total, setTotal] = useState('');
@@ -1405,9 +1491,11 @@ const AddVendorModal = ({ isOpen, onClose, onConfirm, currencySymbol }: any) => 
 
     useEffect(() => {
         if(isOpen) {
-            setName(''); setService(''); setTotal(''); setAdvance(''); setDueDate('');
+            setName('');
+            setService(categories && categories.length > 0 ? categories[0].name : '');
+            setTotal(''); setAdvance(''); setDueDate('');
         }
-    }, [isOpen]);
+    }, [isOpen, categories]);
 
     if(!isOpen) return null;
 
@@ -1421,7 +1509,19 @@ const AddVendorModal = ({ isOpen, onClose, onConfirm, currencySymbol }: any) => 
                 </div>
                 <div className="space-y-3">
                     <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Vendor Name" value={name} onChange={e => setName(e.target.value)} />
-                    <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Service (e.g. Catering)" value={service} onChange={e => setService(e.target.value)} />
+                    
+                    <div className="relative">
+                        <select 
+                            className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none appearance-none text-slate-900 dark:text-white" 
+                            value={service} 
+                            onChange={e => setService(e.target.value)}
+                        >
+                            {categories?.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                            <option value="Other">Other</option>
+                        </select>
+                        <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    </div>
+
                     <div className="relative">
                         <span className="absolute left-3 top-3 text-slate-500">{currencySymbol}</span>
                         <input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 pl-8 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Total Cost" value={total} onChange={e => setTotal(e.target.value)} />
@@ -1438,11 +1538,10 @@ const AddVendorModal = ({ isOpen, onClose, onConfirm, currencySymbol }: any) => 
     );
 };
 
-const EditVendorModal = ({ isOpen, onClose, onConfirm, onDelete, vendor, currencySymbol }: any) => {
+const EditVendorModal = ({ isOpen, onClose, onConfirm, onDelete, vendor, currencySymbol, categories }: any) => {
     const [name, setName] = useState('');
     const [service, setService] = useState('');
     const [total, setTotal] = useState('');
-    // Removed Advance editable field to prevent history mismatch. History is the source of truth.
     const [dueDate, setDueDate] = useState('');
 
     useEffect(() => {
@@ -1457,8 +1556,6 @@ const EditVendorModal = ({ isOpen, onClose, onConfirm, onDelete, vendor, currenc
     if (!isOpen || !vendor) return null;
 
     const handleSubmit = () => {
-        // Preserve existing advance amount in object, but editing it directly is disabled here
-        // Updates should happen via payment history modification
         onConfirm({ ...vendor, name, service, totalAmount: parseFloat(total) || 0, dueDate });
     };
 
@@ -1472,7 +1569,19 @@ const EditVendorModal = ({ isOpen, onClose, onConfirm, onDelete, vendor, currenc
                 </div>
                 <div className="space-y-3">
                     <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Vendor Name" value={name} onChange={e => setName(e.target.value)} />
-                    <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Service" value={service} onChange={e => setService(e.target.value)} />
+                    
+                    <div className="relative">
+                        <select 
+                            className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none appearance-none text-slate-900 dark:text-white" 
+                            value={service} 
+                            onChange={e => setService(e.target.value)}
+                        >
+                            {categories?.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                            <option value="Other">Other</option>
+                        </select>
+                        <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    </div>
+
                     <div className="relative">
                         <span className="absolute left-3 top-3 text-slate-500">{currencySymbol}</span>
                         <input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 pl-8 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Total Cost" value={total} onChange={e => setTotal(e.target.value)} />
