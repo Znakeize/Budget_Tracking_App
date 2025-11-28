@@ -1,5 +1,6 @@
 
-export type Language = 'English' | 'Spanish' | 'French' | 'German' | 'Chinese' | 'Japanese';
+
+export type Language = 'English' | 'Spanish' | 'French' | 'German' | 'Chinese' | 'Japanese' | 'Sinhala';
 
 export const translations: Record<Language, Record<string, string>> = {
   English: {
@@ -280,5 +281,51 @@ export const translations: Record<Language, Record<string, string>> = {
     'menu.unlock_ai': 'AIとプレミアムを解除',
     'menu.guest_user': 'ゲストユーザー',
     'menu.sign_in_sync': 'ログインして同期',
+  },
+  Sinhala: {
+    'nav.home': 'මුල් පිටුව',
+    'nav.budget': 'අයවැය',
+    'nav.ai': 'AI',
+    'nav.menu': 'මෙනුව',
+    
+    'dash.budget_label': 'අයවැය',
+    'dash.available': 'ඉතිරි මුදල',
+    'dash.left_to_spend': 'වියදමට ඉතිරි',
+    'dash.total_out': 'මුළු වියදම',
+    'dash.income': 'ආදායම',
+    'dash.expenses': 'වියදම්',
+    'dash.spending_breakdown': 'වියදම් විස්තරය',
+    'dash.category_limits': 'වර්ග සීමා',
+    'dash.cash_flow': 'මුදල් ගලායාම',
+    'dash.rollover': 'පෙර ඉතිරි',
+    'dash.bills_paid': 'ගෙවූ බිල්පත්',
+    'dash.debts_paid': 'ගෙවූ ණය',
+    'dash.investments': 'ආයෝජන',
+    'dash.savings': 'ඉතිරිකිරීම්',
+    'dash.net_cash_flow': 'ශුද්ධ මුදල් ප්‍රවාහය',
+    'dash.sorted_usage': 'භාවිතය අනුව',
+
+    'menu.overview': 'සමස්තය',
+    'menu.features': 'විශේෂාංග',
+    'menu.app': 'යෙදුම',
+    'menu.calculators': 'ගණක යන්ත්‍ර',
+    'menu.calculators_desc': 'ණය, බදු සහ ආයෝජන',
+    'menu.shopping': 'සාප්පු සවාරි',
+    'menu.shopping_desc': 'ලැයිස්තු සහ හවුල්',
+    'menu.history': 'ඉතිහාසය',
+    'menu.history_desc': 'පසුගිය අයවැය',
+    'menu.tools': 'දත්ත මෙවලම්',
+    'menu.tools_desc': 'පිටපත් සහ ආරක්ෂාව',
+    'menu.connect': 'සම්බන්ධ වන්න',
+    'menu.connect_desc': 'අප හා එක්වන්න',
+    'menu.app_demo': 'යෙදුම් Demo',
+    'menu.settings': 'සකසුම්',
+    'menu.support': 'සහාය',
+    'menu.legal': 'නීතිමය',
+    'menu.feedback': 'ප්‍රතිචාර',
+    'menu.go_pro': 'Pro වන්න',
+    'menu.unlock_ai': 'AI සහ විශේෂාංග ලබාගන්න',
+    'menu.guest_user': 'අමුත්තා',
+    'menu.sign_in_sync': 'දත්ත සුරැකීමට ලොග් වන්න',
   }
 };

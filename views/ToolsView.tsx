@@ -1,4 +1,6 @@
 
+
+
 import React, { useState, useEffect, useRef } from 'react';
 import { BudgetData } from '../types';
 import { CURRENCY_SYMBOLS, MONTH_NAMES } from '../constants';
@@ -338,7 +340,7 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
          break;
       case 'language':
           title = 'Language';
-          const langs: Language[] = ['English', 'Spanish', 'French', 'German', 'Chinese', 'Japanese'];
+          const langs: Language[] = ['English', 'Spanish', 'French', 'German', 'Chinese', 'Japanese', 'Sinhala'];
           content = (
               <div className="space-y-2">
                   {langs.map(l => (
