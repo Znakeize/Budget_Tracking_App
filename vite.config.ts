@@ -7,9 +7,9 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: {
-      // This is crucial to support the existing code that uses process.env.API_KEY
-      'process.env.API_KEY': JSON.stringify(env.API_KEY),
-      'process.env': {}
+      // Safely expose API_KEY without overwriting the entire process.env object.
+      // Default to empty string to prevent build crashes if the env var is missing.
+      'process.env.API_KEY': JSON.stringify(env.API_KEY || '')
     },
     server: {
       host: true
