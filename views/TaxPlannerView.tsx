@@ -1463,7 +1463,7 @@ export const TaxPlannerView: React.FC<TaxPlannerViewProps> = ({ onBack, userProf
                                 {defaultMode === 'business' ? (
                                     <li className="text-xs text-slate-700 dark:text-slate-300 leading-snug">• Review depreciation schedules for fixed assets to lower taxable income legally.</li>
                                 ) : (
-                                    <li className="text-xs text-slate-700 dark:text-slate-300 leading-snug">• If your effective rate is high (>20%), look into retirement fund contributions.</li>
+                                    <li className="text-xs text-slate-700 dark:text-slate-300 leading-snug">• If your effective rate is high (&gt;20%), look into retirement fund contributions.</li>
                                 )}
                             </ul>
                         </div>
