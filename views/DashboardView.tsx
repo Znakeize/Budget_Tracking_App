@@ -7,6 +7,7 @@ import { ExpenseBreakdown } from '../components/charts/BudgetCharts';
 import { TrendingUp, TrendingDown, Wallet, AlertCircle, Bell, BellRing } from 'lucide-react';
 import { MONTH_NAMES } from '../constants';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface DashboardProps {
   data: BudgetData;
@@ -18,6 +19,7 @@ interface DashboardProps {
 
 export const DashboardView: React.FC<DashboardProps> = ({ data, setTab, notificationCount, onToggleNotifications, onProfileClick }) => {
   const totals = calculateTotals(data);
+  const { t } = useLanguage();
   
   const percentSpent = totals.totalIncome > 0 
     ? Math.min(100, Math.round((totals.totalOut / totals.totalIncome) * 100)) 
@@ -30,7 +32,7 @@ export const DashboardView: React.FC<DashboardProps> = ({ data, setTab, notifica
       <div className="flex-none pt-6 px-4 pb-4 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-xl z-20 border-b border-slate-200 dark:border-white/5 transition-colors duration-300">
           <div className="flex justify-between items-end">
             <div>
-                <h2 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-0.5">{data.period} Budget</h2>
+                <h2 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-0.5">{data.period} {t('dash.budget_label')}</h2>
                 <h1 className="text-2xl font-bold leading-none tracking-tight text-slate-900 dark:text-white">{MONTH_NAMES[data.month]} {data.year}</h1>
             </div>
             
@@ -62,10 +64,10 @@ export const DashboardView: React.FC<DashboardProps> = ({ data, setTab, notifica
             <Card gradient="from-indigo-600/20 to-blue-600/20 dark:from-indigo-600/40 dark:to-blue-600/40" className="flex flex-col justify-between h-32">
                 <div className="flex items-start justify-between">
                     <div className="p-2 bg-white/40 dark:bg-white/10 rounded-lg text-indigo-700 dark:text-white"><Wallet size={18} /></div>
-                    <span className="text-[10px] bg-white/40 dark:bg-white/20 px-2 py-0.5 rounded-full text-indigo-900 dark:text-white font-medium">Available</span>
+                    <span className="text-[10px] bg-white/40 dark:bg-white/20 px-2 py-0.5 rounded-full text-indigo-900 dark:text-white font-medium">{t('dash.available')}</span>
                 </div>
                 <div>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 mb-1">Left to Spend</p>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 mb-1">{t('dash.left_to_spend')}</p>
                     <p className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{formatCurrency(totals.leftToSpend, data.currencySymbol)}</p>
                 </div>
             </Card>
@@ -73,7 +75,7 @@ export const DashboardView: React.FC<DashboardProps> = ({ data, setTab, notifica
             <Card className="flex flex-col justify-between h-32">
                 <div className="h-full flex flex-col justify-between">
                     <div className="flex justify-between items-start">
-                         <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Total Out</p>
+                         <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">{t('dash.total_out')}</p>
                          <TrendingDown size={16} className="text-red-500 dark:text-red-400"/>
                     </div>
                     <p className="text-xl font-bold text-slate-900 dark:text-white">{formatCurrency(totals.totalOut, data.currencySymbol)}</p>
@@ -84,7 +86,7 @@ export const DashboardView: React.FC<DashboardProps> = ({ data, setTab, notifica
                             style={{ width: `${percentSpent}%` }}
                         ></div>
                     </div>
-                    <p className="text-[10px] text-right mt-1 text-slate-500 dark:text-slate-400">{percentSpent}% of Income</p>
+                    <p className="text-[10px] text-right mt-1 text-slate-500 dark:text-slate-400">{percentSpent}%</p>
                 </div>
             </Card>
           </div>
@@ -92,7 +94,7 @@ export const DashboardView: React.FC<DashboardProps> = ({ data, setTab, notifica
           {/* Charts Section */}
           <Card className="p-4">
             <h3 className="text-sm font-semibold mb-4 flex items-center gap-2 text-slate-700 dark:text-white">
-                <PieChartIcon /> Spending Breakdown
+                <PieChartIcon /> {t('dash.spending_breakdown')}
             </h3>
             <ExpenseBreakdown data={data} />
           </Card>
@@ -100,8 +102,8 @@ export const DashboardView: React.FC<DashboardProps> = ({ data, setTab, notifica
           {/* Budget Limits (Progress Bars) */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-3">
-                 <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Category Limits</h3>
-                 <span className="text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">Sorted by Usage</span>
+                 <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t('dash.category_limits')}</h3>
+                 <span className="text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">{t('dash.sorted_usage')}</span>
             </div>
             <div className="space-y-4">
                 {[...data.expenses]
@@ -172,7 +174,7 @@ export const DashboardView: React.FC<DashboardProps> = ({ data, setTab, notifica
                         <TrendingUp size={14} />
                     </div>
                     <div>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400">Income</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">{t('dash.income')}</p>
                         <p className="text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(totals.totalIncome, data.currencySymbol)}</p>
                     </div>
                  </div>
@@ -183,7 +185,7 @@ export const DashboardView: React.FC<DashboardProps> = ({ data, setTab, notifica
                         <TrendingDown size={14} />
                     </div>
                     <div>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400">Expenses</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">{t('dash.expenses')}</p>
                         <p className="text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(totals.totalExpenses, data.currencySymbol)}</p>
                     </div>
                  </div>
@@ -192,36 +194,36 @@ export const DashboardView: React.FC<DashboardProps> = ({ data, setTab, notifica
           
           {/* Cash Flow Summary */}
           <Card>
-            <h3 className="text-sm font-semibold mb-3 border-b border-slate-200 dark:border-white/10 pb-2 text-slate-700 dark:text-white">Cash Flow</h3>
+            <h3 className="text-sm font-semibold mb-3 border-b border-slate-200 dark:border-white/10 pb-2 text-slate-700 dark:text-white">{t('dash.cash_flow')}</h3>
             <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Rollover (Start)</span>
+                    <span className="text-slate-500 dark:text-slate-400">{t('dash.rollover')}</span>
                     <span className="text-emerald-600 dark:text-emerald-400 font-bold">{formatCurrency(data.rollover || 0, data.currencySymbol)}</span>
                 </div>
                 <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Expenses</span>
+                    <span className="text-slate-500 dark:text-slate-400">{t('dash.expenses')}</span>
                     <span className="text-pink-500 dark:text-pink-400">{formatCurrency(totals.totalExpenses, data.currencySymbol)}</span>
                 </div>
                 <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Bills Paid</span>
+                    <span className="text-slate-500 dark:text-slate-400">{t('dash.bills_paid')}</span>
                     {/* Use actual bills paid for Cash Flow report */}
                     <span className="text-slate-900 dark:text-white">{formatCurrency(totals.actualBills, data.currencySymbol)}</span>
                 </div>
                 <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Debts Paid</span>
+                    <span className="text-slate-500 dark:text-slate-400">{t('dash.debts_paid')}</span>
                     <span className="text-orange-500 dark:text-orange-400">{formatCurrency(totals.actualDebts, data.currencySymbol)}</span>
                 </div>
                 <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Investments</span>
+                    <span className="text-slate-500 dark:text-slate-400">{t('dash.investments')}</span>
                     {/* Use actual investment contributions */}
                     <span className="text-violet-500 dark:text-violet-400">{formatCurrency(totals.actualInvestments, data.currencySymbol)}</span>
                 </div>
                 <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Savings</span>
+                    <span className="text-slate-500 dark:text-slate-400">{t('dash.savings')}</span>
                     <span className="text-emerald-600 dark:text-emerald-400">+{formatCurrency(totals.totalSavings, data.currencySymbol)}</span>
                 </div>
                 <div className="pt-2 mt-2 border-t border-slate-200 dark:border-white/10 flex justify-between items-center">
-                    <span className="font-bold text-slate-700 dark:text-white">Net Cash Flow</span>
+                    <span className="font-bold text-slate-700 dark:text-white">{t('dash.net_cash_flow')}</span>
                     <span className={`font-bold text-lg ${totals.leftToSpend >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
                         {formatCurrency(totals.leftToSpend, data.currencySymbol)}
                     </span>

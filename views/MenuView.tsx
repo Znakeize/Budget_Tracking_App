@@ -4,9 +4,10 @@ import { Card } from '../components/ui/Card';
 import { 
   History, Wrench, CalendarHeart, Settings, 
   LifeBuoy, FileText, MessageSquare, ChevronRight, 
-  Bell, BellRing, UserCircle, Users, Crown, ShoppingCart, Calculator 
+  Bell, BellRing, UserCircle, Users, Crown, ShoppingCart, Calculator, PlayCircle 
 } from 'lucide-react';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface MenuViewProps {
   onNavigate: (tab: string) => void;
@@ -23,6 +24,7 @@ interface UserProfile {
 
 export const MenuView: React.FC<MenuViewProps> = ({ onNavigate, notificationCount, onToggleNotifications, onProfileClick }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     const savedUser = localStorage.getItem('budget_user_session');
@@ -36,18 +38,19 @@ export const MenuView: React.FC<MenuViewProps> = ({ onNavigate, notificationCoun
   }, []);
 
   const menuItems = [
-    { id: 'calculators', label: 'Calculators', icon: Calculator, color: 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400', desc: 'Loan, SIP & Tax' },
-    { id: 'shopping-list', label: 'Shopping', icon: ShoppingCart, color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400', desc: 'Lists & Shared' },
-    { id: 'history', label: 'History', icon: History, color: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400', desc: 'Past Budgets' },
-    { id: 'tools', label: 'Data Tools', icon: Wrench, color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400', desc: 'Export & Backup' },
-    { id: 'community-links', label: 'Connect', icon: Users, color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400', desc: 'Join Us' },
+    { id: 'calculators', label: t('menu.calculators'), icon: Calculator, color: 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400', desc: t('menu.calculators_desc') },
+    { id: 'shopping-list', label: t('menu.shopping'), icon: ShoppingCart, color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400', desc: t('menu.shopping_desc') },
+    { id: 'history', label: t('menu.history'), icon: History, color: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400', desc: t('menu.history_desc') },
+    { id: 'tools', label: t('menu.tools'), icon: Wrench, color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400', desc: t('menu.tools_desc') },
+    { id: 'community-links', label: t('menu.connect'), icon: Users, color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400', desc: t('menu.connect_desc') },
   ];
 
   const listItems = [
-    { id: 'settings', label: 'Settings', icon: Settings },
-    { id: 'support', label: 'Support', icon: LifeBuoy },
-    { id: 'legal', label: 'Legal', icon: FileText },
-    { id: 'feedback', label: 'Feedback', icon: MessageSquare },
+    { id: 'app-demo', label: t('menu.app_demo'), icon: PlayCircle },
+    { id: 'settings', label: t('menu.settings'), icon: Settings },
+    { id: 'support', label: t('menu.support'), icon: LifeBuoy },
+    { id: 'legal', label: t('menu.legal'), icon: FileText },
+    { id: 'feedback', label: t('menu.feedback'), icon: MessageSquare },
   ];
 
   return (
@@ -56,8 +59,8 @@ export const MenuView: React.FC<MenuViewProps> = ({ onNavigate, notificationCoun
        <div className="flex-none pt-6 px-4 pb-4 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-xl z-20 border-b border-slate-200 dark:border-white/5 transition-colors duration-300">
             <div className="flex justify-between items-end">
                 <div>
-                    <h2 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-0.5">Overview</h2>
-                    <h1 className="text-2xl font-bold leading-none tracking-tight text-slate-900 dark:text-white">Menu</h1>
+                    <h2 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-0.5">{t('menu.overview')}</h2>
+                    <h1 className="text-2xl font-bold leading-none tracking-tight text-slate-900 dark:text-white">{t('nav.menu')}</h1>
                 </div>
                 <div className="flex items-center gap-1 pb-1">
                     <button 
@@ -92,10 +95,10 @@ export const MenuView: React.FC<MenuViewProps> = ({ onNavigate, notificationCoun
                     </div>
                     <div className="flex-1">
                         <h3 className="font-bold text-slate-900 dark:text-white text-lg flex items-center gap-2">
-                            {user ? user.name : 'Guest User'}
+                            {user ? user.name : t('menu.guest_user')}
                             {user?.isPro && <Crown size={14} className="text-amber-500" fill="currentColor" />}
                         </h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{user ? user.email : 'Sign in to sync data'}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{user ? user.email : t('menu.sign_in_sync')}</p>
                     </div>
                     <ChevronRight size={20} className="text-slate-300" />
                 </div>
@@ -104,7 +107,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ onNavigate, notificationCoun
 
         {/* Main Features Grid */}
         <div>
-            <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 ml-1">Features</h3>
+            <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 ml-1">{t('menu.features')}</h3>
             <div className="grid grid-cols-2 gap-3">
                 {/* Pro Membership Link (High Visibility) */}
                 {!user?.isPro && (
@@ -117,8 +120,8 @@ export const MenuView: React.FC<MenuViewProps> = ({ onNavigate, notificationCoun
                                 <Crown size={20} fill="currentColor" />
                             </div>
                             <div>
-                                <div className="font-bold text-white">Go Pro</div>
-                                <div className="text-[10px] text-indigo-200">Unlock AI & Premium Features</div>
+                                <div className="font-bold text-white">{t('menu.go_pro')}</div>
+                                <div className="text-[10px] text-indigo-200">{t('menu.unlock_ai')}</div>
                             </div>
                         </div>
                         <ChevronRight size={16} className="text-white/50 group-hover:text-white transition-colors" />
@@ -143,7 +146,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ onNavigate, notificationCoun
 
         {/* App Options List */}
         <div>
-            <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 ml-1">App</h3>
+            <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 ml-1">{t('menu.app')}</h3>
             <div className="space-y-2">
                 {listItems.map((item) => (
                     <button 

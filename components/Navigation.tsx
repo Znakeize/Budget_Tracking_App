@@ -1,5 +1,7 @@
+
 import React from 'react';
 import { Home, Wallet, Plus, Crown, Menu } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface NavigationProps {
   activeTab: string;
@@ -9,12 +11,14 @@ interface NavigationProps {
 }
 
 export const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange, onAdd, badgeTabs = [] }) => {
+  const { t } = useLanguage();
+
   const tabs = [
-    { id: 'dashboard', icon: Home, label: 'Home' },
-    { id: 'budget', icon: Wallet, label: 'Budget' },
+    { id: 'dashboard', icon: Home, label: t('nav.home') },
+    { id: 'budget', icon: Wallet, label: t('nav.budget') },
     { id: 'add', icon: Plus, label: '', isAction: true },
-    { id: 'ai', icon: Crown, label: 'AI' },
-    { id: 'menu', icon: Menu, label: 'Menu' },
+    { id: 'ai', icon: Crown, label: t('nav.ai') },
+    { id: 'menu', icon: Menu, label: t('nav.menu') },
   ];
 
   return (

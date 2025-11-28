@@ -27,6 +27,7 @@ import { EmailPreferencesView } from './views/settings/EmailPreferencesView';
 import { SecurityView } from './views/settings/SecurityView';
 import { AdvancedCalculatorsView } from './views/AdvancedCalculatorsView';
 import { CommunityLinksView } from './views/CommunityLinksView';
+import { AppDemoView } from './views/AppDemoView';
 
 import { NotificationPopup } from './components/ui/NotificationPopup';
 import { NewPeriodModal } from './components/ui/NewPeriodModal';
@@ -35,8 +36,9 @@ import { RolloverModal } from './components/ui/RolloverModal';
 import { BudgetData, ShoppingListData, EventData, SharedGroup, InvestmentGoal, InvestmentAlert, EventMember } from './types';
 import { INITIAL_DATA, SAMPLE_EVENTS, SAMPLE_SHOPPING_LISTS, MOCK_GROUPS, SAMPLE_INVESTMENT_GOALS } from './constants';
 import { getNotifications, calculateTotals, generateId } from './utils/calculations';
+import { LanguageProvider } from './contexts/LanguageContext';
 
-// Moved outside component to prevent ReferenceError
+// Tabs that show the bottom navigation bar
 const showNavTabs = [
   'dashboard', 'budget', 'ai', 'menu', 
   'tools', 'settings', 'history', 'events', 
@@ -45,7 +47,7 @@ const showNavTabs = [
   'support', 'legal', 'feedback', 
   'pro-membership', 'membership-management', 
   'personal-info', 'email-prefs', 'security', 
-  'calculators', 'community-links'
+  'calculators', 'community-links', 'app-demo'
 ];
 
 const getNavTab = (tab: string) => {
@@ -55,8 +57,11 @@ const getNavTab = (tab: string) => {
   return 'menu';
 };
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [navHistory, setNavHistory] = useState<string[]>([]); // Stack-based navigation history
+  const [appDemoTab, setAppDemoTab] = useState('calculators'); // Persist App Demo Tab state
+
   const [budgetData, setBudgetData] = useState<BudgetData>(INITIAL_DATA);
   const [history, setHistory] = useState<BudgetData[]>([]);
   const [shoppingLists, setShoppingLists] = useState<ShoppingListData[]>(SAMPLE_SHOPPING_LISTS);
@@ -102,6 +107,33 @@ const App: React.FC = () => {
       else document.documentElement.classList.remove('dark');
   }, [isDarkMode]);
 
+  // --- Navigation Logic ---
+
+  // Standard navigation (drill-down) - pushes to history
+  const navigate = (tab: string) => {
+      if (tab === activeTab) return;
+      setNavHistory(prev => [...prev, activeTab]);
+      setActiveTab(tab);
+  };
+
+  // Back button - pops from history
+  const goBack = (defaultTab: string = 'dashboard') => {
+      if (navHistory.length > 0) {
+          const newHistory = [...navHistory];
+          const prevTab = newHistory.pop();
+          setNavHistory(newHistory);
+          setActiveTab(prevTab || defaultTab);
+      } else {
+          setActiveTab(defaultTab);
+      }
+  };
+
+  // Root tab switch (bottom nav) - clears history
+  const handleTabSwitch = (tab: string) => {
+      setNavHistory([]);
+      setActiveTab(tab);
+  };
+
   const handleUpdateData = (newData: BudgetData, addToHistory = true) => {
       if (addToHistory) {
           setUndoStack(prev => [...prev, budgetData]);
@@ -129,19 +161,19 @@ const App: React.FC = () => {
   };
 
   const handleProfileClick = () => {
-      setActiveTab('profile');
+      navigate('profile');
   };
 
   const handleLogin = (userData: any) => {
       setUser(userData);
       localStorage.setItem('budget_user_session', JSON.stringify(userData));
-      setActiveTab('dashboard');
+      handleTabSwitch('dashboard');
   };
 
   const handleLogout = () => {
       setUser(null);
       localStorage.removeItem('budget_user_session');
-      setActiveTab('dashboard'); // Or auth
+      handleTabSwitch('dashboard');
   };
 
   const notifications = useMemo(() => {
@@ -156,21 +188,20 @@ const App: React.FC = () => {
   const handleNotificationClick = (item: any) => {
       setShowNotifications(false);
       if (item.category === 'Budget' || item.category === 'Bill' || item.category === 'Debt') {
-          setActiveTab('budget');
-          // Logic to focus specific item would go here if implemented in BudgetView
+          handleTabSwitch('budget');
           if (item.id) {
               const [type, id] = item.id.split('-');
               if (type && id) setBudgetFocus({ section: type.toLowerCase() + 's', itemId: item.id });
           }
       } else if (item.category === 'Shopping') {
-          setActiveTab('shopping-list');
+          navigate('shopping-list');
           if (item.data) setShoppingFocus(item.data);
       } else if (item.category === 'Event') {
-          setActiveTab('events');
+          navigate('events');
       } else if (item.category === 'Investment') {
-          setActiveTab('investments');
+          navigate('investments');
       } else if (item.category === 'Collaboration') {
-          setActiveTab('social');
+          navigate('social');
       }
   };
 
@@ -190,7 +221,7 @@ const App: React.FC = () => {
       alert(`Synced ${budgetData.currencySymbol}${amount} to Budget as "${shopName}"`);
   };
 
-  const handleCreateShoppingList = (name: string, budget: number, members: EventMember[] = [], redirect: boolean = true) => {
+  const handleCreateShoppingList = (name: string, budget: number, members: EventMember[] = []) => {
       const newList: ShoppingListData = {
           id: generateId(),
           name: name,
@@ -211,9 +242,7 @@ const App: React.FC = () => {
           lastModified: Date.now()
       };
       setShoppingLists([...shoppingLists, newList]);
-      if (redirect) {
-        setActiveTab('shopping-list');
-      }
+      navigate('shopping-list');
   };
 
   // Rollover Logic
@@ -258,7 +287,7 @@ const App: React.FC = () => {
       
       setBudgetData(newPeriod);
       setShowNewPeriodModal(false);
-      setActiveTab('dashboard');
+      handleTabSwitch('dashboard');
   };
 
   const handleViewFeature = (featureId: string) => {
@@ -282,12 +311,12 @@ const App: React.FC = () => {
               }} 
               onOpenFeature={(fid) => {
                   setFeatureViewId(null);
-                  if (fid === 'simulator') setActiveTab('simulator');
-                  else if (fid === 'analysis') setActiveTab('analysis');
-                  else if (fid === 'investments') setActiveTab('investments');
-                  else if (fid === 'events') setActiveTab('events');
-                  else if (fid === 'social') setActiveTab('social');
-                  else if (fid === 'business') setActiveTab('calculators'); // Leads to advanced calc view with business tab active logic needed
+                  if (fid === 'simulator') navigate('simulator');
+                  else if (fid === 'analysis') navigate('analysis');
+                  else if (fid === 'investments') navigate('investments');
+                  else if (fid === 'events') navigate('events');
+                  else if (fid === 'social') navigate('social');
+                  else if (fid === 'business') navigate('calculators'); // Leads to advanced calc view with business tab active logic needed
               }}
           />;
       }
@@ -296,7 +325,7 @@ const App: React.FC = () => {
           case 'dashboard':
               return <DashboardView 
                   data={budgetData} 
-                  setTab={setActiveTab} 
+                  setTab={navigate} 
                   notificationCount={notifications.length} 
                   onToggleNotifications={() => setShowNotifications(true)}
                   onProfileClick={handleProfileClick}
@@ -314,7 +343,7 @@ const App: React.FC = () => {
                   focusTarget={budgetFocus}
                   clearFocusTarget={() => setBudgetFocus(null)}
                   onProfileClick={handleProfileClick}
-                  onCreateShoppingList={(name, budget) => handleCreateShoppingList(name, budget, [], false)}
+                  onCreateShoppingList={handleCreateShoppingList}
                   onAddInvestmentGoal={(goal) => setInvestmentGoals([...investmentGoals, goal])}
                   onGoalUpdate={(goal) => {
                       setBudgetData(prev => ({
@@ -324,9 +353,8 @@ const App: React.FC = () => {
                   }}
               />;
           case 'add':
-              // This is usually handled by the modal logic in Navigation or BudgetView, 
-              // but if it's a dedicated view:
-              setActiveTab('budget'); // redirect for now
+              // Normally not reached directly, button opens modal
+              handleTabSwitch('budget'); 
               return null;
           case 'ai':
               return <AIView 
@@ -334,24 +362,24 @@ const App: React.FC = () => {
                   currencySymbol={budgetData.currencySymbol}
                   notificationCount={notifications.length}
                   onToggleNotifications={() => setShowNotifications(true)}
-                  onViewAnalysis={() => setActiveTab('analysis')}
-                  onViewInvestments={() => setActiveTab('investments')}
-                  onViewEvents={() => setActiveTab('events')}
-                  onViewSimulator={() => setActiveTab('simulator')}
-                  onViewSocial={() => setActiveTab('social')}
+                  onViewAnalysis={() => navigate('analysis')}
+                  onViewInvestments={() => navigate('investments')}
+                  onViewEvents={() => navigate('events')}
+                  onViewSimulator={() => navigate('simulator')}
+                  onViewSocial={() => navigate('social')}
                   onProfileClick={handleProfileClick}
                   user={user}
-                  onNavigate={setActiveTab}
+                  onNavigate={navigate}
                   onViewFeature={setFeatureViewId}
               />;
           case 'menu':
               return <MenuView 
-                  onNavigate={setActiveTab} 
+                  onNavigate={navigate} 
                   notificationCount={notifications.length} 
                   onToggleNotifications={() => setShowNotifications(true)}
                   onProfileClick={handleProfileClick}
               />;
-          case 'tools': // From menu
+          case 'tools':
               return <ToolsView 
                   data={budgetData} 
                   updateData={handleUpdateData} 
@@ -360,7 +388,7 @@ const App: React.FC = () => {
                   toggleTheme={() => setIsDarkMode(!isDarkMode)}
                   notificationCount={notifications.length}
                   onToggleNotifications={() => setShowNotifications(true)}
-                  onBack={() => setActiveTab('menu')}
+                  onBack={() => goBack('menu')}
               />;
           case 'settings':
               return <ToolsView 
@@ -371,7 +399,7 @@ const App: React.FC = () => {
                   toggleTheme={() => setIsDarkMode(!isDarkMode)}
                   notificationCount={notifications.length}
                   onToggleNotifications={() => setShowNotifications(true)}
-                  onBack={() => setActiveTab('menu')}
+                  onBack={() => goBack('menu')}
                   initialTab="settings"
               />;
           case 'history':
@@ -381,7 +409,7 @@ const App: React.FC = () => {
                   onLoadPeriod={(id) => {
                       const period = history.find(h => h.id === id);
                       if (period) setBudgetData(period);
-                      setActiveTab('dashboard');
+                      handleTabSwitch('dashboard');
                   }}
                   onCreateNewPeriod={handleCreateNewPeriod}
                   onDeletePeriod={(id) => setHistory(history.filter(h => h.id !== id))}
@@ -398,14 +426,14 @@ const App: React.FC = () => {
                   resetData={() => setBudgetData(INITIAL_DATA)}
                   isDarkMode={isDarkMode}
                   toggleTheme={() => setIsDarkMode(!isDarkMode)}
-                  onBack={() => setActiveTab('menu')}
+                  onBack={() => goBack('menu')}
               />;
           case 'events':
               return <EventsView 
                   events={events}
                   onUpdateEvents={setEvents}
                   currencySymbol={budgetData.currencySymbol}
-                  onBack={() => setActiveTab('ai')}
+                  onBack={() => goBack('menu')}
                   onProfileClick={handleProfileClick}
                   focusEventId={eventFocus}
                   onCreateShoppingList={handleCreateShoppingList}
@@ -414,14 +442,14 @@ const App: React.FC = () => {
               return <ProfileView 
                   user={user} 
                   onLogout={handleLogout} 
-                  onBack={() => setActiveTab('dashboard')}
-                  onNavigate={setActiveTab}
+                  onBack={() => goBack('dashboard')}
+                  onNavigate={navigate}
                   notificationCount={notifications.length}
                   onToggleNotifications={() => setShowNotifications(true)}
               />;
           case 'shopping-list':
               return <ShoppingListView 
-                  onBack={() => setActiveTab('menu')} 
+                  onBack={() => goBack('menu')} 
                   onProfileClick={handleProfileClick} 
                   notificationCount={notifications.length} 
                   onToggleNotifications={() => setShowNotifications(true)} 
@@ -434,7 +462,7 @@ const App: React.FC = () => {
               />;
           case 'social':
               return <CollaborativeView 
-                  onBack={() => setActiveTab('ai')}
+                  onBack={() => goBack('menu')}
                   onProfileClick={handleProfileClick}
                   groups={groups}
                   onUpdateGroups={setGroups}
@@ -452,7 +480,7 @@ const App: React.FC = () => {
               return <InvestmentAnalysisView 
                   history={[...history, budgetData]} 
                   currencySymbol={budgetData.currencySymbol}
-                  onBack={() => setActiveTab('ai')}
+                  onBack={() => goBack('menu')}
                   onProfileClick={handleProfileClick}
                   onUpdateData={handleUpdateData}
                   investmentGoals={investmentGoals}
@@ -466,7 +494,7 @@ const App: React.FC = () => {
               return <LifeSimulatorView 
                   currentData={budgetData}
                   currencySymbol={budgetData.currencySymbol}
-                  onBack={() => setActiveTab('ai')}
+                  onBack={() => goBack('ai')}
                   onApplyScenario={(changes) => handleUpdateData({...budgetData, ...changes})}
                   onProfileClick={handleProfileClick}
               />;
@@ -476,18 +504,18 @@ const App: React.FC = () => {
                   currencySymbol={budgetData.currencySymbol}
                   notificationCount={notifications.length}
                   onToggleNotifications={() => setShowNotifications(true)}
-                  onBack={() => setActiveTab('ai')}
+                  onBack={() => goBack('ai')}
                   onProfileClick={handleProfileClick}
               />;
           case 'support':
-              return <SupportView onBack={() => setActiveTab('menu')} />;
+              return <SupportView onBack={() => goBack('menu')} />;
           case 'legal':
-              return <LegalView onBack={() => setActiveTab('menu')} />;
+              return <LegalView onBack={() => goBack('menu')} />;
           case 'feedback':
-              return <FeedbackView onBack={() => setActiveTab('menu')} />;
+              return <FeedbackView onBack={() => goBack('menu')} />;
           case 'pro-membership':
               return <ProMembershipView 
-                  onBack={() => setActiveTab('profile')} 
+                  onBack={() => goBack('profile')} 
                   onUpgrade={() => {
                       const updatedUser = { ...user, isPro: true };
                       setUser(updatedUser);
@@ -505,7 +533,7 @@ const App: React.FC = () => {
           case 'membership-management':
               return <MembershipManagementView 
                   user={user}
-                  onBack={() => setActiveTab('profile')}
+                  onBack={() => goBack('profile')}
                   onCancelSubscription={() => {
                       const updatedUser = { ...user, isPro: false };
                       setUser(updatedUser);
@@ -516,7 +544,7 @@ const App: React.FC = () => {
                       setUser(updated);
                       localStorage.setItem('budget_user_session', JSON.stringify(updated));
                   }}
-                  onNavigate={setActiveTab}
+                  onNavigate={navigate}
               />;
           case 'personal-info':
               return <PersonalInfoView 
@@ -525,35 +553,43 @@ const App: React.FC = () => {
                       setUser(updated);
                       localStorage.setItem('budget_user_session', JSON.stringify(updated));
                   }}
-                  onBack={() => setActiveTab('profile')}
+                  onBack={() => goBack('profile')}
                   onProfileClick={handleProfileClick}
               />;
           case 'email-prefs':
               return <EmailPreferencesView 
-                  onBack={() => setActiveTab('profile')}
+                  onBack={() => goBack('profile')}
                   onProfileClick={handleProfileClick}
               />;
           case 'security':
               return <SecurityView 
-                  onBack={() => setActiveTab('profile')}
+                  onBack={() => goBack('profile')}
                   onProfileClick={handleProfileClick}
               />;
           case 'calculators':
               return <AdvancedCalculatorsView 
-                  onBack={() => setActiveTab('menu')}
+                  onBack={() => goBack('menu')}
                   currencySymbol={budgetData.currencySymbol}
                   onProfileClick={handleProfileClick}
                   budgetData={budgetData}
                   user={user}
-                  onNavigate={setActiveTab}
+                  onNavigate={navigate}
                   onViewFeature={setFeatureViewId}
               />;
           case 'community-links':
-              return <CommunityLinksView onBack={() => setActiveTab('menu')} />;
+              return <CommunityLinksView onBack={() => goBack('menu')} />;
+          case 'app-demo':
+              return <AppDemoView 
+                  onBack={() => goBack('menu')} 
+                  onNavigate={(tab) => navigate(tab)}
+                  onProfileClick={handleProfileClick}
+                  activeTab={appDemoTab}
+                  onTabChange={setAppDemoTab}
+              />;
           default:
               return <DashboardView 
                   data={budgetData} 
-                  setTab={setActiveTab} 
+                  setTab={navigate} 
                   notificationCount={notifications.length} 
                   onToggleNotifications={() => setShowNotifications(true)}
                   onProfileClick={handleProfileClick}
@@ -569,7 +605,7 @@ const App: React.FC = () => {
       {user && showNavTabs.includes(activeTab) && !featureViewId && (
           <Navigation 
               activeTab={getNavTab(activeTab)} 
-              onTabChange={setActiveTab} 
+              onTabChange={handleTabSwitch} 
               onAdd={() => {
                   const totals = calculateTotals(budgetData);
                   setCalculatedRollover(totals.leftToSpend);
@@ -608,6 +644,14 @@ const App: React.FC = () => {
           currencySymbol={budgetData.currencySymbol}
       />
     </Layout>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
   );
 };
 

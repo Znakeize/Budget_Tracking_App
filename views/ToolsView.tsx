@@ -13,6 +13,8 @@ import {
   CreditCard, Activity, RefreshCcw, Cloud, Lock, Database, RefreshCw, Server, Loader2, HardDrive
 } from 'lucide-react';
 import { calculateTotals } from '../utils/calculations';
+import { useLanguage } from '../contexts/LanguageContext';
+import { Language } from '../utils/translations';
 
 interface ToolsViewProps {
   data: BudgetData;
@@ -46,6 +48,7 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
   const [user, setUser] = useState<UserProfile | null>(null);
   const viewMode = initialTab;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { language, setLanguage } = useLanguage();
 
   // Settings State
   const [activeSetting, setActiveSetting] = useState<'notifications' | 'security' | 'language' | 'currency' | 'period' | null>(null);
@@ -70,7 +73,6 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
   });
 
   const [securitySettings, setSecuritySettings] = useState({ biometrics: false });
-  const [language, setLanguage] = useState('English');
 
   // Cloud Backup State
   const [isBackingUp, setIsBackingUp] = useState(false);
@@ -336,7 +338,7 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
          break;
       case 'language':
           title = 'Language';
-          const langs = ['English', 'Spanish', 'French', 'German', 'Chinese', 'Japanese'];
+          const langs: Language[] = ['English', 'Spanish', 'French', 'German', 'Chinese', 'Japanese'];
           content = (
               <div className="space-y-2">
                   {langs.map(l => (
