@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card } from '../components/ui/Card';
-import { ChevronLeft, Check, Star, Zap, Shield, Crown, CheckCircle2, X, Lock, RefreshCcw, TrendingUp, PieChart, CalendarHeart, Users, ArrowRight, Loader2, FileText, Server, DownloadCloud } from 'lucide-react';
+import { ChevronLeft, Check, Star, Zap, Shield, Crown, CheckCircle2, X, Lock, RefreshCcw, TrendingUp, PieChart, CalendarHeart, Users, ArrowRight, Loader2, FileText, Server, DownloadCloud, Calculator, Briefcase } from 'lucide-react';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
 import { PaymentGatewayModal } from '../components/ui/PaymentGatewayModal';
 
@@ -30,6 +30,7 @@ export const ProMembershipView: React.FC<ProMembershipViewProps> = ({ onBack, on
   const features = [
     { icon: Zap, text: "Unlimited AI Financial Analysis", desc: "Get personalized insights powered by Gemini 2.5" },
     { icon: Crown, text: "Advanced Life Simulator", desc: "Unlock all scenario modules (Startup, Retirement, etc.)" },
+    { icon: Calculator, text: "Advanced Business Tools", desc: "Corporate Tax, VAT & Forex Calculators" },
     { icon: Shield, text: "Cloud Backup & Sync", desc: "Securely sync data across multiple devices" },
     { icon: Star, text: "Unlimited History", desc: "Access your entire financial timeline forever" },
     { icon: CheckCircle2, text: "Priority Support", desc: "Get your questions answered first" },
@@ -41,6 +42,7 @@ export const ProMembershipView: React.FC<ProMembershipViewProps> = ({ onBack, on
       { id: 'investments', title: 'Investments', price: '1.99', icon: PieChart, color: 'text-violet-500', desc: "Track portfolio growth, asset allocation, and net worth." },
       { id: 'events', title: 'Event Planner', price: '1.99', icon: CalendarHeart, color: 'text-pink-500', desc: "Dedicated tools for weddings, trips, and large projects." },
       { id: 'social', title: 'Collaboration', price: '1.99', icon: Users, color: 'text-amber-500', desc: "Share budgets, split expenses, and track group spending." },
+      { id: 'business', title: 'Business Suite', price: '1.99', icon: Briefcase, color: 'text-indigo-500', desc: "Corporate Tax, VAT & Forex tools for professionals." },
   ];
 
   const plans = [
@@ -105,6 +107,36 @@ export const ProMembershipView: React.FC<ProMembershipViewProps> = ({ onBack, on
   const hasFeature = (id: string) => {
       return user?.isPro || (user?.unlockedFeatures && user.unlockedFeatures.includes(id));
   };
+
+  // Derived success details for the modal
+  const successDetails = useMemo(() => {
+      if (successType === 'pro') {
+          return {
+              title: 'Pro Membership',
+              color: 'text-amber-500',
+              bgColor: 'bg-amber-500',
+              icon: Crown
+          };
+      }
+      
+      const feat = individualFeatures.find(f => f.id === paymentContext?.id);
+      if (feat) {
+          const colorName = feat.color.split('-')[1]; // e.g. fuchsia from text-fuchsia-500
+          return {
+              title: feat.title,
+              color: feat.color,
+              bgColor: `bg-${colorName}-500`,
+              icon: feat.icon
+          };
+      }
+      
+      return {
+          title: 'Premium Feature',
+          color: 'text-emerald-500',
+          bgColor: 'bg-emerald-500',
+          icon: CheckCircle2
+      };
+  }, [successType, paymentContext]);
 
   return (
     <div className="flex flex-col h-full relative bg-slate-50 dark:bg-slate-900">
@@ -311,24 +343,21 @@ export const ProMembershipView: React.FC<ProMembershipViewProps> = ({ onBack, on
        {showSuccess && (
            <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
                <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-3xl p-8 text-center relative animate-in zoom-in-95 duration-300">
-                   <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-500/20">
-                       <Check size={40} strokeWidth={3} />
+                   <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg ${successDetails.bgColor} bg-opacity-20`}>
+                       <successDetails.icon size={40} strokeWidth={3} className={successDetails.color} />
                    </div>
                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-                       {successType === 'pro' ? 'Welcome to Pro!' : 'Feature Unlocked!'}
+                       You're all set!
                    </h2>
                    <p className="text-slate-500 dark:text-slate-400 text-sm mb-8">
-                       {successType === 'pro' 
-                        ? "Your subscription is active. You now have full access to all AI features and unlimited history."
-                        : "You now have access to this feature."}
+                       You have successfully subscribed to {successDetails.title}.
                    </p>
                    <button 
                         onClick={handleSuccessClose}
-                        className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/30 transition-all active:scale-95"
+                        className={`w-full py-3.5 text-white font-bold rounded-xl shadow-lg transition-all active:scale-95 ${successDetails.bgColor}`}
                    >
                        Continue
                    </button>
-                   <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-400 to-teal-500 rounded-t-3xl"></div>
                </div>
            </div>
        )}

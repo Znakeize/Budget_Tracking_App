@@ -480,7 +480,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({
                               {['3m', '6m', 'ytd', 'all'].map(tf => (
                                   <button
                                       key={tf}
-                                      onClick={() => setReportTimeframe(tf as any)}
+                                      onClick={() => setReportTimeframe(tf as '3m' | '6m' | 'ytd' | 'all')}
                                       className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${reportTimeframe === tf ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                                   >
                                       {tf === '3m' ? '3 Months' : tf === '6m' ? '6 Months' : tf === 'ytd' ? 'Year to Date' : 'All Time'}
@@ -509,7 +509,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({
                                       <button onClick={clearAllCats} className="text-xs font-bold text-slate-400">Clear</button>
                                   </div>
                                   <div className="space-y-1">
-                                      {Array.from(new Set(history.flatMap(h => h.expenses.map(e => e.name)))).map(cat => (
+                                      {(Array.from(new Set(history.flatMap(h => h.expenses.map(e => e.name)))) as string[]).map(cat => (
                                           <div key={cat} onClick={() => toggleCategory(cat)} className="flex items-center gap-2 p-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-lg cursor-pointer">
                                               {reportCategories.includes(cat) ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} className="text-slate-300" />}
                                               <span className="text-sm text-slate-700 dark:text-slate-300">{cat}</span>
@@ -532,7 +532,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({
                   ].map((rpt) => (
                       <div 
                           key={rpt.id}
-                          onClick={() => setSelectedReportType(rpt.id as any)}
+                          onClick={() => setSelectedReportType(rpt.id as 'summary' | 'category' | 'comparison' | 'tax')}
                           className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${selectedReportType === rpt.id ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-indigo-300'}`}
                       >
                           <rpt.icon size={24} className={`mb-2 ${selectedReportType === rpt.id ? 'text-indigo-600' : 'text-slate-400'}`} />

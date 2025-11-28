@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Layout } from './components/ui/Layout';
 import { Navigation } from './components/Navigation';
@@ -35,25 +34,6 @@ import { RolloverModal } from './components/ui/RolloverModal';
 import { BudgetData, ShoppingListData, EventData, SharedGroup, InvestmentGoal, InvestmentAlert, EventMember } from './types';
 import { INITIAL_DATA, SAMPLE_EVENTS, SAMPLE_SHOPPING_LISTS, MOCK_GROUPS, SAMPLE_INVESTMENT_GOALS } from './constants';
 import { getNotifications, calculateTotals, generateId } from './utils/calculations';
-
-// Moved outside component to prevent ReferenceError
-const showNavTabs = [
-  'dashboard', 'budget', 'ai', 'menu', 
-  'tools', 'settings', 'history', 'events', 
-  'profile', 'shopping-list', 'social', 
-  'investments', 'simulator', 'analysis', 
-  'support', 'legal', 'feedback', 
-  'pro-membership', 'membership-management', 
-  'personal-info', 'email-prefs', 'security', 
-  'calculators', 'community-links'
-];
-
-const getNavTab = (tab: string) => {
-  if (['dashboard'].includes(tab)) return 'dashboard';
-  if (['budget'].includes(tab)) return 'budget';
-  if (['ai', 'analysis', 'investments', 'events', 'simulator', 'social'].includes(tab)) return 'ai';
-  return 'menu';
-};
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -190,7 +170,7 @@ const App: React.FC = () => {
       alert(`Synced ${budgetData.currencySymbol}${amount} to Budget as "${shopName}"`);
   };
 
-  const handleCreateShoppingList = (name: string, budget: number, members: EventMember[] = [], redirect: boolean = true) => {
+  const handleCreateShoppingList = (name: string, budget: number, members: EventMember[] = []) => {
       const newList: ShoppingListData = {
           id: generateId(),
           name: name,
@@ -211,9 +191,7 @@ const App: React.FC = () => {
           lastModified: Date.now()
       };
       setShoppingLists([...shoppingLists, newList]);
-      if (redirect) {
-        setActiveTab('shopping-list');
-      }
+      setActiveTab('shopping-list');
   };
 
   // Rollover Logic
@@ -314,7 +292,7 @@ const App: React.FC = () => {
                   focusTarget={budgetFocus}
                   clearFocusTarget={() => setBudgetFocus(null)}
                   onProfileClick={handleProfileClick}
-                  onCreateShoppingList={(name, budget) => handleCreateShoppingList(name, budget, [], false)}
+                  onCreateShoppingList={handleCreateShoppingList}
                   onAddInvestmentGoal={(goal) => setInvestmentGoals([...investmentGoals, goal])}
                   onGoalUpdate={(goal) => {
                       setBudgetData(prev => ({
@@ -405,7 +383,7 @@ const App: React.FC = () => {
                   events={events}
                   onUpdateEvents={setEvents}
                   currencySymbol={budgetData.currencySymbol}
-                  onBack={() => setActiveTab('ai')}
+                  onBack={() => setActiveTab('menu')}
                   onProfileClick={handleProfileClick}
                   focusEventId={eventFocus}
                   onCreateShoppingList={handleCreateShoppingList}
@@ -434,7 +412,7 @@ const App: React.FC = () => {
               />;
           case 'social':
               return <CollaborativeView 
-                  onBack={() => setActiveTab('ai')}
+                  onBack={() => setActiveTab('menu')}
                   onProfileClick={handleProfileClick}
                   groups={groups}
                   onUpdateGroups={setGroups}
@@ -452,7 +430,7 @@ const App: React.FC = () => {
               return <InvestmentAnalysisView 
                   history={[...history, budgetData]} 
                   currencySymbol={budgetData.currencySymbol}
-                  onBack={() => setActiveTab('ai')}
+                  onBack={() => setActiveTab('menu')}
                   onProfileClick={handleProfileClick}
                   onUpdateData={handleUpdateData}
                   investmentGoals={investmentGoals}
@@ -560,6 +538,9 @@ const App: React.FC = () => {
               />;
       }
   };
+
+  const showNavTabs = ['dashboard', 'budget', 'ai', 'menu'];
+  const getNavTab = (tab: string) => tab;
 
   return (
     <Layout>

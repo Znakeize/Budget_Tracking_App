@@ -147,13 +147,27 @@ export const MembershipManagementView: React.FC<MembershipManagementViewProps> =
       }
   };
 
+  const handleUnsubscribeFeature = (featureId: string) => {
+      if (window.confirm(`Are you sure you want to cancel the ${featureId.replace('-', ' ')} subscription? This will remove it from your owned modules.`)) {
+          setLoadingAction(`cancel-${featureId}`);
+          setTimeout(() => {
+              if (onUpdateUser) {
+                  const updatedFeatures = (user.unlockedFeatures || []).filter((f: string) => f !== featureId);
+                  onUpdateUser({ ...user, unlockedFeatures: updatedFeatures });
+              }
+              setLoadingAction(null);
+          }, 1000);
+      }
+  };
+
   // Map feature ID to app tab ID
   const featureMap: Record<string, string> = {
       'simulator': 'simulator',
       'analysis': 'analysis',
       'investments': 'investments',
       'events': 'events',
-      'social': 'social'
+      'social': 'social',
+      'business': 'calculators'
   };
 
   return (
@@ -276,12 +290,22 @@ export const MembershipManagementView: React.FC<MembershipManagementViewProps> =
                                                <p className="text-[10px] text-slate-500">Active Subscription • Monthly</p>
                                            </div>
                                        </div>
-                                       <button 
-                                            onClick={() => onNavigate(featureMap[feat] || 'dashboard')}
-                                            className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-indigo-600 hover:text-white text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold transition-all"
-                                       >
-                                           Open <ExternalLink size={12} />
-                                       </button>
+                                       <div className="flex items-center gap-2">
+                                            <button 
+                                                type="button"
+                                                onClick={() => handleUnsubscribeFeature(feat)}
+                                                disabled={loadingAction === `cancel-${feat}`}
+                                                className="px-3 py-1.5 bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg text-[10px] font-bold transition-all disabled:opacity-50 flex items-center justify-center min-w-[80px]"
+                                            >
+                                                {loadingAction === `cancel-${feat}` ? <Loader2 size={12} className="animate-spin" /> : 'Unsubscribe'}
+                                            </button>
+                                            <button 
+                                                    onClick={() => onNavigate(featureMap[feat] || 'dashboard')}
+                                                    className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-indigo-600 hover:text-white text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold transition-all"
+                                            >
+                                                Open <ExternalLink size={12} />
+                                            </button>
+                                       </div>
                                    </div>
                                ))}
                            </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import { BudgetData } from '../types';
@@ -40,7 +40,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   onToggleNotifications,
   onBack
 }) => {
-  const sortedHistory = [...history].sort((a, b) => b.created - a.created);
+  const sortedHistory = useMemo(() => {
+      // Combine current data with history, ensuring no duplicates by ID
+      const all = [currentData, ...history.filter(h => h.id !== currentData.id)];
+      return all.sort((a, b) => b.created - a.created);
+  }, [currentData, history]);
+
   const [user, setUser] = useState<UserProfile | null>(null);
 
   useEffect(() => {
@@ -91,9 +96,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         
         {/* History List Header */}
         <div className="flex items-center justify-between mb-1">
-             <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Past Budgets</h3>
+             <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">All Budgets</h3>
              <button 
-                onClick={onCreateNewPeriod}
+                type="button"
+                onClick={(e) => {
+                    e.preventDefault();
+                    onCreateNewPeriod();
+                }}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 active:scale-95 transition-transform"
             >
                 <Plus size={14} /> New
@@ -115,7 +124,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           ))}
           {sortedHistory.length === 0 && (
               <div className="text-center py-10 text-slate-400">
-                  <p>No history yet.</p>
+                  <p>No budget periods found.</p>
               </div>
           )}
         </div>
@@ -268,17 +277,19 @@ const HistoryCard: React.FC<HistoryCardProps> = ({ period, isActive, onLoad, onD
                             </button>
                         )}
                         
-                         <button 
-                            type="button"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onDelete();
-                            }}
-                            className="p-1.5 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/20 transition-colors"
-                            title="Delete Period"
-                        >
-                            <Trash2 size={16} />
-                        </button>
+                        {!isActive && (
+                             <button 
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onDelete();
+                                }}
+                                className="p-1.5 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/20 transition-colors"
+                                title="Delete Period"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -320,7 +331,7 @@ const HistoryCard: React.FC<HistoryCardProps> = ({ period, isActive, onLoad, onD
                 {/* Expanded Details Content */}
                 {expanded && (
                     <div className="space-y-4 pt-2 animate-in slide-in-from-top-2 duration-300">
-                        {/* Simplified content for brevity in XML, assumed similar logic */}
+                        {/* Rollover Info */}
                         <div className="flex justify-between items-center text-xs bg-indigo-100 dark:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-500/20 p-2 rounded">
                              <span className="font-bold text-indigo-700 dark:text-indigo-300">↩️ Rollover from Previous Period</span>
                              <span className="font-mono font-bold text-slate-900 dark:text-white">{formatCurrency(period.rollover || 0, period.currencySymbol)}</span>

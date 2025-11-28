@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { BudgetData, InvestmentGoal, GoalItem } from '../types';
 import { formatCurrency, generateId } from '../utils/calculations';
 import { 
@@ -72,6 +72,14 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
   const [expandedInvestmentId, setExpandedInvestmentId] = useState<string | null>(null);
   const [goalToConfirm, setGoalToConfirm] = useState<number | null>(null);
   const [addingCollection, setAddingCollection] = useState<keyof BudgetData | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to top when changing sections
+  useEffect(() => {
+    if (scrollRef.current) {
+        scrollRef.current.scrollTop = 0;
+    }
+  }, [activeSection]);
 
   // Deep Link Handling
   useEffect(() => {
@@ -425,7 +433,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-28">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-28">
         {!activeSection ? (
             /* Card Grid View */
             <div className="grid grid-cols-1 md:grid-cols-2 gap-y-14 gap-x-6 pt-8 pb-10 px-2">

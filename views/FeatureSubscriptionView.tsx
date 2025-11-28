@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Card } from '../components/ui/Card';
-import { ChevronLeft, Check, Shield, RefreshCcw, TrendingUp, PieChart, CalendarHeart, Users, CheckCircle } from 'lucide-react';
+import { ChevronLeft, Check, Shield, RefreshCcw, TrendingUp, PieChart, CalendarHeart, Users, CheckCircle, Briefcase } from 'lucide-react';
 import { PaymentGatewayModal } from '../components/ui/PaymentGatewayModal';
 
 interface FeatureSubscriptionViewProps {
@@ -81,6 +81,20 @@ const FEATURE_DATA: Record<string, any> = {
             "Real-time Sync",
             "Debt Settlement Tracking"
         ]
+    },
+    'business': {
+        title: 'Business Suite',
+        icon: Briefcase,
+        color: 'text-indigo-500',
+        bgColor: 'bg-indigo-500',
+        gradient: 'from-indigo-600 to-blue-700',
+        description: "Professional tools for corporate tax, VAT, and forex planning.",
+        benefits: [
+            "Corporate Tax Calculator",
+            "VAT & GST Invoicing Tool",
+            "Forex Rate Analyzer",
+            "Export Business Reports"
+        ]
     }
 };
 
@@ -114,7 +128,7 @@ export const FeatureSubscriptionView: React.FC<FeatureSubscriptionViewProps> = (
             </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto hide-scrollbar pb-56">
+        <div className="flex-1 overflow-y-auto hide-scrollbar pb-32">
             
             {/* Hero */}
             <div className={`relative h-80 bg-gradient-to-br ${feature.gradient} text-white p-8 flex flex-col justify-end pb-12 overflow-hidden`}>
@@ -174,8 +188,8 @@ export const FeatureSubscriptionView: React.FC<FeatureSubscriptionViewProps> = (
             </div>
         </div>
 
-        {/* Fixed Bottom Button - Z-index 60 to sit above Navigation bar (z-50) with large padding to push button up */}
-        <div className="fixed bottom-0 left-0 right-0 z-[60] p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 pb-24 safe-area-bottom max-w-md mx-auto">
+        {/* Fixed Bottom Button - Adjusted padding for when nav is hidden */}
+        <div className="fixed bottom-0 left-0 right-0 z-[60] p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 pb-8 safe-area-bottom max-w-md mx-auto">
             <button 
                 onClick={() => setShowPayment(true)}
                 className={`w-full py-4 rounded-xl font-bold text-white shadow-lg active:scale-[0.98] transition-all bg-gradient-to-r ${feature.gradient}`}

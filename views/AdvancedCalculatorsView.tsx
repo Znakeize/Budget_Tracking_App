@@ -3,402 +3,876 @@ import React, { useState, useMemo } from 'react';
 import { 
   ChevronLeft, Calculator, TrendingUp, DollarSign, 
   Landmark, PieChart, RefreshCcw, Percent, BarChart3,
-  ArrowRight, Download, Table as TableIcon, Activity, Zap, Crown
+  ArrowRight, Download, Table as TableIcon, Activity, Zap, Crown,
+  Settings, Info, Globe, ArrowLeftRight, Coins, Receipt, Briefcase,
+  Home, Car, CreditCard, Plane, Smile, Coffee, Gem, Calendar, Clock, Lock
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
-import { Line, Doughnut } from 'react-chartjs-2';
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, Filler } from 'chart.js';
+import { Line, Doughnut, Bar } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, Filler, BarElement } from 'chart.js';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
+import { TaxPlannerView } from './TaxPlannerView';
+import { BudgetData } from '../types';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, Filler);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, Filler, BarElement);
 
 interface AdvancedCalculatorsViewProps {
   onBack: () => void;
   currencySymbol: string;
   onProfileClick: () => void;
+  budgetData?: BudgetData;
+  user?: any;
+  onNavigate?: (tab: string) => void;
+  onViewFeature?: (featureId: string) => void;
 }
 
-type ModuleType = 'investment' | 'loan' | 'retirement' | 'tax';
+type ModuleType = 'investment' | 'loan' | 'retirement' | 'tax' | 'business' | 'forex' | 'vat' | null;
 
-export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = ({ onBack, currencySymbol, onProfileClick }) => {
-  const [activeModule, setActiveModule] = useState<ModuleType>('investment');
-  const [showTable, setShowTable] = useState(false);
+export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = ({ 
+  onBack, currencySymbol, onProfileClick, budgetData, user, onNavigate, onViewFeature 
+}) => {
+  const [activeModule, setActiveModule] = useState<ModuleType>(null); // Null shows the dashboard
 
   // --- Inputs State ---
-  const [invInputs, setInvInputs] = useState({ principal: 5000, monthly: 500, rate: 8, years: 10, inflation: 2 });
-  const [loanInputs, setLoanInputs] = useState({ amount: 50000, rate: 5.5, tenure: 5 }); // Tenure in years
-  const [retInputs, setRetInputs] = useState({ currentAge: 30, retAge: 65, savings: 20000, monthlySave: 1000, monthlySpend: 3000, inflation: 3 });
-  const [taxInputs, setTaxInputs] = useState({ income: 60000, deductions: 12000, rate: 20 });
+  const [invInputs, setInvInputs] = useState({ 
+      principal: 5000, 
+      contribution: 500, 
+      frequency: 'monthly', // weekly, bi-weekly, monthly, annually
+      rate: 8, 
+      years: 10, 
+      inflation: 2.5, 
+      stepUp: 0,
+      type: 'sip' // sip or lumpsum
+  });
+  
+  const [loanInputs, setLoanInputs] = useState({ amount: 50000, rate: 5.5, tenure: 5, extraPayment: 0, loanType: 'personal' }); 
+  const [retInputs, setRetInputs] = useState({ currentAge: 30, retAge: 65, savings: 20000, monthlySave: 1000, monthlySpend: 3000, inflation: 3, preRetReturn: 8, postRetReturn: 5, lifeExpectancy: 85 });
+  const [forexInputs, setForexInputs] = useState({ amount: 1000, from: 'USD', to: 'EUR', rate: 0.92, fee: 2.0 });
 
-  // --- Scenarios (Advanced Feature) ---
-  const [scenarioAdj, setScenarioAdj] = useState(0); // Generic adjustment slider (-50% to +50%)
+  // --- Calculations Logic ---
 
-  // --- Calculations ---
-
-  // 1. Investment Calc
+  // Investment
   const investmentResults = useMemo(() => {
       const dataPoints = [];
-      const labels = [];
       let totalInvested = invInputs.principal;
-      let totalValue = invInputs.principal;
+      let nominalValue = invInputs.principal;
+      let currentContribution = invInputs.type === 'sip' ? invInputs.contribution : 0;
       
-      // Scenario adjustment applies to monthly contribution
-      const adjustedMonthly = invInputs.monthly * (1 + scenarioAdj/100);
+      const periodsMap: Record<string, number> = { 'weekly': 52, 'bi-weekly': 26, 'monthly': 12, 'annually': 1 };
+      const ppy = periodsMap[invInputs.frequency] || 12;
+      const totalPeriods = invInputs.years * ppy;
+      const ratePerPeriod = invInputs.rate / 100 / ppy;
 
-      for(let y = 0; y <= invInputs.years; y++) {
-          labels.push(`Year ${y}`);
-          if (y > 0) {
-              for(let m=0; m<12; m++) {
-                  totalValue = (totalValue + adjustedMonthly) * (1 + invInputs.rate/100/12);
-                  totalInvested += adjustedMonthly;
+      for (let i = 1; i <= totalPeriods; i++) {
+          // Interest
+          nominalValue = nominalValue * (1 + ratePerPeriod);
+          
+          // Contribution
+          if (invInputs.type === 'sip') {
+              nominalValue += currentContribution;
+              totalInvested += currentContribution;
+          }
+
+          // Annual Step Up (Check if we completed a year)
+          if (i % ppy === 0 && invInputs.stepUp > 0 && invInputs.type === 'sip') {
+              currentContribution = currentContribution * (1 + invInputs.stepUp / 100);
+          }
+          
+          // Record data points (Yearly)
+          if (i % ppy === 0) {
+              dataPoints.push({ 
+                  year: i / ppy, 
+                  invested: totalInvested, 
+                  value: nominalValue, 
+                  gain: nominalValue - totalInvested 
+              });
+          }
+      }
+      
+      const totalInterest = nominalValue - totalInvested;
+      const realValue = nominalValue / Math.pow(1 + invInputs.inflation/100, invInputs.years);
+      
+      // Cost of Delay (Delay 1 year)
+      // Estimate by running a simplified loop for (years - 1)
+      let delayVal = invInputs.principal;
+      let delayInvested = invInputs.principal;
+      let delayContrib = invInputs.type === 'sip' ? invInputs.contribution : 0;
+      const delayPeriods = (invInputs.years - 1) * ppy;
+      
+      if (invInputs.years > 1) {
+          for (let i = 1; i <= delayPeriods; i++) {
+              delayVal = delayVal * (1 + ratePerPeriod);
+              if (invInputs.type === 'sip') {
+                  delayVal += delayContrib;
+                  delayInvested += delayContrib;
+              }
+              if (i % ppy === 0 && invInputs.stepUp > 0 && invInputs.type === 'sip') {
+                  delayContrib = delayContrib * (1 + invInputs.stepUp / 100);
               }
           }
-          dataPoints.push({ year: y, invested: totalInvested, value: totalValue });
       }
-      return { 
-          totalValue, 
-          totalInvested, 
-          profit: totalValue - totalInvested, 
-          dataPoints 
-      };
-  }, [invInputs, scenarioAdj]);
+      const costOfDelay = nominalValue - delayVal;
 
-  // 2. Loan Calc
+      return { totalValue: nominalValue, realValue, totalInvested, totalInterest, dataPoints, costOfDelay };
+  }, [invInputs]);
+
+  // Loan
   const loanResults = useMemo(() => {
       const r = loanInputs.rate / 100 / 12;
-      const n = loanInputs.tenure * 12;
-      // EMI = P * r * (1+r)^n / ((1+r)^n - 1)
-      const emi = (loanInputs.amount * r * Math.pow(1+r, n)) / (Math.pow(1+r, n) - 1);
-      const totalPayment = emi * n;
-      const totalInterest = totalPayment - loanInputs.amount;
+      const n = loanInputs.tenure * 12; 
       
-      // Amortization for Chart
-      const amortization = [];
+      // Standard EMI Formula: P * r * (1+r)^n / ((1+r)^n - 1)
+      const emi = (loanInputs.amount * r * Math.pow(1+r, n)) / (Math.pow(1+r, n) - 1);
+      
       let balance = loanInputs.amount;
-      for(let y=0; y<=loanInputs.tenure; y++) {
-          amortization.push(balance);
-          balance -= (loanInputs.amount / loanInputs.tenure); // Simplified linear drop for chart visualization
-          if(balance < 0) balance = 0;
+      let totalInterest = 0;
+      let actualMonths = 0;
+      const amortization = [];
+      let yearlyInterest = 0;
+      let yearlyPrincipal = 0;
+
+      // Simulation loop
+      while (balance > 0.1 && actualMonths < 600) { // Safety cap
+          const interest = balance * r;
+          const totalPay = emi + loanInputs.extraPayment;
+          const principal = Math.min(balance, totalPay - interest);
+          
+          balance -= principal;
+          totalInterest += interest;
+          yearlyInterest += interest;
+          yearlyPrincipal += principal;
+          actualMonths++;
+
+          // Yearly Snapshots
+          if (actualMonths % 12 === 0 || balance <= 0.1) {
+              amortization.push({
+                  year: Math.ceil(actualMonths / 12),
+                  interest: yearlyInterest,
+                  principal: yearlyPrincipal,
+                  balance: Math.max(0, balance)
+              });
+              yearlyInterest = 0;
+              yearlyPrincipal = 0;
+          }
       }
 
-      return { emi, totalPayment, totalInterest, amortization };
+      const totalPayment = loanInputs.amount + totalInterest;
+      const payoffDate = new Date();
+      payoffDate.setMonth(payoffDate.getMonth() + actualMonths);
+
+      const interestSaved = ((emi * n) - loanInputs.amount) - totalInterest;
+      const timeSaved = n - actualMonths;
+
+      return { 
+          emi, totalPayment, totalInterest, actualMonths, 
+          interestSaved, timeSaved, payoffDate, amortization 
+      };
   }, [loanInputs]);
 
-  // 3. Retirement Calc
+  // Retirement
   const retResults = useMemo(() => {
+      // Phase 1: Accumulation (Now -> Retire)
       const yearsToGrow = retInputs.retAge - retInputs.currentAge;
-      const r = 0.07; // Assumed 7% return
-      const monthlyr = r / 12;
-      const months = yearsToGrow * 12;
+      const accumulationData = [];
+      let currentCorpus = retInputs.savings;
+      const monthlyRate = retInputs.preRetReturn / 100 / 12;
       
-      // FV of current savings
-      const fvPrincipal = retInputs.savings * Math.pow(1 + monthlyr, months);
-      // FV of contributions
-      const fvContrib = retInputs.monthlySave * (Math.pow(1 + monthlyr, months) - 1) / monthlyr;
-      const corpus = fvPrincipal + fvContrib;
-      
-      // Required Corpus (25x rule adjusted for inflation)
-      const inflationFactor = Math.pow(1 + retInputs.inflation/100, yearsToGrow);
-      const futureMonthlySpend = retInputs.monthlySpend * inflationFactor;
-      const requiredCorpus = futureMonthlySpend * 12 * 25;
+      for(let i=0; i<=yearsToGrow; i++) {
+          accumulationData.push({ age: retInputs.currentAge + i, value: currentCorpus });
+          // Grow for 1 year
+          for(let m=0; m<12; m++) {
+              currentCorpus = (currentCorpus + retInputs.monthlySave) * (1 + monthlyRate);
+          }
+      }
 
-      return { corpus, requiredCorpus, gap: requiredCorpus - corpus, futureMonthlySpend };
+      const corpusAtRetirement = currentCorpus;
+
+      // Phase 2: Distribution (Retire -> Death)
+      const yearsInRetirement = retInputs.lifeExpectancy - retInputs.retAge;
+      const postMonthlyRate = retInputs.postRetReturn / 100 / 12;
+      const monthlyInflation = retInputs.inflation / 100 / 12;
+      
+      // Calculate required monthly spend at retirement age adjusted for inflation
+      let currentMonthlySpend = retInputs.monthlySpend * Math.pow(1 + monthlyInflation, yearsToGrow * 12);
+      
+      const distributionData = [];
+      let hasRunOut = false;
+      let runOutAge = null;
+
+      for(let i=0; i<=yearsInRetirement; i++) {
+          distributionData.push({ age: retInputs.retAge + i, value: Math.max(0, currentCorpus) });
+          
+          // Withdraw for 1 year
+          for(let m=0; m<12; m++) {
+              currentCorpus = currentCorpus * (1 + postMonthlyRate) - currentMonthlySpend;
+              currentMonthlySpend = currentMonthlySpend * (1 + monthlyInflation); // Inflation continues in retirement
+              if (currentCorpus <= 0 && !hasRunOut) {
+                  hasRunOut = true;
+                  runOutAge = retInputs.retAge + i + (m/12);
+              }
+          }
+      }
+
+      const gap = hasRunOut ? 1 : 0; // Simple indicator for UI state
+
+      return { 
+          corpus: corpusAtRetirement, 
+          monthlySpendAtRetirement: retInputs.monthlySpend * Math.pow(1 + retInputs.inflation/100, yearsToGrow),
+          chartData: [...accumulationData, ...distributionData],
+          runOutAge,
+          gap
+      };
   }, [retInputs]);
 
-  // --- Export ---
-  const handleExportPDF = () => {
-      const doc = new jsPDF();
-      doc.setFontSize(20);
-      doc.text("Financial Calculation Report", 20, 20);
-      doc.setFontSize(12);
+  // Forex
+  const forexResults = useMemo(() => {
+      const grossAmount = forexInputs.amount;
+      const feeAmount = grossAmount * (forexInputs.fee / 100);
+      const netAmount = grossAmount - feeAmount;
+      const converted = netAmount * forexInputs.rate;
       
-      if (activeModule === 'investment') {
-          doc.text(`Investment Projection (${invInputs.years} Years)`, 20, 40);
-          doc.text(`Future Value: ${currencySymbol}${investmentResults.totalValue.toFixed(2)}`, 20, 50);
-          doc.text(`Total Invested: ${currencySymbol}${investmentResults.totalInvested.toFixed(2)}`, 20, 60);
-          doc.text(`Total Profit: ${currencySymbol}${investmentResults.profit.toFixed(2)}`, 20, 70);
-      } else if (activeModule === 'loan') {
-          doc.text(`Loan EMI Schedule`, 20, 40);
-          doc.text(`Monthly EMI: ${currencySymbol}${loanResults.emi.toFixed(2)}`, 20, 50);
-          doc.text(`Total Interest: ${currencySymbol}${loanResults.totalInterest.toFixed(2)}`, 20, 60);
+      // Mock historical data (last 7 days)
+      const history = Array.from({length: 7}).map((_, i) => {
+          const trend = Math.sin(i) * 0.05; // Fake trend
+          return forexInputs.rate * (1 + trend);
+      });
+
+      return { feeAmount, netAmount, converted, history };
+  }, [forexInputs]);
+
+  // Check if user has unlocked business features
+  const hasBusinessAccess = user?.isPro || (user?.unlockedFeatures && user.unlockedFeatures.includes('business'));
+
+  const handleModuleClick = (module: ModuleType, isPremium: boolean) => {
+      if (isPremium && !hasBusinessAccess) {
+          if (onViewFeature) {
+              onViewFeature('business');
+          } else if (onNavigate) {
+              onNavigate('pro-membership');
+          }
+          return;
       }
-      // ... Add other modules as needed
-      
-      doc.save("financial_report.pdf");
+      setActiveModule(module);
   };
 
-  const handleExportExcel = () => {
-      const wb = XLSX.utils.book_new();
-      let data: any[] = [];
-      
-      if (activeModule === 'investment') {
-          data = investmentResults.dataPoints.map(d => ({
-              Year: d.year,
-              Invested: d.invested,
-              Value: d.value
-          }));
-      }
-      // Add other logic
-      
-      const ws = XLSX.utils.json_to_sheet(data);
-      XLSX.utils.book_append_sheet(wb, ws, "Calculation");
-      XLSX.writeFile(wb, "financial_calc.xlsx");
-  };
+  // If Tax-related Modules are active, show the specialized Tax Planner View
+  if (activeModule === 'tax' || activeModule === 'vat' || activeModule === 'business') {
+      return (
+        <TaxPlannerView 
+            onBack={() => setActiveModule(null)} 
+            userProfile={{}} 
+            defaultMode={activeModule === 'vat' ? 'vat' : activeModule === 'business' ? 'business' : 'income'} 
+            budgetData={budgetData}
+        />
+      );
+  }
 
   // --- Renders ---
+  
+  const renderDashboard = () => (
+      <div className="space-y-8 animate-in fade-in slide-in-from-right-4">
+          
+          {/* Basic Essentials Section */}
+          <div>
+              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
+                  <Calculator size={14} /> Basic Essentials
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                  
+                  {/* Income Tax Card */}
+                  <button 
+                      onClick={() => setActiveModule('tax')}
+                      className="p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 hover:border-indigo-500 transition-all text-left group active:scale-95 col-span-2"
+                  >
+                      <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                              <Percent size={24} />
+                          </div>
+                          <div>
+                              <h4 className="font-bold text-lg text-slate-900 dark:text-white">Income Tax</h4>
+                              <p className="text-xs text-slate-500 mt-1">Personal Tax Slabs & Deductions</p>
+                          </div>
+                          <ArrowRight className="ml-auto opacity-50 group-hover:translate-x-1 transition-transform" />
+                      </div>
+                  </button>
 
-  const renderInvestment = () => (
-      <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-          <Card className="p-5 bg-gradient-to-br from-indigo-600 to-violet-700 text-white border-none">
-              <div className="flex justify-between items-start mb-4">
-                  <div>
-                      <p className="text-xs text-indigo-200 font-bold uppercase mb-1">Projected Future Value</p>
-                      <h2 className="text-3xl font-bold">{currencySymbol}{investmentResults.totalValue.toLocaleString(undefined, {maximumFractionDigits: 0})}</h2>
-                  </div>
-                  <div className="p-2 bg-white/20 rounded-lg">
-                      <TrendingUp size={24} />
-                  </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/10">
-                  <div>
-                      <p className="text-[10px] text-indigo-200 font-bold uppercase">Total Invested</p>
-                      <p className="font-bold">{currencySymbol}{investmentResults.totalInvested.toLocaleString()}</p>
-                  </div>
-                  <div className="text-right">
-                      <p className="text-[10px] text-indigo-200 font-bold uppercase">Total Profit</p>
-                      <p className="font-bold text-emerald-300">+{currencySymbol}{investmentResults.profit.toLocaleString()}</p>
-                  </div>
-              </div>
-          </Card>
+                  <button 
+                      onClick={() => setActiveModule('loan')}
+                      className="p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 hover:border-indigo-500 transition-all text-left group active:scale-95"
+                  >
+                      <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                          <Landmark size={20} />
+                      </div>
+                      <h4 className="font-bold text-slate-900 dark:text-white">Loan & EMI</h4>
+                      <p className="text-[10px] text-slate-500 mt-1">Amortization</p>
+                  </button>
 
-          <Card className="p-4">
-              <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4">Growth Visualization</h3>
-              <div className="h-56">
-                  <Line 
-                      data={{
-                          labels: investmentResults.dataPoints.map(d => d.year),
-                          datasets: [
-                              {
-                                  label: 'Total Value',
-                                  data: investmentResults.dataPoints.map(d => d.value),
-                                  borderColor: '#8b5cf6',
-                                  backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                                  fill: true,
-                                  tension: 0.4
-                              },
-                              {
-                                  label: 'Invested Amount',
-                                  data: investmentResults.dataPoints.map(d => d.invested),
-                                  borderColor: '#94a3b8',
-                                  borderDash: [5, 5],
-                                  tension: 0.4,
-                                  pointRadius: 0
-                              }
-                          ]
-                      }}
-                      options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } }}
-                  />
-              </div>
-          </Card>
+                  <button 
+                      onClick={() => setActiveModule('forex')}
+                      className="p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 hover:border-indigo-500 transition-all text-left group active:scale-95"
+                  >
+                      <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                          <Globe size={20} />
+                      </div>
+                      <h4 className="font-bold text-slate-900 dark:text-white">Forex</h4>
+                      <p className="text-[10px] text-slate-500 mt-1">Rates & Fees</p>
+                  </button>
 
-          {/* Configuration Inputs */}
-          <div className="grid grid-cols-2 gap-3">
-              <InputGroup label="Principal Amount" value={invInputs.principal} onChange={v => setInvInputs({...invInputs, principal: v})} prefix={currencySymbol} />
-              <InputGroup label="Monthly Contribution" value={invInputs.monthly} onChange={v => setInvInputs({...invInputs, monthly: v})} prefix={currencySymbol} />
-              <InputGroup label="Annual Return (%)" value={invInputs.rate} onChange={v => setInvInputs({...invInputs, rate: v})} />
-              <InputGroup label="Time Period (Years)" value={invInputs.years} onChange={v => setInvInputs({...invInputs, years: v})} />
+                  <button 
+                      onClick={() => setActiveModule('investment')}
+                      className="p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 hover:border-indigo-500 transition-all text-left group active:scale-95"
+                  >
+                      <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                          <TrendingUp size={20} />
+                      </div>
+                      <h4 className="font-bold text-slate-900 dark:text-white">Wealth</h4>
+                      <p className="text-[10px] text-slate-500 mt-1">Growth & SIP</p>
+                  </button>
+
+                  <button 
+                      onClick={() => setActiveModule('retirement')}
+                      className="p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 hover:border-indigo-500 transition-all text-left group active:scale-95"
+                  >
+                      <div className="w-10 h-10 rounded-xl bg-fuchsia-100 dark:bg-fuchsia-900/30 text-fuchsia-600 dark:text-fuchsia-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                          <RefreshCcw size={20} />
+                      </div>
+                      <h4 className="font-bold text-slate-900 dark:text-white">Retirement</h4>
+                      <p className="text-[10px] text-slate-500 mt-1">Planning</p>
+                  </button>
+              </div>
           </div>
 
-          {/* Advanced Scenario */}
-          <Card className="p-4 border-l-4 border-l-amber-500 bg-amber-50/50 dark:bg-amber-900/10">
-              <div className="flex justify-between items-center mb-2">
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                      <Zap size={16} className="text-amber-500" /> Scenario Simulation
-                  </h4>
-                  <span className="text-xs font-bold text-amber-600">{scenarioAdj > 0 ? '+' : ''}{scenarioAdj}% Contribution</span>
+          {/* Advanced Section - Premium Gated */}
+          <div>
+              <div className="flex items-center gap-2 mb-3 ml-1">
+                  <Briefcase size={14} className="text-slate-500" /> 
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Advanced Section</h3>
+                  {!hasBusinessAccess && <span className="bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 text-[9px] font-extrabold px-1.5 py-0.5 rounded ml-1">PRO</span>}
               </div>
-              <p className="text-xs text-slate-500 mb-3">Adjust your monthly investment to see impact.</p>
-              <input 
-                  type="range" min="-50" max="50" step="5" 
-                  value={scenarioAdj} onChange={e => setScenarioAdj(parseFloat(e.target.value))}
-                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-500"
-              />
-          </Card>
-      </div>
-  );
+              <div className="grid grid-cols-2 gap-3">
+                  {/* Business Tax Card */}
+                  <button 
+                      onClick={() => handleModuleClick('business', true)}
+                      className={`p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 transition-all text-left group active:scale-95 relative overflow-hidden ${!hasBusinessAccess ? 'opacity-90' : 'hover:border-indigo-500'}`}
+                  >
+                      {!hasBusinessAccess && (
+                          <div className="absolute top-2 right-2 text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-full p-1">
+                              <Lock size={14} />
+                          </div>
+                      )}
+                      <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                          <Briefcase size={20} />
+                      </div>
+                      <h4 className="font-bold text-slate-900 dark:text-white">Business Tax</h4>
+                      <p className="text-[10px] text-slate-500 mt-1">Corporate & P&L</p>
+                  </button>
 
-  const renderLoan = () => (
-      <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-          <div className="grid grid-cols-2 gap-3">
-              <Card className="p-4 bg-white dark:bg-slate-800 border-l-4 border-l-red-500">
-                  <p className="text-xs text-slate-500 font-bold uppercase mb-1">Monthly EMI</p>
-                  <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{currencySymbol}{loanResults.emi.toLocaleString(undefined, {maximumFractionDigits: 0})}</h2>
-              </Card>
-              <Card className="p-4 bg-white dark:bg-slate-800 border-l-4 border-l-orange-500">
-                  <p className="text-xs text-slate-500 font-bold uppercase mb-1">Total Interest</p>
-                  <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{currencySymbol}{loanResults.totalInterest.toLocaleString(undefined, {maximumFractionDigits: 0})}</h2>
-              </Card>
+                  <button 
+                      onClick={() => handleModuleClick('vat', true)}
+                      className={`p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 transition-all text-left group active:scale-95 relative overflow-hidden ${!hasBusinessAccess ? 'opacity-90' : 'hover:border-indigo-500'}`}
+                  >
+                      {!hasBusinessAccess && (
+                          <div className="absolute top-2 right-2 text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-full p-1">
+                              <Lock size={14} />
+                          </div>
+                      )}
+                      <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                          <Receipt size={20} />
+                      </div>
+                      <h4 className="font-bold text-slate-900 dark:text-white">VAT / GST</h4>
+                      <p className="text-[10px] text-slate-500 mt-1">Sales Tax</p>
+                  </button>
+              </div>
           </div>
-
-          <Card className="p-4 flex items-center gap-6">
-              <div className="w-32 h-32 relative">
-                  <Doughnut 
-                      data={{
-                          labels: ['Principal', 'Interest'],
-                          datasets: [{
-                              data: [loanInputs.amount, loanResults.totalInterest],
-                              backgroundColor: ['#10b981', '#ef4444'],
-                              borderWidth: 0
-                          }]
-                      }}
-                      options={{ maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '70%' }}
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-xs font-bold text-slate-400">Total</div>
-              </div>
-              <div className="flex-1 space-y-3">
-                  <div>
-                      <div className="flex justify-between text-xs mb-1"><span className="font-bold text-slate-700 dark:text-slate-300">Principal</span> <span className="text-emerald-600">{((loanInputs.amount / (loanInputs.amount+loanResults.totalInterest))*100).toFixed(0)}%</span></div>
-                      <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{width: `${(loanInputs.amount / (loanInputs.amount+loanResults.totalInterest))*100}%`}}></div></div>
-                  </div>
-                  <div>
-                      <div className="flex justify-between text-xs mb-1"><span className="font-bold text-slate-700 dark:text-slate-300">Interest</span> <span className="text-red-500">{((loanResults.totalInterest / (loanInputs.amount+loanResults.totalInterest))*100).toFixed(0)}%</span></div>
-                      <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-red-500" style={{width: `${(loanResults.totalInterest / (loanInputs.amount+loanResults.totalInterest))*100}%`}}></div></div>
-                  </div>
-              </div>
-          </Card>
-
-          <div className="space-y-3">
-              <InputGroup label="Loan Amount" value={loanInputs.amount} onChange={v => setLoanInputs({...loanInputs, amount: v})} prefix={currencySymbol} />
-              <InputGroup label="Interest Rate (%)" value={loanInputs.rate} onChange={v => setLoanInputs({...loanInputs, rate: v})} />
-              <InputGroup label="Tenure (Years)" value={loanInputs.tenure} onChange={v => setLoanInputs({...loanInputs, tenure: v})} />
-          </div>
-      </div>
-  );
-
-  const renderRetirement = () => (
-      <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-          <Card className={`p-5 border-none text-white ${retResults.gap > 0 ? 'bg-gradient-to-br from-red-500 to-orange-600' : 'bg-gradient-to-br from-emerald-500 to-teal-600'}`}>
-              <div className="flex justify-between items-start mb-2">
-                  <div>
-                      <p className="text-xs text-white/80 font-bold uppercase mb-1">Projected Corpus</p>
-                      <h2 className="text-3xl font-bold">{currencySymbol}{retResults.corpus.toLocaleString(undefined, {maximumFractionDigits: 0})}</h2>
-                  </div>
-                  <div className="p-2 bg-white/20 rounded-lg"><Activity size={24} /></div>
-              </div>
-              <div className="pt-4 border-t border-white/20">
-                  <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold uppercase text-white/80">Goal Gap</span>
-                      <span className="font-bold text-white text-lg">{retResults.gap > 0 ? `Short by ${currencySymbol}${retResults.gap.toLocaleString(undefined, {maximumFractionDigits:0})}` : 'Goal Met!'}</span>
-                  </div>
-              </div>
-          </Card>
-
-          <div className="grid grid-cols-2 gap-3">
-              <InputGroup label="Current Age" value={retInputs.currentAge} onChange={v => setRetInputs({...retInputs, currentAge: v})} />
-              <InputGroup label="Retirement Age" value={retInputs.retAge} onChange={v => setRetInputs({...retInputs, retAge: v})} />
-              <InputGroup label="Current Savings" value={retInputs.savings} onChange={v => setRetInputs({...retInputs, savings: v})} prefix={currencySymbol} />
-              <InputGroup label="Monthly Savings" value={retInputs.monthlySave} onChange={v => setRetInputs({...retInputs, monthlySave: v})} prefix={currencySymbol} />
-          </div>
-
-          <Card className="p-4 bg-slate-50 dark:bg-slate-800">
-              <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-2">Future Expense Projection</h3>
-              <p className="text-xs text-slate-500 mb-3">
-                  To maintain your current lifestyle, you will need <strong>{currencySymbol}{retResults.futureMonthlySpend.toLocaleString(undefined, {maximumFractionDigits:0})} / month</strong> in retirement due to inflation.
-              </p>
-              <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-500">Inflation:</span>
-                  <input 
-                      type="range" min="0" max="10" step="0.5" 
-                      value={retInputs.inflation} onChange={e => setRetInputs({...retInputs, inflation: parseFloat(e.target.value)})}
-                      className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                  />
-                  <span className="text-xs font-bold text-indigo-600">{retInputs.inflation}%</span>
-              </div>
-          </Card>
       </div>
   );
 
   return (
     <div className="flex flex-col h-full relative bg-slate-50 dark:bg-slate-900">
        {/* Header */}
-       <div className="flex-none pt-6 px-4 pb-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl z-20 border-b border-slate-200 dark:border-white/5 transition-colors duration-300">
-            <div className="flex justify-between items-end mb-4">
+       <div className="flex-none pt-6 px-4 pb-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl z-20 border-b border-slate-200 dark:border-white/5 transition-colors duration-300">
+            <div className="flex justify-between items-end">
                 <div className="flex items-center gap-3">
-                    <button onClick={onBack} className="p-2 -ml-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                    <button onClick={activeModule ? () => setActiveModule(null) : onBack} className="p-2 -ml-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                         <ChevronLeft size={24} />
                     </button>
                     <div>
-                        <h2 className="text-xs font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wider mb-0.5">Tools</h2>
-                        <h1 className="text-xl font-bold leading-none text-slate-900 dark:text-white">Calculators</h1>
+                        <h2 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-0.5">
+                            {activeModule ? 'Calculator' : 'Tools'}
+                        </h2>
+                        <h1 className="text-xl font-bold leading-none text-slate-900 dark:text-white capitalize">
+                            {activeModule ? activeModule.replace('-', ' ') : 'Calculators'}
+                        </h1>
                     </div>
                 </div>
                 <div className="pb-1">
                     <HeaderProfile onClick={onProfileClick} />
                 </div>
             </div>
-
-            {/* Module Navigation */}
-            <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-0 -mx-4 px-4">
-                {[
-                    { id: 'investment', label: 'Invest', icon: TrendingUp },
-                    { id: 'loan', label: 'Loan', icon: Landmark },
-                    { id: 'retirement', label: 'Retire', icon: RefreshCcw },
-                    { id: 'tax', label: 'Tax', icon: Percent },
-                ].map((m) => (
-                    <button
-                        key={m.id}
-                        onClick={() => setActiveModule(m.id as any)}
-                        className={`flex flex-col items-center justify-center gap-1 min-w-[70px] py-2 text-[10px] font-bold border-b-2 transition-colors ${
-                            activeModule === m.id 
-                            ? 'border-violet-600 text-violet-600 dark:text-violet-400 bg-violet-50/50 dark:bg-violet-900/10' 
-                            : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                        }`}
-                    >
-                        <m.icon size={18} /> {m.label}
-                    </button>
-                ))}
-            </div>
        </div>
 
        <div className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-28">
-           {activeModule === 'investment' && renderInvestment()}
-           {activeModule === 'loan' && renderLoan()}
-           {activeModule === 'retirement' && renderRetirement()}
-           {activeModule === 'tax' && (
-               <div className="text-center py-20 text-slate-400">
-                   <Percent size={48} className="mx-auto mb-4 opacity-50" />
-                   <p className="text-sm">Tax Calculator Coming Soon</p>
-               </div>
-           )}
-
-           {/* Export Actions */}
-           <div className="fixed bottom-0 left-0 right-0 p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex gap-3 z-30 pb-safe-bottom">
-               <button onClick={handleExportPDF} className="flex-1 py-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-red-100 transition-colors">
-                   <Download size={18} /> PDF Report
-               </button>
-               <button onClick={handleExportExcel} className="flex-1 py-3 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-100 transition-colors">
-                   <TableIcon size={18} /> Export Excel
-               </button>
-           </div>
-           <div className="h-20"></div> {/* Spacer */}
+           {!activeModule && renderDashboard()}
+           {activeModule === 'investment' && <InvestmentModule results={investmentResults} inputs={invInputs} setInputs={setInvInputs} currencySymbol={currencySymbol} />}
+           {activeModule === 'loan' && <LoanModule results={loanResults} inputs={loanInputs} setInputs={setLoanInputs} currencySymbol={currencySymbol} />}
+           {activeModule === 'retirement' && <RetirementModule results={retResults} inputs={retInputs} setInputs={setRetInputs} currencySymbol={currencySymbol} />}
+           {activeModule === 'forex' && <ForexModule results={forexResults} inputs={forexInputs} setInputs={setForexInputs} />}
        </div>
     </div>
   );
 };
 
+// --- Helper for Module Descriptions ---
+const ModuleDescription = ({ title, description }: { title: string, description: string }) => (
+    <div className="bg-slate-100 dark:bg-slate-800/50 p-4 rounded-xl mb-6 border border-slate-200 dark:border-slate-700">
+        <h3 className="font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2 text-sm">
+            <Info size={16} className="text-indigo-500" /> {title}
+        </h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            {description}
+        </p>
+    </div>
+);
+
+// --- Sub-Components for Modules ---
+
+const InvestmentModule = ({ results, inputs, setInputs, currencySymbol }: any) => {
+    const [showRealValue, setShowRealValue] = useState(false);
+
+    const breakdownData = {
+        labels: ['Principal', 'Returns'],
+        datasets: [{
+            data: [results.totalInvested, results.totalInterest],
+            backgroundColor: ['#cbd5e1', '#8b5cf6'],
+            borderWidth: 0,
+        }]
+    };
+
+    return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+        <ModuleDescription 
+            title="Investment Planner" 
+            description="Project wealth accumulation through SIP or Lumpsum investments. Adjust for inflation and step-up contributions to see real purchasing power." 
+        />
+
+        <Card className="p-5 bg-gradient-to-br from-violet-600 to-indigo-700 text-white border-none relative overflow-hidden">
+            <div className="relative z-10">
+                <div className="flex justify-between items-start mb-4">
+                    <div>
+                        <p className="text-xs text-violet-200 font-bold uppercase mb-1">{showRealValue ? 'Inflation Adjusted Value' : 'Future Value'}</p>
+                        <h2 className="text-3xl font-bold">{currencySymbol}{(showRealValue ? results.realValue : results.totalValue).toLocaleString(undefined, {maximumFractionDigits: 0})}</h2>
+                    </div>
+                    <div className="p-2 bg-white/20 rounded-lg cursor-pointer" onClick={() => setShowRealValue(!showRealValue)}>
+                        {showRealValue ? <Percent size={24} /> : <TrendingUp size={24} />}
+                    </div>
+                </div>
+                <div className="flex gap-2 text-xs">
+                    <button onClick={() => setShowRealValue(false)} className={`px-2 py-1 rounded ${!showRealValue ? 'bg-white text-violet-700 font-bold' : 'text-violet-200'}`}>Nominal</button>
+                    <button onClick={() => setShowRealValue(true)} className={`px-2 py-1 rounded ${showRealValue ? 'bg-white text-violet-700 font-bold' : 'text-violet-200'}`}>Real (Inflation)</button>
+                </div>
+            </div>
+        </Card>
+
+        {/* Input Configuration */}
+        <Card className="p-4">
+            <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2"><Settings size={12}/> Strategy</h4>
+            
+            {/* Type Selector */}
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
+                <button 
+                    onClick={() => setInputs({...inputs, type: 'sip'})} 
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${inputs.type === 'sip' ? 'bg-white dark:bg-slate-700 shadow-sm text-violet-600 dark:text-violet-400' : 'text-slate-500'}`}
+                >
+                    SIP (Recurring)
+                </button>
+                <button 
+                    onClick={() => setInputs({...inputs, type: 'lumpsum'})} 
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${inputs.type === 'lumpsum' ? 'bg-white dark:bg-slate-700 shadow-sm text-violet-600 dark:text-violet-400' : 'text-slate-500'}`}
+                >
+                    Lumpsum
+                </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-3">
+                <InputGroup label="Start Amount" value={inputs.principal} onChange={v => setInputs({...inputs, principal: v})} prefix={currencySymbol} />
+                <InputGroup label="Duration (Years)" value={inputs.years} onChange={v => setInputs({...inputs, years: v})} />
+            </div>
+
+            {inputs.type === 'sip' && (
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                    <InputGroup label="Contribution" value={inputs.contribution} onChange={v => setInputs({...inputs, contribution: v})} prefix={currencySymbol} />
+                    <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Frequency</label>
+                        <select 
+                            value={inputs.frequency}
+                            onChange={(e) => setInputs({...inputs, frequency: e.target.value})}
+                            className="w-full bg-transparent text-sm font-bold text-slate-900 dark:text-white outline-none"
+                        >
+                            <option value="weekly">Weekly</option>
+                            <option value="bi-weekly">Bi-Weekly</option>
+                            <option value="monthly">Monthly</option>
+                            <option value="annually">Annually</option>
+                        </select>
+                    </div>
+                </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+                <InputGroup label="Return Rate (%)" value={inputs.rate} onChange={v => setInputs({...inputs, rate: v})} />
+                <InputGroup label="Inflation (%)" value={inputs.inflation} onChange={v => setInputs({...inputs, inflation: v})} />
+            </div>
+            
+            {inputs.type === 'sip' && (
+                <div className="mt-3">
+                    <InputGroup label="Annual Step-Up (%)" value={inputs.stepUp} onChange={v => setInputs({...inputs, stepUp: v})} />
+                </div>
+            )}
+        </Card>
+
+        {/* Charts Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card className="p-4">
+                <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-3">Growth Curve</h3>
+                <div className="h-40">
+                    <Line 
+                        data={{
+                            labels: results.dataPoints.map((d:any) => `Y${d.year}`), 
+                            datasets: [
+                                {label: 'Value', data: results.dataPoints.map((d:any) => d.value), borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)', fill: true, pointRadius: 0},
+                                {label: 'Invested', data: results.dataPoints.map((d:any) => d.invested), borderColor: '#cbd5e1', borderDash: [5,5], fill: false, pointRadius: 0}
+                            ]
+                        }} 
+                        options={{responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}, scales: {y: {display: false}, x: {display: false}}}} 
+                    />
+                </div>
+            </Card>
+
+            <Card className="p-4 flex items-center justify-between">
+                <div className="w-1/2 h-32 relative">
+                    <Doughnut 
+                        data={breakdownData} 
+                        options={{maintainAspectRatio: false, cutout: '70%', plugins: {legend: {display: false}}}} 
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-slate-400">
+                        Total
+                    </div>
+                </div>
+                <div className="flex-1 pl-4 space-y-2">
+                    <div>
+                        <p className="text-[10px] text-slate-500 uppercase font-bold flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-300"></span> Invested</p>
+                        <p className="font-bold text-slate-900 dark:text-white text-sm">{currencySymbol}{results.totalInvested.toLocaleString(undefined, {notation: 'compact'})}</p>
+                    </div>
+                    <div>
+                        <p className="text-[10px] text-slate-500 uppercase font-bold flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-violet-500"></span> Returns</p>
+                        <p className="font-bold text-emerald-500 text-sm">+{currencySymbol}{results.totalInterest.toLocaleString(undefined, {notation: 'compact'})}</p>
+                    </div>
+                </div>
+            </Card>
+        </div>
+
+        {/* Cost of Waiting Insight */}
+        {results.costOfDelay > 0 && (
+            <Card className="p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-500/20">
+                <div className="flex gap-3">
+                    <Clock className="text-amber-500 shrink-0" size={20} />
+                    <div>
+                        <h4 className="text-sm font-bold text-amber-800 dark:text-amber-400 mb-1">Cost of Delay</h4>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                            If you wait just 1 year to start, you could lose approximately <strong>{currencySymbol}{results.costOfDelay.toLocaleString(undefined, {maximumFractionDigits: 0})}</strong> in potential wealth.
+                        </p>
+                    </div>
+                </div>
+            </Card>
+        )}
+    </div>
+    );
+};
+
+const LoanModule = ({ results, inputs, setInputs, currencySymbol }: any) => {
+    const [view, setView] = useState<'summary' | 'schedule'>('summary');
+
+    return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+        <ModuleDescription 
+            title="Loan & EMI Calculator" 
+            description="Analyze loan repayment schedules. See how interest rates, tenure, and extra payments impact your total cost and debt-free date." 
+        />
+
+        {/* Toggle View */}
+        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+            <button onClick={() => setView('summary')} className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${view==='summary' ? 'bg-white dark:bg-slate-700 shadow text-red-600' : 'text-slate-500'}`}>Overview</button>
+            <button onClick={() => setView('schedule')} className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${view==='schedule' ? 'bg-white dark:bg-slate-700 shadow text-red-600' : 'text-slate-500'}`}>Schedule</button>
+        </div>
+
+        {view === 'summary' ? (
+            <>
+                <div className="grid grid-cols-2 gap-3">
+                    <Card className="p-4 bg-white dark:bg-slate-800 border-l-4 border-l-red-500">
+                        <p className="text-xs text-slate-500 font-bold uppercase mb-1">Monthly EMI</p>
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">{currencySymbol}{results.emi.toLocaleString(undefined, {maximumFractionDigits: 0})}</h2>
+                    </Card>
+                    <Card className="p-4 bg-white dark:bg-slate-800 border-l-4 border-l-orange-500">
+                        <p className="text-xs text-slate-500 font-bold uppercase mb-1">Total Interest</p>
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">{currencySymbol}{results.totalInterest.toLocaleString(undefined, {maximumFractionDigits: 0})}</h2>
+                    </Card>
+                </div>
+
+                <Card className="p-4">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-sm font-bold text-slate-700 dark:text-white">Payoff Analysis</h3>
+                        <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full text-slate-500">
+                            {results.payoffDate.toLocaleDateString(undefined, {month: 'short', year: 'numeric'})}
+                        </span>
+                    </div>
+                    
+                    <div className="h-48 relative">
+                        <Bar 
+                            data={{
+                                labels: results.amortization.map((d:any) => `Y${d.year}`), 
+                                datasets: [
+                                    {label: 'Principal', data: results.amortization.map((d:any) => d.principal), backgroundColor: '#10b981', stack: 'Stack 0'},
+                                    {label: 'Interest', data: results.amortization.map((d:any) => d.interest), backgroundColor: '#ef4444', stack: 'Stack 0'}
+                                ]
+                            }} 
+                            options={{responsive: true, maintainAspectRatio: false, plugins: {legend: {position: 'bottom'}}, scales: {x: {stacked: true, grid: {display: false}}, y: {stacked: true}}}} 
+                        />
+                    </div>
+                    {results.interestSaved > 0 && (
+                        <div className="mt-3 bg-emerald-50 dark:bg-emerald-900/20 p-2 rounded-lg text-center border border-emerald-100 dark:border-emerald-800">
+                            <p className="text-xs text-emerald-700 dark:text-emerald-300 font-bold">You save {currencySymbol}{results.interestSaved.toLocaleString(undefined, {maximumFractionDigits:0})} in interest!</p>
+                        </div>
+                    )}
+                </Card>
+
+                {/* Inputs */}
+                <div className="space-y-4">
+                    <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-2">
+                        {[
+                            {id: 'personal', label: 'Personal', icon: CreditCard}, 
+                            {id: 'home', label: 'Home', icon: Home}, 
+                            {id: 'car', label: 'Auto', icon: Car}
+                        ].map(t => (
+                            <button 
+                                key={t.id} 
+                                onClick={() => setInputs({...inputs, loanType: t.id, rate: t.id === 'home' ? 6.5 : t.id === 'car' ? 8.0 : 12.0, tenure: t.id === 'home' ? 20 : 5})}
+                                className={`flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-bold rounded-lg transition-all ${inputs.loanType === t.id ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500'}`}
+                            >
+                                <t.icon size={12} /> {t.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <InputGroup label="Loan Amount" value={inputs.amount} onChange={v => setInputs({...inputs, amount: v})} prefix={currencySymbol} />
+                        <InputGroup label="Interest Rate (%)" value={inputs.rate} onChange={v => setInputs({...inputs, rate: v})} />
+                        <InputGroup label="Tenure (Years)" value={inputs.tenure} onChange={v => setInputs({...inputs, tenure: v})} />
+                        <InputGroup label="Extra Payment/Mo" value={inputs.extraPayment} onChange={v => setInputs({...inputs, extraPayment: v})} prefix={currencySymbol} />
+                    </div>
+                </div>
+            </>
+        ) : (
+            <Card className="overflow-hidden p-0">
+                <div className="bg-slate-50 dark:bg-slate-800 p-3 border-b border-slate-200 dark:border-slate-700 flex justify-between text-xs font-bold text-slate-500">
+                    <span className="w-12">Year</span>
+                    <span className="flex-1 text-right">Interest</span>
+                    <span className="flex-1 text-right">Principal</span>
+                    <span className="flex-1 text-right">Balance</span>
+                </div>
+                <div className="max-h-[400px] overflow-y-auto custom-scrollbar divide-y divide-slate-100 dark:divide-slate-800">
+                    {results.amortization.map((row: any) => (
+                        <div key={row.year} className="p-3 flex justify-between text-xs text-slate-700 dark:text-slate-300">
+                            <span className="w-12 font-bold">{row.year}</span>
+                            <span className="flex-1 text-right text-red-500">{formatCurrency(row.interest, currencySymbol)}</span>
+                            <span className="flex-1 text-right text-emerald-600">{formatCurrency(row.principal, currencySymbol)}</span>
+                            <span className="flex-1 text-right font-mono">{formatCurrency(row.balance, currencySymbol)}</span>
+                        </div>
+                    ))}
+                </div>
+            </Card>
+        )}
+    </div>
+    );
+};
+
+const RetirementModule = ({ results, inputs, setInputs, currencySymbol }: any) => (
+    <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+        <ModuleDescription 
+            title="Retirement Planner" 
+            description="Assess your retirement readiness. Visualize the accumulation phase and drawdown phase to ensure your savings last your lifetime." 
+        />
+
+        {/* Status Card */}
+        <Card className={`p-5 border-none text-white relative overflow-hidden ${results.runOutAge ? 'bg-gradient-to-br from-red-500 to-orange-600' : 'bg-gradient-to-br from-emerald-500 to-teal-600'}`}>
+            <div className="relative z-10">
+                <div className="flex justify-between items-start mb-2">
+                    <div>
+                        <p className="text-xs text-white/80 font-bold uppercase mb-1">Outlook</p>
+                        <h2 className="text-3xl font-bold">{results.runOutAge ? `Funds out at age ${Math.floor(results.runOutAge)}` : 'Fully Funded'}</h2>
+                    </div>
+                    <div className="p-2 bg-white/20 rounded-lg"><Activity size={24} /></div>
+                </div>
+                <div className="pt-4 border-t border-white/20">
+                    <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold uppercase text-white/80">Corpus at {inputs.retAge}</span>
+                        <span className="font-bold text-white text-lg">{currencySymbol}{results.corpus.toLocaleString(undefined, {maximumFractionDigits: 0, notation: 'compact'})}</span>
+                    </div>
+                </div>
+            </div>
+        </Card>
+
+        <Card className="p-4">
+            <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-3">Lifetime Wealth Curve</h3>
+            <div className="h-56">
+                <Line 
+                    data={{
+                        labels: results.chartData.map((d:any) => d.age),
+                        datasets: [{
+                            label: 'Portfolio Value',
+                            data: results.chartData.map((d:any) => d.value),
+                            borderColor: results.runOutAge ? '#ef4444' : '#10b981',
+                            backgroundColor: results.runOutAge ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                            fill: true,
+                            pointRadius: 0
+                        }]
+                    }}
+                    options={{responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}, scales: {x: {grid: {display: false}}, y: {ticks: {callback: (v) => formatCurrency(v as number, currencySymbol, true)}}}}}
+                />
+            </div>
+            <div className="mt-3 flex justify-between text-[10px] text-slate-400 px-2">
+                <span>Age {inputs.currentAge}</span>
+                <span>Retire {inputs.retAge}</span>
+                <span>Expectancy {inputs.lifeExpectancy}</span>
+            </div>
+        </Card>
+
+        {/* Inputs Grid */}
+        <div className="space-y-4">
+            <h4 className="text-xs font-bold text-slate-500 uppercase">Configuration</h4>
+            <div className="grid grid-cols-2 gap-3">
+                <InputGroup label="Current Age" value={inputs.currentAge} onChange={v => setInputs({...inputs, currentAge: v})} />
+                <InputGroup label="Retire Age" value={inputs.retAge} onChange={v => setInputs({...inputs, retAge: v})} />
+                <InputGroup label="Current Savings" value={inputs.savings} onChange={v => setInputs({...inputs, savings: v})} prefix={currencySymbol} />
+                <InputGroup label="Monthly Saving" value={inputs.monthlySave} onChange={v => setInputs({...inputs, monthlySave: v})} prefix={currencySymbol} />
+                <InputGroup label="Desired Monthly Income" value={inputs.monthlySpend} onChange={v => setInputs({...inputs, monthlySpend: v})} prefix={currencySymbol} />
+                <InputGroup label="Life Expectancy" value={inputs.lifeExpectancy} onChange={v => setInputs({...inputs, lifeExpectancy: v})} />
+            </div>
+        </div>
+    </div>
+);
+
+const ForexModule = ({ results, inputs, setInputs }: any) => (
+    <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+        <ModuleDescription 
+            title="Currency Converter" 
+            description="Real-time currency conversion with fee estimation. Understand the spread impact on your international transfers." 
+        />
+
+        {/* Main Display */}
+        <Card className="p-5 bg-gradient-to-br from-emerald-600 to-teal-700 text-white border-none">
+            <div className="flex justify-between items-start mb-4">
+                <div>
+                    <p className="text-xs text-emerald-200 font-bold uppercase mb-1">You Get</p>
+                    <h2 className="text-3xl font-bold">{inputs.to} {results.converted.toLocaleString(undefined, {maximumFractionDigits: 2})}</h2>
+                    <p className="text-[10px] text-emerald-200 mt-1">1 {inputs.from} = {inputs.rate} {inputs.to}</p>
+                </div>
+                <div className="p-2 bg-white/20 rounded-lg"><ArrowLeftRight size={24} /></div>
+            </div>
+            <div className="pt-4 border-t border-white/20">
+                <div className="flex justify-between items-center text-xs">
+                    <span className="text-emerald-200 font-bold">Exchange Fee ({inputs.fee}%)</span>
+                    <span className="font-bold text-white">-{inputs.from} {results.feeAmount.toFixed(2)}</span>
+                </div>
+            </div>
+        </Card>
+
+        {/* Currency Selectors */}
+        <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="flex gap-2 items-center mb-4">
+                <div className="flex-1">
+                    <label className="text-[10px] font-bold text-slate-400 mb-1 block uppercase">Amount</label>
+                    <input type="number" className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-sm font-bold outline-none" value={inputs.amount} onChange={e => setInputs({...inputs, amount: parseFloat(e.target.value)||0})} />
+                </div>
+                <div className="flex-1">
+                    <label className="text-[10px] font-bold text-slate-400 mb-1 block uppercase">From</label>
+                    <select className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-sm font-bold outline-none" value={inputs.from} onChange={e => setInputs({...inputs, from: e.target.value})}>
+                        <option>USD</option><option>EUR</option><option>GBP</option><option>LKR</option><option>AUD</option><option>CAD</option><option>JPY</option>
+                    </select>
+                </div>
+                <div className="flex items-end pb-2 text-slate-400"><ArrowRight size={16}/></div>
+                <div className="flex-1">
+                    <label className="text-[10px] font-bold text-slate-400 mb-1 block uppercase">To</label>
+                    <select className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-sm font-bold outline-none" value={inputs.to} onChange={e => setInputs({...inputs, to: e.target.value})}>
+                        <option>EUR</option><option>USD</option><option>GBP</option><option>LKR</option><option>AUD</option><option>CAD</option><option>JPY</option>
+                    </select>
+                </div>
+            </div>
+
+            {/* Rate & Fee Sliders */}
+            <div className="space-y-3">
+                <div>
+                    <div className="flex justify-between items-center mb-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Exchange Rate</label>
+                        <span className="text-xs font-bold text-emerald-600">{inputs.rate}</span>
+                    </div>
+                    <input type="range" min="0.1" max="300" step="0.01" value={inputs.rate} onChange={e => setInputs({...inputs, rate: parseFloat(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
+                </div>
+                <div>
+                    <div className="flex justify-between items-center mb-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Bank Fee / Spread (%)</label>
+                        <span className="text-xs font-bold text-red-500">{inputs.fee}%</span>
+                    </div>
+                    <input type="range" min="0" max="10" step="0.1" value={inputs.fee} onChange={e => setInputs({...inputs, fee: parseFloat(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-500" />
+                </div>
+            </div>
+        </div>
+
+        {/* Trend Mock */}
+        <Card className="p-4">
+            <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-2">30-Day Trend (Simulated)</h3>
+            <div className="h-32 w-full">
+                <Line 
+                    data={{
+                        labels: ['1w', '2w', '3w', '4w', 'Now'],
+                        datasets: [{
+                            label: 'Rate',
+                            data: results.history,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 0
+                        }]
+                    }}
+                    options={{responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}, scales: {x: {display: false}, y: {display: false}}}}
+                />
+            </div>
+        </Card>
+    </div>
+);
+
 const InputGroup = ({ label, value, onChange, prefix }: { label: string, value: number, onChange: (v: number) => void, prefix?: string }) => (
-    <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+    <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:border-indigo-500 transition-colors">
         <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">{label}</label>
         <div className="relative">
             {prefix && <span className="absolute left-0 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">{prefix}</span>}
             <input 
                 type="number" 
-                value={value} 
+                value={value || ''} 
                 onChange={e => onChange(parseFloat(e.target.value) || 0)}
                 className={`w-full bg-transparent outline-none text-sm font-bold text-slate-900 dark:text-white ${prefix ? 'pl-4' : ''}`}
+                onFocus={(e) => e.target.select()}
             />
         </div>
     </div>
 );
+
+// Helper for formatting large numbers in charts
+const formatCurrency = (val: number, symbol: string, compact: boolean = false) => {
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD', // Placeholder, we replace symbol anyway
+        notation: compact ? 'compact' : 'standard'
+    }).format(val).replace('$', symbol);
+}
