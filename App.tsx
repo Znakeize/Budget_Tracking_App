@@ -276,9 +276,9 @@ const AppContent: React.FC = () => {
           currencySymbol: budgetData.currencySymbol,
           // Copy over recurring items usually, but for now we reset or copy selected
           bills: budgetData.bills.map(b => ({ ...b, paid: false })), // Reset paid status
-          goals: budgetData.goals,
+          goals: budgetData.goals.map(g => ({ ...g, checked: false })), // Keep goals but uncheck them
           debts: budgetData.debts.map(d => ({ ...d, paid: false })),
-          income: budgetData.income, // Assume salary same
+          income: budgetData.income.map(i => ({ ...i, actual: 0 })), // Keep planned income, reset actuals
           expenses: budgetData.expenses.map(e => ({ ...e, spent: 0 })), // Reset spent
           investments: budgetData.investments.map(i => ({ ...i, contributed: false })),
           savings: budgetData.savings.map(s => ({ ...s, amount: 0, paid: false })),
@@ -506,6 +506,7 @@ const AppContent: React.FC = () => {
                   onToggleNotifications={() => setShowNotifications(true)}
                   onBack={() => goBack('ai')}
                   onProfileClick={handleProfileClick}
+                  shoppingLists={shoppingLists}
               />;
           case 'support':
               return <SupportView onBack={() => goBack('menu')} />;

@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ChevronLeft, Calculator, TrendingUp, DollarSign, 
   Landmark, PieChart, RefreshCcw, Percent, BarChart3,
@@ -14,6 +14,8 @@ import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import { TaxPlannerView } from './TaxPlannerView';
+import { ForexCalculatorView } from './ForexCalculatorView';
+import { SimpleCurrencyConverterView } from './SimpleCurrencyConverterView';
 import { BudgetData } from '../types';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, Filler, BarElement);
@@ -28,7 +30,7 @@ interface AdvancedCalculatorsViewProps {
   onViewFeature?: (featureId: string) => void;
 }
 
-type ModuleType = 'investment' | 'loan' | 'retirement' | 'tax' | 'business' | 'forex' | 'vat' | null;
+type ModuleType = 'investment' | 'loan' | 'retirement' | 'tax' | 'business' | 'converter' | 'vat' | 'forex' | 'simple-converter' | null;
 
 export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = ({ 
   onBack, currencySymbol, onProfileClick, budgetData, user, onNavigate, onViewFeature 
@@ -43,13 +45,12 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
       rate: 8, 
       years: 10, 
       inflation: 2.5, 
-      stepUp: 0,
+      stepUp: 0, 
       type: 'sip' // sip or lumpsum
   });
   
   const [loanInputs, setLoanInputs] = useState({ amount: 50000, rate: 5.5, tenure: 5, extraPayment: 0, loanType: 'personal' }); 
   const [retInputs, setRetInputs] = useState({ currentAge: 30, retAge: 65, savings: 20000, monthlySave: 1000, monthlySpend: 3000, inflation: 3, preRetReturn: 8, postRetReturn: 5, lifeExpectancy: 85 });
-  const [forexInputs, setForexInputs] = useState({ amount: 1000, from: 'USD', to: 'EUR', rate: 0.92, fee: 2.0 });
 
   // --- Calculations Logic ---
 
@@ -94,6 +95,9 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
       const totalInterest = nominalValue - totalInvested;
       const realValue = nominalValue / Math.pow(1 + invInputs.inflation/100, invInputs.years);
       
+      // ROI Calculation
+      const totalRoi = totalInvested > 0 ? (totalInterest / totalInvested) * 100 : 0;
+      
       // Cost of Delay (Delay 1 year)
       // Estimate by running a simplified loop for (years - 1)
       let delayVal = invInputs.principal;
@@ -115,7 +119,7 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
       }
       const costOfDelay = nominalValue - delayVal;
 
-      return { totalValue: nominalValue, realValue, totalInvested, totalInterest, dataPoints, costOfDelay };
+      return { totalValue: nominalValue, realValue, totalInvested, totalInterest, dataPoints, costOfDelay, totalRoi };
   }, [invInputs]);
 
   // Loan
@@ -226,22 +230,6 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
       };
   }, [retInputs]);
 
-  // Forex
-  const forexResults = useMemo(() => {
-      const grossAmount = forexInputs.amount;
-      const feeAmount = grossAmount * (forexInputs.fee / 100);
-      const netAmount = grossAmount - feeAmount;
-      const converted = netAmount * forexInputs.rate;
-      
-      // Mock historical data (last 7 days)
-      const history = Array.from({length: 7}).map((_, i) => {
-          const trend = Math.sin(i) * 0.05; // Fake trend
-          return forexInputs.rate * (1 + trend);
-      });
-
-      return { feeAmount, netAmount, converted, history };
-  }, [forexInputs]);
-
   // Check if user has unlocked business features
   const hasBusinessAccess = user?.isPro || (user?.unlockedFeatures && user.unlockedFeatures.includes('business'));
 
@@ -257,7 +245,7 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
       setActiveModule(module);
   };
 
-  // If Tax-related Modules are active, show the specialized Tax Planner View
+  // If specialized modules are active, render them
   if (activeModule === 'tax' || activeModule === 'vat' || activeModule === 'business') {
       return (
         <TaxPlannerView 
@@ -267,6 +255,14 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
             budgetData={budgetData}
         />
       );
+  }
+
+  if (activeModule === 'forex' || activeModule === 'converter') {
+      return <ForexCalculatorView onBack={() => setActiveModule(null)} currencySymbol={currencySymbol} />;
+  }
+
+  if (activeModule === 'simple-converter') {
+      return <SimpleCurrencyConverterView onBack={() => setActiveModule(null)} currencySymbol={currencySymbol} />;
   }
 
   // --- Renders ---
@@ -310,17 +306,6 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
                   </button>
 
                   <button 
-                      onClick={() => setActiveModule('forex')}
-                      className="p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 hover:border-indigo-500 transition-all text-left group active:scale-95"
-                  >
-                      <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                          <Globe size={20} />
-                      </div>
-                      <h4 className="font-bold text-slate-900 dark:text-white">Forex</h4>
-                      <p className="text-[10px] text-slate-500 mt-1">Rates & Fees</p>
-                  </button>
-
-                  <button 
                       onClick={() => setActiveModule('investment')}
                       className="p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 hover:border-indigo-500 transition-all text-left group active:scale-95"
                   >
@@ -341,6 +326,18 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
                       <h4 className="font-bold text-slate-900 dark:text-white">Retirement</h4>
                       <p className="text-[10px] text-slate-500 mt-1">Planning</p>
                   </button>
+
+                  {/* Simple Currency Converter - New Card */}
+                  <button 
+                      onClick={() => setActiveModule('simple-converter')}
+                      className="p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 hover:border-emerald-500 transition-all text-left group active:scale-95"
+                  >
+                      <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                          <ArrowLeftRight size={20} />
+                      </div>
+                      <h4 className="font-bold text-slate-900 dark:text-white">Converter</h4>
+                      <p className="text-[10px] text-slate-500 mt-1">Live Rates</p>
+                  </button>
               </div>
           </div>
 
@@ -352,7 +349,6 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
                   {!hasBusinessAccess && <span className="bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 text-[9px] font-extrabold px-1.5 py-0.5 rounded ml-1">PRO</span>}
               </div>
               <div className="grid grid-cols-2 gap-3">
-                  {/* Business Tax Card */}
                   <button 
                       onClick={() => handleModuleClick('business', true)}
                       className={`p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 transition-all text-left group active:scale-95 relative overflow-hidden ${!hasBusinessAccess ? 'opacity-90' : 'hover:border-indigo-500'}`}
@@ -383,6 +379,22 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
                       </div>
                       <h4 className="font-bold text-slate-900 dark:text-white">VAT / GST</h4>
                       <p className="text-[10px] text-slate-500 mt-1">Sales Tax</p>
+                  </button>
+
+                  <button 
+                      onClick={() => handleModuleClick('forex', true)}
+                      className={`p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 transition-all text-left group active:scale-95 relative overflow-hidden ${!hasBusinessAccess ? 'opacity-90' : 'hover:border-indigo-500'}`}
+                  >
+                      {!hasBusinessAccess && (
+                          <div className="absolute top-2 right-2 text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-full p-1">
+                              <Lock size={14} />
+                          </div>
+                      )}
+                      <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                          <Globe size={20} />
+                      </div>
+                      <h4 className="font-bold text-slate-900 dark:text-white">Forex Suite</h4>
+                      <p className="text-[10px] text-slate-500 mt-1">Live Rates & P&L</p>
                   </button>
               </div>
           </div>
@@ -418,13 +430,14 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
            {activeModule === 'investment' && <InvestmentModule results={investmentResults} inputs={invInputs} setInputs={setInvInputs} currencySymbol={currencySymbol} />}
            {activeModule === 'loan' && <LoanModule results={loanResults} inputs={loanInputs} setInputs={setLoanInputs} currencySymbol={currencySymbol} />}
            {activeModule === 'retirement' && <RetirementModule results={retResults} inputs={retInputs} setInputs={setRetInputs} currencySymbol={currencySymbol} />}
-           {activeModule === 'forex' && <ForexModule results={forexResults} inputs={forexInputs} setInputs={setForexInputs} />}
        </div>
     </div>
   );
 };
 
-// --- Helper for Module Descriptions ---
+// ... Helper components (ModuleDescription, InvestmentModule, LoanModule, RetirementModule, InputGroup) remain unchanged ...
+// Re-declaring helper components to ensure file completeness
+
 const ModuleDescription = ({ title, description }: { title: string, description: string }) => (
     <div className="bg-slate-100 dark:bg-slate-800/50 p-4 rounded-xl mb-6 border border-slate-200 dark:border-slate-700">
         <h3 className="font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2 text-sm">
@@ -436,10 +449,19 @@ const ModuleDescription = ({ title, description }: { title: string, description:
     </div>
 );
 
-// --- Sub-Components for Modules ---
-
 const InvestmentModule = ({ results, inputs, setInputs, currencySymbol }: any) => {
     const [showRealValue, setShowRealValue] = useState(false);
+    const [activeTab, setActiveTab] = useState<'forecast' | 'roi'>('forecast');
+    const [roiParams, setRoiParams] = useState({ initial: 10000, final: 18000, years: 5 });
+
+    const roiResults = useMemo(() => {
+        const gain = roiParams.final - roiParams.initial;
+        const totalRoi = roiParams.initial > 0 ? (gain / roiParams.initial) * 100 : 0;
+        const cagr = (roiParams.initial > 0 && roiParams.final > 0 && roiParams.years > 0)
+            ? (Math.pow(roiParams.final / roiParams.initial, 1 / roiParams.years) - 1) * 100
+            : 0;
+        return { gain, totalRoi, cagr };
+    }, [roiParams]);
 
     const breakdownData = {
         labels: ['Principal', 'Returns'],
@@ -452,139 +474,186 @@ const InvestmentModule = ({ results, inputs, setInputs, currencySymbol }: any) =
 
     return (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-        <ModuleDescription 
-            title="Investment Planner" 
-            description="Project wealth accumulation through SIP or Lumpsum investments. Adjust for inflation and step-up contributions to see real purchasing power." 
-        />
-
-        <Card className="p-5 bg-gradient-to-br from-violet-600 to-indigo-700 text-white border-none relative overflow-hidden">
-            <div className="relative z-10">
-                <div className="flex justify-between items-start mb-4">
-                    <div>
-                        <p className="text-xs text-violet-200 font-bold uppercase mb-1">{showRealValue ? 'Inflation Adjusted Value' : 'Future Value'}</p>
-                        <h2 className="text-3xl font-bold">{currencySymbol}{(showRealValue ? results.realValue : results.totalValue).toLocaleString(undefined, {maximumFractionDigits: 0})}</h2>
-                    </div>
-                    <div className="p-2 bg-white/20 rounded-lg cursor-pointer" onClick={() => setShowRealValue(!showRealValue)}>
-                        {showRealValue ? <Percent size={24} /> : <TrendingUp size={24} />}
-                    </div>
-                </div>
-                <div className="flex gap-2 text-xs">
-                    <button onClick={() => setShowRealValue(false)} className={`px-2 py-1 rounded ${!showRealValue ? 'bg-white text-violet-700 font-bold' : 'text-violet-200'}`}>Nominal</button>
-                    <button onClick={() => setShowRealValue(true)} className={`px-2 py-1 rounded ${showRealValue ? 'bg-white text-violet-700 font-bold' : 'text-violet-200'}`}>Real (Inflation)</button>
-                </div>
-            </div>
-        </Card>
-
-        {/* Input Configuration */}
-        <Card className="p-4">
-            <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2"><Settings size={12}/> Strategy</h4>
-            
-            {/* Type Selector */}
-            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
-                <button 
-                    onClick={() => setInputs({...inputs, type: 'sip'})} 
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${inputs.type === 'sip' ? 'bg-white dark:bg-slate-700 shadow-sm text-violet-600 dark:text-violet-400' : 'text-slate-500'}`}
-                >
-                    SIP (Recurring)
-                </button>
-                <button 
-                    onClick={() => setInputs({...inputs, type: 'lumpsum'})} 
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${inputs.type === 'lumpsum' ? 'bg-white dark:bg-slate-700 shadow-sm text-violet-600 dark:text-violet-400' : 'text-slate-500'}`}
-                >
-                    Lumpsum
-                </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 mb-3">
-                <InputGroup label="Start Amount" value={inputs.principal} onChange={v => setInputs({...inputs, principal: v})} prefix={currencySymbol} />
-                <InputGroup label="Duration (Years)" value={inputs.years} onChange={v => setInputs({...inputs, years: v})} />
-            </div>
-
-            {inputs.type === 'sip' && (
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                    <InputGroup label="Contribution" value={inputs.contribution} onChange={v => setInputs({...inputs, contribution: v})} prefix={currencySymbol} />
-                    <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Frequency</label>
-                        <select 
-                            value={inputs.frequency}
-                            onChange={(e) => setInputs({...inputs, frequency: e.target.value})}
-                            className="w-full bg-transparent text-sm font-bold text-slate-900 dark:text-white outline-none"
-                        >
-                            <option value="weekly">Weekly</option>
-                            <option value="bi-weekly">Bi-Weekly</option>
-                            <option value="monthly">Monthly</option>
-                            <option value="annually">Annually</option>
-                        </select>
-                    </div>
-                </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-                <InputGroup label="Return Rate (%)" value={inputs.rate} onChange={v => setInputs({...inputs, rate: v})} />
-                <InputGroup label="Inflation (%)" value={inputs.inflation} onChange={v => setInputs({...inputs, inflation: v})} />
-            </div>
-            
-            {inputs.type === 'sip' && (
-                <div className="mt-3">
-                    <InputGroup label="Annual Step-Up (%)" value={inputs.stepUp} onChange={v => setInputs({...inputs, stepUp: v})} />
-                </div>
-            )}
-        </Card>
-
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card className="p-4">
-                <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-3">Growth Curve</h3>
-                <div className="h-40">
-                    <Line 
-                        data={{
-                            labels: results.dataPoints.map((d:any) => `Y${d.year}`), 
-                            datasets: [
-                                {label: 'Value', data: results.dataPoints.map((d:any) => d.value), borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)', fill: true, pointRadius: 0},
-                                {label: 'Invested', data: results.dataPoints.map((d:any) => d.invested), borderColor: '#cbd5e1', borderDash: [5,5], fill: false, pointRadius: 0}
-                            ]
-                        }} 
-                        options={{responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}, scales: {y: {display: false}, x: {display: false}}}} 
-                    />
-                </div>
-            </Card>
-
-            <Card className="p-4 flex items-center justify-between">
-                <div className="w-1/2 h-32 relative">
-                    <Doughnut 
-                        data={breakdownData} 
-                        options={{maintainAspectRatio: false, cutout: '70%', plugins: {legend: {display: false}}}} 
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-slate-400">
-                        Total
-                    </div>
-                </div>
-                <div className="flex-1 pl-4 space-y-2">
-                    <div>
-                        <p className="text-[10px] text-slate-500 uppercase font-bold flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-300"></span> Invested</p>
-                        <p className="font-bold text-slate-900 dark:text-white text-sm">{currencySymbol}{results.totalInvested.toLocaleString(undefined, {notation: 'compact'})}</p>
-                    </div>
-                    <div>
-                        <p className="text-[10px] text-slate-500 uppercase font-bold flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-violet-500"></span> Returns</p>
-                        <p className="font-bold text-emerald-500 text-sm">+{currencySymbol}{results.totalInterest.toLocaleString(undefined, {notation: 'compact'})}</p>
-                    </div>
-                </div>
-            </Card>
+        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
+            <button onClick={() => setActiveTab('forecast')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${activeTab==='forecast' ? 'bg-white dark:bg-slate-700 shadow text-violet-600 dark:text-violet-400' : 'text-slate-500'}`}>Growth Forecast</button>
+            <button onClick={() => setActiveTab('roi')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${activeTab==='roi' ? 'bg-white dark:bg-slate-700 shadow text-violet-600 dark:text-violet-400' : 'text-slate-500'}`}>ROI Calculator</button>
         </div>
 
-        {/* Cost of Waiting Insight */}
-        {results.costOfDelay > 0 && (
-            <Card className="p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-500/20">
-                <div className="flex gap-3">
-                    <Clock className="text-amber-500 shrink-0" size={20} />
-                    <div>
-                        <h4 className="text-sm font-bold text-amber-800 dark:text-amber-400 mb-1">Cost of Delay</h4>
-                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                            If you wait just 1 year to start, you could lose approximately <strong>{currencySymbol}{results.costOfDelay.toLocaleString(undefined, {maximumFractionDigits: 0})}</strong> in potential wealth.
-                        </p>
+        {activeTab === 'forecast' ? (
+            <>
+                <ModuleDescription 
+                    title="Investment Planner" 
+                    description="Project wealth accumulation through SIP or Lumpsum investments. Adjust for inflation and step-up contributions to see real purchasing power." 
+                />
+
+                <Card className="p-5 bg-gradient-to-br from-violet-600 to-indigo-700 text-white border-none relative overflow-hidden">
+                    <div className="relative z-10">
+                        <div className="flex justify-between items-start mb-4">
+                            <div>
+                                <p className="text-xs text-violet-200 font-bold uppercase mb-1">{showRealValue ? 'Inflation Adjusted Value' : 'Future Value'}</p>
+                                <h2 className="text-3xl font-bold">{currencySymbol}{(showRealValue ? results.realValue : results.totalValue).toLocaleString(undefined, {maximumFractionDigits: 0})}</h2>
+                            </div>
+                            <div className="p-2 bg-white/20 rounded-lg cursor-pointer" onClick={() => setShowRealValue(!showRealValue)}>
+                                {showRealValue ? <Percent size={24} /> : <TrendingUp size={24} />}
+                            </div>
+                        </div>
+                        <div className="flex gap-2 text-xs">
+                            <button onClick={() => setShowRealValue(false)} className={`px-2 py-1 rounded ${!showRealValue ? 'bg-white text-violet-700 font-bold' : 'text-violet-200'}`}>Nominal</button>
+                            <button onClick={() => setShowRealValue(true)} className={`px-2 py-1 rounded ${showRealValue ? 'bg-white text-violet-700 font-bold' : 'text-violet-200'}`}>Real (Inflation)</button>
+                        </div>
                     </div>
+                </Card>
+
+                {/* Input Configuration */}
+                <Card className="p-4">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2"><Settings size={12}/> Strategy</h4>
+                    
+                    {/* Type Selector */}
+                    <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
+                        <button 
+                            onClick={() => setInputs({...inputs, type: 'sip'})} 
+                            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${inputs.type === 'sip' ? 'bg-white dark:bg-slate-700 shadow-sm text-violet-600 dark:text-violet-400' : 'text-slate-500'}`}
+                        >
+                            SIP (Recurring)
+                        </button>
+                        <button 
+                            onClick={() => setInputs({...inputs, type: 'lumpsum'})} 
+                            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${inputs.type === 'lumpsum' ? 'bg-white dark:bg-slate-700 shadow-sm text-violet-600 dark:text-violet-400' : 'text-slate-500'}`}
+                        >
+                            Lumpsum
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                        <InputGroup label="Start Amount" value={inputs.principal} onChange={v => setInputs({...inputs, principal: v})} prefix={currencySymbol} />
+                        <InputGroup label="Duration (Years)" value={inputs.years} onChange={v => setInputs({...inputs, years: v})} />
+                    </div>
+
+                    {inputs.type === 'sip' && (
+                        <div className="grid grid-cols-2 gap-3 mb-3">
+                            <InputGroup label="Contribution" value={inputs.contribution} onChange={v => setInputs({...inputs, contribution: v})} prefix={currencySymbol} />
+                            <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Frequency</label>
+                                <select 
+                                    value={inputs.frequency}
+                                    onChange={(e) => setInputs({...inputs, frequency: e.target.value})}
+                                    className="w-full bg-transparent text-sm font-bold text-slate-900 dark:text-white outline-none"
+                                >
+                                    <option value="weekly">Weekly</option>
+                                    <option value="bi-weekly">Bi-Weekly</option>
+                                    <option value="monthly">Monthly</option>
+                                    <option value="annually">Annually</option>
+                                </select>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <InputGroup label="Return Rate (%)" value={inputs.rate} onChange={v => setInputs({...inputs, rate: v})} />
+                        <InputGroup label="Inflation (%)" value={inputs.inflation} onChange={v => setInputs({...inputs, inflation: v})} />
+                    </div>
+                    
+                    {inputs.type === 'sip' && (
+                        <div className="mt-3">
+                            <InputGroup label="Annual Step-Up (%)" value={inputs.stepUp} onChange={v => setInputs({...inputs, stepUp: v})} />
+                        </div>
+                    )}
+                </Card>
+
+                {/* Charts Section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card className="p-4">
+                        <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-3">Growth Curve</h3>
+                        <div className="h-40">
+                            <Line 
+                                data={{
+                                    labels: results.dataPoints.map((d:any) => `Y${d.year}`), 
+                                    datasets: [
+                                        {label: 'Value', data: results.dataPoints.map((d:any) => d.value), borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)', fill: true, pointRadius: 0},
+                                        {label: 'Invested', data: results.dataPoints.map((d:any) => d.invested), borderColor: '#cbd5e1', borderDash: [5,5], fill: false, pointRadius: 0}
+                                    ]
+                                }} 
+                                options={{responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}, scales: {y: {display: false}, x: {display: false}}}} 
+                            />
+                        </div>
+                    </Card>
+
+                    <Card className="p-4 flex items-center justify-between">
+                        <div className="w-1/2 h-32 relative">
+                            <Doughnut 
+                                data={breakdownData} 
+                                options={{maintainAspectRatio: false, cutout: '70%', plugins: {legend: {display: false}}}} 
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-slate-400">
+                                Total
+                            </div>
+                        </div>
+                        <div className="flex-1 pl-4 space-y-2">
+                            <div>
+                                <p className="text-[10px] text-slate-500 uppercase font-bold flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-300"></span> Invested</p>
+                                <p className="font-bold text-slate-900 dark:text-white text-sm">{currencySymbol}{results.totalInvested.toLocaleString(undefined, {notation: 'compact'})}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-slate-500 uppercase font-bold flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-violet-500"></span> Returns</p>
+                                <p className="font-bold text-emerald-500 text-sm">+{currencySymbol}{results.totalInterest.toLocaleString(undefined, {notation: 'compact'})}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-slate-500 uppercase font-bold flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-transparent border border-slate-400"></span> Total ROI</p>
+                                <p className="font-bold text-indigo-600 dark:text-indigo-400 text-sm">{results.totalRoi.toFixed(1)}%</p>
+                            </div>
+                        </div>
+                    </Card>
                 </div>
-            </Card>
+
+                {/* Cost of Waiting Insight */}
+                {results.costOfDelay > 0 && (
+                    <Card className="p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-500/20">
+                        <div className="flex gap-3">
+                            <Clock className="text-amber-500 shrink-0" size={20} />
+                            <div>
+                                <h4 className="text-sm font-bold text-amber-800 dark:text-amber-400 mb-1">Cost of Delay</h4>
+                                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                                    If you wait just 1 year to start, you could lose approximately <strong>{currencySymbol}{results.costOfDelay.toLocaleString(undefined, {maximumFractionDigits: 0})}</strong> in potential wealth.
+                                </p>
+                            </div>
+                        </div>
+                    </Card>
+                )}
+            </>
+        ) : (
+            <>
+                <ModuleDescription 
+                    title="ROI & CAGR Calculator" 
+                    description="Calculate the efficiency of an investment. Determine the Annualized Return (CAGR) and Total Return based on initial and final values." 
+                />
+
+                <Card className="p-5 bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white border-none shadow-xl">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <p className="text-xs text-fuchsia-200 font-bold uppercase mb-1">Annualized Return (CAGR)</p>
+                            <h2 className="text-3xl font-bold">{roiResults.cagr.toFixed(2)}%</h2>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-xs text-fuchsia-200 font-bold uppercase mb-1">Total ROI</p>
+                            <h2 className="text-3xl font-bold">{roiResults.totalRoi.toFixed(1)}%</h2>
+                        </div>
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center">
+                        <span className="text-xs font-bold text-fuchsia-100 uppercase">Total Profit</span>
+                        <span className="text-xl font-bold">{currencySymbol}{roiResults.gain.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+                    </div>
+                </Card>
+
+                <Card className="p-4 bg-white dark:bg-slate-800">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-4 flex items-center gap-2"><Calculator size={14}/> Investment Details</h4>
+                    
+                    <div className="space-y-4">
+                        <InputGroup label="Initial Amount" value={roiParams.initial} onChange={v => setRoiParams({...roiParams, initial: v})} prefix={currencySymbol} />
+                        <InputGroup label="Final Value" value={roiParams.final} onChange={v => setRoiParams({...roiParams, final: v})} prefix={currencySymbol} />
+                        <InputGroup label="Time Period (Years)" value={roiParams.years} onChange={v => setRoiParams({...roiParams, years: v})} />
+                    </div>
+                </Card>
+            </>
         )}
     </div>
     );
@@ -762,96 +831,6 @@ const RetirementModule = ({ results, inputs, setInputs, currencySymbol }: any) =
     </div>
 );
 
-const ForexModule = ({ results, inputs, setInputs }: any) => (
-    <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-        <ModuleDescription 
-            title="Currency Converter" 
-            description="Real-time currency conversion with fee estimation. Understand the spread impact on your international transfers." 
-        />
-
-        {/* Main Display */}
-        <Card className="p-5 bg-gradient-to-br from-emerald-600 to-teal-700 text-white border-none">
-            <div className="flex justify-between items-start mb-4">
-                <div>
-                    <p className="text-xs text-emerald-200 font-bold uppercase mb-1">You Get</p>
-                    <h2 className="text-3xl font-bold">{inputs.to} {results.converted.toLocaleString(undefined, {maximumFractionDigits: 2})}</h2>
-                    <p className="text-[10px] text-emerald-200 mt-1">1 {inputs.from} = {inputs.rate} {inputs.to}</p>
-                </div>
-                <div className="p-2 bg-white/20 rounded-lg"><ArrowLeftRight size={24} /></div>
-            </div>
-            <div className="pt-4 border-t border-white/20">
-                <div className="flex justify-between items-center text-xs">
-                    <span className="text-emerald-200 font-bold">Exchange Fee ({inputs.fee}%)</span>
-                    <span className="font-bold text-white">-{inputs.from} {results.feeAmount.toFixed(2)}</span>
-                </div>
-            </div>
-        </Card>
-
-        {/* Currency Selectors */}
-        <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-            <div className="flex gap-2 items-center mb-4">
-                <div className="flex-1">
-                    <label className="text-[10px] font-bold text-slate-400 mb-1 block uppercase">Amount</label>
-                    <input type="number" className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-sm font-bold outline-none" value={inputs.amount} onChange={e => setInputs({...inputs, amount: parseFloat(e.target.value)||0})} />
-                </div>
-                <div className="flex-1">
-                    <label className="text-[10px] font-bold text-slate-400 mb-1 block uppercase">From</label>
-                    <select className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-sm font-bold outline-none" value={inputs.from} onChange={e => setInputs({...inputs, from: e.target.value})}>
-                        <option>USD</option><option>EUR</option><option>GBP</option><option>LKR</option><option>AUD</option><option>CAD</option><option>JPY</option>
-                    </select>
-                </div>
-                <div className="flex items-end pb-2 text-slate-400"><ArrowRight size={16}/></div>
-                <div className="flex-1">
-                    <label className="text-[10px] font-bold text-slate-400 mb-1 block uppercase">To</label>
-                    <select className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-sm font-bold outline-none" value={inputs.to} onChange={e => setInputs({...inputs, to: e.target.value})}>
-                        <option>EUR</option><option>USD</option><option>GBP</option><option>LKR</option><option>AUD</option><option>CAD</option><option>JPY</option>
-                    </select>
-                </div>
-            </div>
-
-            {/* Rate & Fee Sliders */}
-            <div className="space-y-3">
-                <div>
-                    <div className="flex justify-between items-center mb-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase">Exchange Rate</label>
-                        <span className="text-xs font-bold text-emerald-600">{inputs.rate}</span>
-                    </div>
-                    <input type="range" min="0.1" max="300" step="0.01" value={inputs.rate} onChange={e => setInputs({...inputs, rate: parseFloat(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
-                </div>
-                <div>
-                    <div className="flex justify-between items-center mb-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase">Bank Fee / Spread (%)</label>
-                        <span className="text-xs font-bold text-red-500">{inputs.fee}%</span>
-                    </div>
-                    <input type="range" min="0" max="10" step="0.1" value={inputs.fee} onChange={e => setInputs({...inputs, fee: parseFloat(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-500" />
-                </div>
-            </div>
-        </div>
-
-        {/* Trend Mock */}
-        <Card className="p-4">
-            <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-2">30-Day Trend (Simulated)</h3>
-            <div className="h-32 w-full">
-                <Line 
-                    data={{
-                        labels: ['1w', '2w', '3w', '4w', 'Now'],
-                        datasets: [{
-                            label: 'Rate',
-                            data: results.history,
-                            borderColor: '#10b981',
-                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                            fill: true,
-                            tension: 0.4,
-                            pointRadius: 0
-                        }]
-                    }}
-                    options={{responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}, scales: {x: {display: false}, y: {display: false}}}}
-                />
-            </div>
-        </Card>
-    </div>
-);
-
 const InputGroup = ({ label, value, onChange, prefix }: { label: string, value: number, onChange: (v: number) => void, prefix?: string }) => (
     <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:border-indigo-500 transition-colors">
         <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">{label}</label>
@@ -868,11 +847,10 @@ const InputGroup = ({ label, value, onChange, prefix }: { label: string, value: 
     </div>
 );
 
-// Helper for formatting large numbers in charts
 const formatCurrency = (val: number, symbol: string, compact: boolean = false) => {
     return new Intl.NumberFormat('en-US', {
         style: 'currency',
-        currency: 'USD', // Placeholder, we replace symbol anyway
+        currency: 'USD',
         notation: compact ? 'compact' : 'standard'
     }).format(val).replace('$', symbol);
 }

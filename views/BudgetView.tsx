@@ -1,3 +1,5 @@
+
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { BudgetData, InvestmentGoal, GoalItem } from '../types';
 import { formatCurrency, generateId } from '../utils/calculations';
@@ -11,6 +13,7 @@ import { Checkbox } from '../components/ui/Checkbox';
 import { GoalActionModal } from '../components/ui/GoalActionModal';
 import { AddItemModal } from '../components/ui/AddItemModal';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
+import { useLanguage } from '../contexts/LanguageContext';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -68,6 +71,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
   onAddInvestmentGoal,
   onGoalUpdate
 }) => {
+  const { t } = useLanguage();
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [expandedInvestmentId, setExpandedInvestmentId] = useState<string | null>(null);
   const [goalToConfirm, setGoalToConfirm] = useState<number | null>(null);
@@ -339,56 +343,56 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
       .reduce((sum, item) => sum + item.amount, 0)
   };
 
-  // Configuration for the cards
+  // Configuration for the cards with translations
   const sections = [
     {
         id: 'income',
-        title: 'Income Tracker',
+        title: t('budget.section.income'),
         icon: Wallet,
         color: 'emerald',
-        summary: `Total: ${formatCurrency(totals.income.actual, data.currencySymbol)} | ${data.income.length} Sources`
+        summary: `${t('budget.summary.total')}: ${formatCurrency(totals.income.actual, data.currencySymbol)} | ${data.income.length} ${t('budget.summary.sources')}`
     },
     {
         id: 'goals',
-        title: 'Money Goals',
+        title: t('budget.section.goals'),
         icon: Target,
         color: 'blue',
-        summary: `${data.goals.length} Goals | Monthly: ${formatCurrency(totals.goals, data.currencySymbol)}`
+        summary: `${data.goals.length} ${t('budget.section.goals')} | ${t('budget.summary.monthly')}: ${formatCurrency(totals.goals, data.currencySymbol)}`
     },
     {
         id: 'bills',
-        title: 'Bill Tracker',
+        title: t('budget.section.bills'),
         icon: Receipt,
         color: 'indigo',
-        summary: `${data.bills.length} Bills | Unpaid: ${formatCurrency(totals.bills.unpaid, data.currencySymbol)}`
+        summary: `${data.bills.length} ${t('budget.section.bills')} | ${t('budget.summary.unpaid')}: ${formatCurrency(totals.bills.unpaid, data.currencySymbol)}`
     },
     {
         id: 'expenses',
-        title: 'Expense Summary',
+        title: t('budget.section.expenses'),
         icon: CreditCard,
         color: 'pink',
-        summary: `Spent: ${formatCurrency(totals.expenses.spent, data.currencySymbol)} of ${formatCurrency(totals.expenses.budgeted, data.currencySymbol)}`
+        summary: `${t('budget.summary.spent')}: ${formatCurrency(totals.expenses.spent, data.currencySymbol)} ${t('budget.summary.spent_of')} ${formatCurrency(totals.expenses.budgeted, data.currencySymbol)}`
     },
     {
         id: 'savings',
-        title: 'Savings Tracker',
+        title: t('budget.section.savings'),
         icon: PiggyBank,
         color: 'teal',
-        summary: `Total Saved: ${formatCurrency(totals.savings.amount, data.currencySymbol)}`
+        summary: `${t('budget.summary.saved')}: ${formatCurrency(totals.savings.amount, data.currencySymbol)}`
     },
     {
         id: 'debts',
-        title: 'Debt Tracker',
+        title: t('budget.section.debts'),
         icon: Landmark,
         color: 'orange',
-        summary: `Balance: ${formatCurrency(totals.debts.balance, data.currencySymbol)} | ${data.debts.length} Debts`
+        summary: `${t('budget.summary.balance')}: ${formatCurrency(totals.debts.balance, data.currencySymbol)} | ${data.debts.length} ${t('budget.section.debts')}`
     },
     {
         id: 'investments',
-        title: 'Investment Tracker',
+        title: t('budget.section.investments'),
         icon: TrendingUp,
         color: 'violet',
-        summary: `Total Value: ${formatCurrency(totals.investments, data.currencySymbol)}`
+        summary: `${t('budget.summary.value')}: ${formatCurrency(totals.investments, data.currencySymbol)}`
     }
   ];
 
@@ -405,10 +409,10 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                 )}
                 <div>
                     <h2 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-0.5">
-                        {activeSection ? 'Edit Details' : 'Manage Plan'}
+                        {activeSection ? t('budget.edit_details') : t('budget.manage_plan')}
                     </h2>
                     <h1 className="text-2xl font-bold leading-none tracking-tight text-slate-900 dark:text-white">
-                        {activeSection ? sections.find(s => s.id === activeSection)?.title : 'Budget Editor'}
+                        {activeSection ? sections.find(s => s.id === activeSection)?.title : t('budget.title')}
                     </h1>
                 </div>
             </div>
@@ -461,7 +465,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                         onClick={() => setAddingCollection(activeSection as keyof BudgetData)} 
                         className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95 transition-all"
                     >
-                        <Plus size={18} /> Add New
+                        <Plus size={18} /> {t('budget.add_new')}
                     </button>
                 </div>
 
@@ -474,11 +478,11 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                     className="bg-transparent font-bold text-lg text-slate-900 dark:text-white outline-none w-full mb-3" 
                                     value={item.name} 
                                     onChange={(e) => updateItem('income', idx, 'name', e.target.value)} 
-                                    placeholder="Source Name"
+                                    placeholder={t('budget.placeholder.source')}
                                 />
                                 <div className="flex gap-3">
                                     <div className="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-800">
-                                        <span className="text-xs text-slate-400 uppercase font-bold block mb-1">Planned</span>
+                                        <span className="text-xs text-slate-400 uppercase font-bold block mb-1">{t('budget.label.planned')}</span>
                                         <div className="flex items-center">
                                             <span className="text-slate-400 text-sm mr-1">{data.currencySymbol}</span>
                                             <input type="number" className="bg-transparent w-full font-semibold outline-none text-slate-700 dark:text-slate-300 min-w-0" 
@@ -486,7 +490,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                         </div>
                                     </div>
                                     <div className="flex-1 bg-emerald-50 dark:bg-emerald-900/10 rounded-lg px-3 py-2 border border-emerald-100 dark:border-emerald-500/20">
-                                        <span className="text-xs text-emerald-600 dark:text-emerald-400 uppercase font-bold block mb-1">Actual</span>
+                                        <span className="text-xs text-emerald-600 dark:text-emerald-400 uppercase font-bold block mb-1">{t('budget.label.actual')}</span>
                                         <div className="flex items-center">
                                             <span className="text-emerald-600/70 text-sm mr-1">{data.currencySymbol}</span>
                                             <input type="number" className="bg-transparent w-full font-bold outline-none text-emerald-600 dark:text-emerald-400 min-w-0" 
@@ -515,14 +519,14 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                             className={`bg-transparent font-bold text-lg outline-none flex-1 min-w-0 ${item.checked ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-white'}`}
                                             value={item.name} 
                                             onChange={(e) => updateItem('goals', idx, 'name', e.target.value)} 
-                                            placeholder="Goal Name"
+                                            placeholder={t('budget.placeholder.goal')}
                                         />
                                         <button onClick={() => deleteItem('goals', idx)} className="text-slate-300 hover:text-red-500 p-2 transition-colors"><Trash2 size={20} /></button>
                                     </div>
                                     
                                     <div className="grid grid-cols-2 gap-3 mb-3">
                                         <div className="bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-800">
-                                            <span className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Current Saved</span>
+                                            <span className="text-[10px] text-slate-400 uppercase font-bold block mb-1">{t('budget.label.current_saved')}</span>
                                             <div className="flex items-center text-blue-500 dark:text-blue-400">
                                                 <span className="text-sm mr-1">{data.currencySymbol}</span>
                                                 <input type="number" className="bg-transparent w-full font-bold outline-none min-w-0" 
@@ -530,7 +534,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                             </div>
                                         </div>
                                         <div className="bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-800">
-                                            <span className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Target</span>
+                                            <span className="text-[10px] text-slate-400 uppercase font-bold block mb-1">{t('budget.label.target')}</span>
                                             <div className="flex items-center text-slate-700 dark:text-slate-300">
                                                 <span className="text-sm mr-1">{data.currencySymbol}</span>
                                                 <input type="number" className="bg-transparent w-full font-bold outline-none min-w-0" 
@@ -541,7 +545,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
 
                                     <div className="flex items-center gap-2 mb-3">
                                         <div className="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                                            <span className="text-xs text-slate-500 font-medium">Monthly Contribution</span>
+                                            <span className="text-xs text-slate-500 font-medium">{t('budget.label.monthly_contribution')}</span>
                                             <div className="flex items-center text-slate-900 dark:text-white w-20">
                                                 <span className="text-xs mr-1">{data.currencySymbol}</span>
                                                 <input type="number" className="bg-transparent w-full text-sm font-bold outline-none text-right" 
@@ -550,13 +554,13 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                         </div>
                                          <div className="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-800">
                                             <input type="text" className="bg-transparent w-full text-xs font-medium text-center outline-none text-slate-500" 
-                                                value={item.timeframe} placeholder="Timeframe" onChange={(e) => updateItem('goals', idx, 'timeframe', e.target.value)} />
+                                                value={item.timeframe} placeholder={t('budget.placeholder.timeframe')} onChange={(e) => updateItem('goals', idx, 'timeframe', e.target.value)} />
                                         </div>
                                     </div>
 
                                     <div>
                                         <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1.5">
-                                            <span>Progress</span>
+                                            <span>{t('budget.label.progress')}</span>
                                             <span>{progress.toFixed(1)}%</span>
                                         </div>
                                         <div className="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
@@ -582,7 +586,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                             className={`flex-1 min-w-0 bg-transparent font-bold text-lg outline-none ${item.paid ? 'line-through text-slate-500' : 'text-slate-900 dark:text-white'}`}
                                             value={item.name} 
                                             onChange={(e) => updateItem('bills', idx, 'name', e.target.value)} 
-                                            placeholder="Bill Name"
+                                            placeholder={t('budget.placeholder.bill')}
                                         />
                                         <button onClick={() => deleteItem('bills', idx)} className="text-slate-300 hover:text-red-500 p-2 transition-colors"><Trash2 size={20} /></button>
                                     </div>
@@ -592,14 +596,14 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                             <input type="date" className="bg-transparent outline-none w-full text-xs font-bold uppercase" style={{ colorScheme: 'dark' }} value={item.dueDate} onChange={(e) => updateItem('bills', idx, 'dueDate', e.target.value)} />
                                         </div>
                                         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
-                                            <span className="text-xs font-bold text-slate-400">AMT</span>
+                                            <span className="text-xs font-bold text-slate-400">{t('budget.label.amt')}</span>
                                             <div className="flex items-center flex-1 text-slate-900 dark:text-white">
                                                 <span className="text-xs mr-1">{data.currencySymbol}</span>
                                                 <input type="number" className="bg-transparent w-full text-sm font-bold outline-none text-right" value={item.amount || ''} onChange={(e) => updateItem('bills', idx, 'amount', parseFloat(e.target.value) || 0)} />
                                             </div>
                                         </div>
                                     </div>
-                                    {isOverdue && <div className="pl-9 mt-2 text-xs font-bold text-red-500 animate-pulse">⚠️ Payment Overdue</div>}
+                                    {isOverdue && <div className="pl-9 mt-2 text-xs font-bold text-red-500 animate-pulse">⚠️ {t('budget.warn.overdue')}</div>}
                                 </div>
                             );
                         })}
@@ -614,11 +618,11 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                     className="bg-transparent font-bold text-lg text-slate-900 dark:text-white outline-none w-full mb-3" 
                                     value={item.name} 
                                     onChange={(e) => updateItem('expenses', idx, 'name', e.target.value)} 
-                                    placeholder="Category Name"
+                                    placeholder={t('budget.placeholder.category')}
                                 />
                                 <div className="flex gap-3 mb-3">
                                     <div className="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-800">
-                                        <span className="text-xs text-slate-400 uppercase font-bold block mb-1">Budget</span>
+                                        <span className="text-xs text-slate-400 uppercase font-bold block mb-1">{t('budget.label.budget')}</span>
                                         <div className="flex items-center">
                                             <span className="text-slate-400 text-sm mr-1">{data.currencySymbol}</span>
                                             <input type="number" className="bg-transparent w-full font-semibold outline-none text-slate-700 dark:text-slate-300 min-w-0" 
@@ -626,7 +630,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                         </div>
                                     </div>
                                     <div className="flex-1 bg-pink-50 dark:bg-pink-900/10 rounded-lg px-3 py-2 border border-pink-100 dark:border-pink-500/20">
-                                        <span className="text-xs text-pink-500 uppercase font-bold block mb-1">Spent</span>
+                                        <span className="text-xs text-pink-500 uppercase font-bold block mb-1">{t('budget.label.spent')}</span>
                                         <div className="flex items-center">
                                             <span className="text-pink-600/70 text-sm mr-1">{data.currencySymbol}</span>
                                             <input type="number" className="bg-transparent w-full font-bold outline-none text-pink-600 dark:text-pink-400 min-w-0" 
@@ -654,14 +658,14 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                             className={`flex-1 min-w-0 bg-transparent font-bold text-lg outline-none ${item.paid ? 'line-through text-slate-500' : 'text-slate-900 dark:text-white'}`}
                                             value={item.name} 
                                             onChange={(e) => updateItem('savings', idx, 'name', e.target.value)} 
-                                            placeholder="Fund Name"
+                                            placeholder={t('budget.placeholder.fund')}
                                         />
                                         <button onClick={() => deleteItem('savings', idx)} className="text-slate-300 hover:text-red-500 p-2 transition-colors"><Trash2 size={20} /></button>
                                     </div>
                                     
                                     <div className="grid grid-cols-2 gap-3 pl-9">
                                         <div className="bg-teal-50 dark:bg-teal-900/10 rounded-lg px-3 py-2 border border-teal-100 dark:border-teal-500/20">
-                                            <span className="text-[10px] text-teal-600 dark:text-teal-400 uppercase font-bold block mb-1">Total Fund</span>
+                                            <span className="text-[10px] text-teal-600 dark:text-teal-400 uppercase font-bold block mb-1">{t('budget.label.total_fund')}</span>
                                             <div className="flex items-center text-teal-700 dark:text-teal-300">
                                                 <span className="text-xs mr-1">{data.currencySymbol}</span>
                                                 <input type="number" className="bg-transparent w-full text-sm font-bold outline-none" 
@@ -672,7 +676,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                             </div>
                                         </div>
                                         <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-200 dark:border-slate-700">
-                                            <span className="text-[10px] text-slate-500 uppercase font-bold block mb-1">Monthly Plan</span>
+                                            <span className="text-[10px] text-slate-500 uppercase font-bold block mb-1">{t('budget.label.monthly_plan')}</span>
                                             <div className="flex items-center text-slate-900 dark:text-white">
                                                 <span className="text-xs mr-1">{data.currencySymbol}</span>
                                                 <input type="number" className="bg-transparent w-full text-sm font-bold outline-none" 
@@ -682,7 +686,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                     </div>
                                     {item.paid && (
                                         <div className="pl-9 mt-2 text-[10px] font-bold text-teal-500 flex items-center gap-1">
-                                            <Target size={12} /> {formatCurrency(item.amount, data.currencySymbol)} saved this month
+                                            <Target size={12} /> {formatCurrency(item.amount, data.currencySymbol)} {t('budget.label.saved_this_month')}
                                         </div>
                                     )}
                                 </div>
@@ -704,14 +708,14 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                             className={`flex-1 min-w-0 bg-transparent font-bold text-lg outline-none ${item.paid ? 'line-through text-slate-500' : 'text-slate-900 dark:text-white'}`}
                                             value={item.name} 
                                             onChange={(e) => updateItem('debts', idx, 'name', e.target.value)} 
-                                            placeholder="Debt Name"
+                                            placeholder={t('budget.placeholder.debt')}
                                         />
                                         <button onClick={() => deleteItem('debts', idx)} className="text-slate-300 hover:text-red-500 p-2 transition-colors"><Trash2 size={20} /></button>
                                     </div>
                                     
                                     <div className="grid grid-cols-2 gap-3 pl-9">
                                         <div className="bg-orange-50 dark:bg-orange-900/10 rounded-lg px-3 py-2 border border-orange-100 dark:border-orange-500/20">
-                                            <span className="text-[10px] text-orange-600 dark:text-orange-400 uppercase font-bold block mb-1">Monthly Pay</span>
+                                            <span className="text-[10px] text-orange-600 dark:text-orange-400 uppercase font-bold block mb-1">{t('budget.label.monthly_pay')}</span>
                                             <div className="flex items-center text-orange-700 dark:text-orange-300">
                                                 <span className="text-xs mr-1">{data.currencySymbol}</span>
                                                 <input type="number" className="bg-transparent w-full text-sm font-bold outline-none" 
@@ -719,11 +723,11 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                             </div>
                                         </div>
                                         <div className={`rounded-lg px-3 py-2 border flex flex-col justify-center ${isOverdue ? 'bg-red-500/10 border-red-500/20 text-red-500' : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700'}`}>
-                                            <span className="text-[10px] uppercase font-bold opacity-70 mb-1">Due Date</span>
+                                            <span className="text-[10px] uppercase font-bold opacity-70 mb-1">{t('budget.section.bills')} {t('budget.warn.overdue')}?</span>
                                             <input type="date" className="bg-transparent outline-none w-full text-xs font-bold uppercase p-0" style={{ colorScheme: 'dark' }} value={item.dueDate || ''} onChange={(e) => updateItem('debts', idx, 'dueDate', e.target.value)} />
                                         </div>
                                         <div className="col-span-2 bg-slate-50 dark:bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                                            <span className="text-xs font-bold text-slate-500">Remaining Balance</span>
+                                            <span className="text-xs font-bold text-slate-500">{t('budget.label.remaining_balance')}</span>
                                             <div className="flex items-center text-slate-900 dark:text-white">
                                                 <span className="text-xs mr-1">{data.currencySymbol}</span>
                                                 <input type="number" className="bg-transparent w-full text-sm font-bold outline-none text-right" 
@@ -740,7 +744,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                 {activeSection === 'investments' && (
                      <div className="space-y-4">
                         <div className="bg-violet-100 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-500/20 rounded-xl p-4 text-center">
-                            <span className="text-xs font-bold text-violet-600 dark:text-violet-300 uppercase tracking-wider block mb-1">Total Portfolio Value</span>
+                            <span className="text-xs font-bold text-violet-600 dark:text-violet-300 uppercase tracking-wider block mb-1">{t('budget.summary.value')}</span>
                             <span className="text-3xl font-extrabold text-violet-900 dark:text-white">{formatCurrency(totals.investments, data.currencySymbol)}</span>
                         </div>
 
@@ -760,7 +764,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                                     className={`bg-transparent font-bold text-lg outline-none flex-1 min-w-0 ${item.contributed ? 'text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-white'}`} 
                                                     value={item.name} 
                                                     onChange={(e) => updateItem('investments', idx, 'name', e.target.value)} 
-                                                    placeholder="Asset Name"
+                                                    placeholder={t('budget.placeholder.asset')}
                                                 />
                                                 <button 
                                                     onClick={() => setExpandedInvestmentId(expandedInvestmentId === item.id ? null : item.id)}
@@ -775,7 +779,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                     
                                     <div className="grid grid-cols-2 gap-3 mb-3 pl-9">
                                         <div className="bg-violet-50 dark:bg-violet-900/10 rounded-lg px-3 py-2 border border-violet-100 dark:border-violet-500/20">
-                                            <span className="text-[10px] text-violet-600 dark:text-violet-400 uppercase font-bold block mb-1">Current Value</span>
+                                            <span className="text-[10px] text-violet-600 dark:text-violet-400 uppercase font-bold block mb-1">{t('budget.label.current_value')}</span>
                                             <div className="flex items-center text-violet-700 dark:text-violet-300">
                                                 <span className="text-xs mr-1">{data.currencySymbol}</span>
                                                 <input type="number" className="bg-transparent w-full text-sm font-bold outline-none" 
@@ -783,7 +787,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                             </div>
                                         </div>
                                         <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-200 dark:border-slate-700">
-                                            <span className="text-[10px] text-slate-500 uppercase font-bold block mb-1">Target Value</span>
+                                            <span className="text-[10px] text-slate-500 uppercase font-bold block mb-1">{t('budget.label.target_value')}</span>
                                             <div className="flex items-center text-slate-900 dark:text-white">
                                                 <span className="text-xs mr-1">{data.currencySymbol}</span>
                                                 <input type="number" className="bg-transparent w-full text-sm font-bold outline-none" 
@@ -794,7 +798,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
 
                                     <div className="pl-9 mb-3">
                                         <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                                            <span className="text-xs text-slate-500 font-medium">Monthly Contribution</span>
+                                            <span className="text-xs text-slate-500 font-medium">{t('budget.label.monthly_contribution')}</span>
                                             <div className="flex items-center text-slate-900 dark:text-white w-24">
                                                 <span className="text-xs mr-1">{data.currencySymbol}</span>
                                                 <input type="number" className="bg-transparent w-full text-sm font-bold outline-none text-right" 
@@ -803,14 +807,14 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                         </div>
                                         {item.contributed && (
                                             <div className="mt-1 text-[10px] font-bold text-violet-500 flex items-center gap-1 justify-end">
-                                                <TrendingUp size={10} /> Contributed this month
+                                                <TrendingUp size={10} /> {t('budget.label.contributed_month')}
                                             </div>
                                         )}
                                     </div>
 
                                     <div className="pl-9">
                                         <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1.5">
-                                            <span>Progress</span>
+                                            <span>{t('budget.label.progress')}</span>
                                             <span>{progress.toFixed(1)}%</span>
                                         </div>
                                         <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mb-3">
@@ -824,9 +828,9 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                     {expandedInvestmentId === item.id && (
                                         <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 animate-in slide-in-from-top-2 pl-9">
                                             <div className="flex justify-between items-center mb-3">
-                                                <h4 className="text-[10px] font-bold text-slate-500 uppercase">Value History</h4>
+                                                <h4 className="text-[10px] font-bold text-slate-500 uppercase">{t('budget.label.history')}</h4>
                                                 <button onClick={() => addInvestmentHistory(idx)} className="text-[10px] font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-md hover:bg-slate-50 shadow-sm flex items-center gap-1">
-                                                    <Plus size={10} /> Add Entry
+                                                    <Plus size={10} /> {t('budget.label.add_entry')}
                                                 </button>
                                             </div>
                                             <div className="space-y-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
