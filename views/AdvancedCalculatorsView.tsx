@@ -5,7 +5,8 @@ import {
   Landmark, PieChart, RefreshCcw, Percent, BarChart3,
   ArrowRight, Download, Table as TableIcon, Activity, Zap, Crown,
   Settings, Info, Globe, ArrowLeftRight, Coins, Receipt, Briefcase,
-  Home, Car, CreditCard, Plane, Smile, Coffee, Gem, Calendar, Clock, Lock
+  Home, Car, CreditCard, Plane, Smile, Coffee, Gem, Calendar, Clock, Lock,
+  ShieldCheck, Gauge
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
@@ -54,6 +55,26 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
 
   // --- Calculations Logic ---
 
+  // Calculate metrics from budgetData if available
+  const budgetMetrics = useMemo(() => {
+      if (!budgetData) return null;
+      const totalValue = budgetData.investments.reduce((sum, i) => sum + i.amount, 0);
+      const totalMonthlyContribution = budgetData.investments.reduce((sum, i) => sum + (i.monthly || 0), 0);
+      return { totalValue, totalMonthlyContribution };
+  }, [budgetData]);
+
+  // Sync calculator defaults with real data
+  useEffect(() => {
+      if (activeModule === 'investment' && budgetMetrics && invInputs.principal === 5000) { 
+          // Only auto-fill if user hasn't modified the default 5000 yet, or first load
+          setInvInputs(prev => ({ 
+              ...prev, 
+              principal: budgetMetrics.totalValue || prev.principal, 
+              contribution: budgetMetrics.totalMonthlyContribution || prev.contribution 
+          }));
+      }
+  }, [activeModule, budgetMetrics]);
+
   // Investment
   const investmentResults = useMemo(() => {
       const dataPoints = [];
@@ -101,16 +122,15 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
       // Cost of Delay (Delay 1 year)
       // Estimate by running a simplified loop for (years - 1)
       let delayVal = invInputs.principal;
-      let delayInvested = invInputs.principal;
-      let delayContrib = invInputs.type === 'sip' ? invInputs.contribution : 0;
       const delayPeriods = (invInputs.years - 1) * ppy;
+      let delayInvested = invInputs.principal; // Unused but kept for logic consistency
+      let delayContrib = invInputs.type === 'sip' ? invInputs.contribution : 0;
       
       if (invInputs.years > 1) {
           for (let i = 1; i <= delayPeriods; i++) {
               delayVal = delayVal * (1 + ratePerPeriod);
               if (invInputs.type === 'sip') {
                   delayVal += delayContrib;
-                  delayInvested += delayContrib;
               }
               if (i % ppy === 0 && invInputs.stepUp > 0 && invInputs.type === 'sip') {
                   delayContrib = delayContrib * (1 + invInputs.stepUp / 100);
@@ -180,11 +200,20 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
       // Phase 1: Accumulation (Now -> Retire)
       const yearsToGrow = retInputs.retAge - retInputs.currentAge;
       const accumulationData = [];
+      const realAccumulationData = [];
+      
       let currentCorpus = retInputs.savings;
       const monthlyRate = retInputs.preRetReturn / 100 / 12;
+      const monthlyInflation = retInputs.inflation / 100 / 12;
       
       for(let i=0; i<=yearsToGrow; i++) {
-          accumulationData.push({ age: retInputs.currentAge + i, value: currentCorpus });
+          const age = retInputs.currentAge + i;
+          const totalMonths = i * 12;
+          const discountFactor = Math.pow(1 + monthlyInflation, totalMonths);
+          
+          accumulationData.push({ age, value: currentCorpus });
+          realAccumulationData.push({ age, value: currentCorpus / discountFactor });
+          
           // Grow for 1 year
           for(let m=0; m<12; m++) {
               currentCorpus = (currentCorpus + retInputs.monthlySave) * (1 + monthlyRate);
@@ -192,27 +221,36 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
       }
 
       const corpusAtRetirement = currentCorpus;
+      // Real value at retirement is discounted back to today
+      const realCorpusAtRetirement = corpusAtRetirement / Math.pow(1 + monthlyInflation, yearsToGrow * 12);
 
       // Phase 2: Distribution (Retire -> Death)
       const yearsInRetirement = retInputs.lifeExpectancy - retInputs.retAge;
       const postMonthlyRate = retInputs.postRetReturn / 100 / 12;
-      const monthlyInflation = retInputs.inflation / 100 / 12;
       
       // Calculate required monthly spend at retirement age adjusted for inflation
       let currentMonthlySpend = retInputs.monthlySpend * Math.pow(1 + monthlyInflation, yearsToGrow * 12);
       
       const distributionData = [];
+      const realDistributionData = [];
+      let distCorpus = corpusAtRetirement;
+      
       let hasRunOut = false;
       let runOutAge = null;
 
       for(let i=0; i<=yearsInRetirement; i++) {
-          distributionData.push({ age: retInputs.retAge + i, value: Math.max(0, currentCorpus) });
+          const age = retInputs.retAge + i;
+          const totalMonths = (age - retInputs.currentAge) * 12;
+          const discountFactor = Math.pow(1 + monthlyInflation, totalMonths);
+
+          distributionData.push({ age, value: Math.max(0, distCorpus) });
+          realDistributionData.push({ age, value: Math.max(0, distCorpus / discountFactor) });
           
           // Withdraw for 1 year
           for(let m=0; m<12; m++) {
-              currentCorpus = currentCorpus * (1 + postMonthlyRate) - currentMonthlySpend;
+              distCorpus = distCorpus * (1 + postMonthlyRate) - currentMonthlySpend;
               currentMonthlySpend = currentMonthlySpend * (1 + monthlyInflation); // Inflation continues in retirement
-              if (currentCorpus <= 0 && !hasRunOut) {
+              if (distCorpus <= 0 && !hasRunOut) {
                   hasRunOut = true;
                   runOutAge = retInputs.retAge + i + (m/12);
               }
@@ -223,8 +261,10 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
 
       return { 
           corpus: corpusAtRetirement, 
+          realCorpus: realCorpusAtRetirement,
           monthlySpendAtRetirement: retInputs.monthlySpend * Math.pow(1 + retInputs.inflation/100, yearsToGrow),
           chartData: [...accumulationData, ...distributionData],
+          realChartData: [...realAccumulationData, ...realDistributionData],
           runOutAge,
           gap
       };
@@ -327,7 +367,7 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
                       <p className="text-[10px] text-slate-500 mt-1">Planning</p>
                   </button>
 
-                  {/* Simple Currency Converter - New Card */}
+                  {/* Currency Converter System - Updated */}
                   <button 
                       onClick={() => setActiveModule('simple-converter')}
                       className="p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 hover:border-emerald-500 transition-all text-left group active:scale-95"
@@ -335,8 +375,8 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
                       <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                           <ArrowLeftRight size={20} />
                       </div>
-                      <h4 className="font-bold text-slate-900 dark:text-white">Converter</h4>
-                      <p className="text-[10px] text-slate-500 mt-1">Live Rates</p>
+                      <h4 className="font-bold text-slate-900 dark:text-white">Currency</h4>
+                      <p className="text-[10px] text-slate-500 mt-1">System & Charts</p>
                   </button>
               </div>
           </div>
@@ -394,7 +434,7 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
                           <Globe size={20} />
                       </div>
                       <h4 className="font-bold text-slate-900 dark:text-white">Forex Suite</h4>
-                      <p className="text-[10px] text-slate-500 mt-1">Live Rates & P&L</p>
+                      <p className="text-[10px] text-slate-500 mt-1">Trading & P&L</p>
                   </button>
               </div>
           </div>
@@ -434,9 +474,6 @@ export const AdvancedCalculatorsView: React.FC<AdvancedCalculatorsViewProps> = (
     </div>
   );
 };
-
-// ... Helper components (ModuleDescription, InvestmentModule, LoanModule, RetirementModule, InputGroup) remain unchanged ...
-// Re-declaring helper components to ensure file completeness
 
 const ModuleDescription = ({ title, description }: { title: string, description: string }) => (
     <div className="bg-slate-100 dark:bg-slate-800/50 p-4 rounded-xl mb-6 border border-slate-200 dark:border-slate-700">
@@ -765,7 +802,16 @@ const LoanModule = ({ results, inputs, setInputs, currencySymbol }: any) => {
     );
 };
 
-const RetirementModule = ({ results, inputs, setInputs, currencySymbol }: any) => (
+const RetirementModule = ({ results, inputs, setInputs, currencySymbol }: any) => {
+    const [showReal, setShowReal] = useState(false);
+
+    const applyRiskProfile = (type: 'conservative' | 'balanced' | 'aggressive') => {
+        if (type === 'conservative') setInputs({ ...inputs, preRetReturn: 6, postRetReturn: 4 });
+        else if (type === 'balanced') setInputs({ ...inputs, preRetReturn: 8, postRetReturn: 5 });
+        else if (type === 'aggressive') setInputs({ ...inputs, preRetReturn: 10, postRetReturn: 6 });
+    };
+
+    return (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
         <ModuleDescription 
             title="Retirement Planner" 
@@ -785,21 +831,34 @@ const RetirementModule = ({ results, inputs, setInputs, currencySymbol }: any) =
                 <div className="pt-4 border-t border-white/20">
                     <div className="flex justify-between items-center">
                         <span className="text-xs font-bold uppercase text-white/80">Corpus at {inputs.retAge}</span>
-                        <span className="font-bold text-white text-lg">{currencySymbol}{results.corpus.toLocaleString(undefined, {maximumFractionDigits: 0, notation: 'compact'})}</span>
+                        <span className="font-bold text-white text-lg">
+                            {currencySymbol}{(showReal ? results.realCorpus : results.corpus).toLocaleString(undefined, {maximumFractionDigits: 0, notation: 'compact'})}
+                        </span>
                     </div>
                 </div>
             </div>
         </Card>
 
         <Card className="p-4">
-            <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-3">Lifetime Wealth Curve</h3>
+            <div className="flex justify-between items-center mb-3">
+                <h3 className="text-sm font-bold text-slate-700 dark:text-white">Lifetime Wealth Curve</h3>
+                {/* Real/Nominal Toggle */}
+                <button 
+                    onClick={() => setShowReal(!showReal)} 
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border flex items-center gap-1 ${showReal ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`}
+                >
+                    {showReal ? <ShieldCheck size={12} /> : <BarChart4 size={12} />}
+                    {showReal ? 'Real (Inflation Adj.)' : 'Nominal'}
+                </button>
+            </div>
+            
             <div className="h-56">
                 <Line 
                     data={{
                         labels: results.chartData.map((d:any) => d.age),
                         datasets: [{
                             label: 'Portfolio Value',
-                            data: results.chartData.map((d:any) => d.value),
+                            data: showReal ? results.realChartData.map((d:any) => d.value) : results.chartData.map((d:any) => d.value),
                             borderColor: results.runOutAge ? '#ef4444' : '#10b981',
                             backgroundColor: results.runOutAge ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
                             fill: true,
@@ -818,18 +877,29 @@ const RetirementModule = ({ results, inputs, setInputs, currencySymbol }: any) =
 
         {/* Inputs Grid */}
         <div className="space-y-4">
-            <h4 className="text-xs font-bold text-slate-500 uppercase">Configuration</h4>
+            <h4 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><Settings size={12} /> Configuration</h4>
+            
+            {/* Risk Profile Selector */}
+            <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex mb-2">
+                <button onClick={() => applyRiskProfile('conservative')} className="flex-1 py-1.5 text-[10px] font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-all">Conservative</button>
+                <button onClick={() => applyRiskProfile('balanced')} className="flex-1 py-1.5 text-[10px] font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-all">Balanced</button>
+                <button onClick={() => applyRiskProfile('aggressive')} className="flex-1 py-1.5 text-[10px] font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-all">Aggressive</button>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
                 <InputGroup label="Current Age" value={inputs.currentAge} onChange={v => setInputs({...inputs, currentAge: v})} />
                 <InputGroup label="Retire Age" value={inputs.retAge} onChange={v => setInputs({...inputs, retAge: v})} />
                 <InputGroup label="Current Savings" value={inputs.savings} onChange={v => setInputs({...inputs, savings: v})} prefix={currencySymbol} />
                 <InputGroup label="Monthly Saving" value={inputs.monthlySave} onChange={v => setInputs({...inputs, monthlySave: v})} prefix={currencySymbol} />
-                <InputGroup label="Desired Monthly Income" value={inputs.monthlySpend} onChange={v => setInputs({...inputs, monthlySpend: v})} prefix={currencySymbol} />
+                <InputGroup label="Monthly Spend (Today's Value)" value={inputs.monthlySpend} onChange={v => setInputs({...inputs, monthlySpend: v})} prefix={currencySymbol} />
                 <InputGroup label="Life Expectancy" value={inputs.lifeExpectancy} onChange={v => setInputs({...inputs, lifeExpectancy: v})} />
+                <InputGroup label="Pre-Ret Return (%)" value={inputs.preRetReturn} onChange={v => setInputs({...inputs, preRetReturn: v})} />
+                <InputGroup label="Post-Ret Return (%)" value={inputs.postRetReturn} onChange={v => setInputs({...inputs, postRetReturn: v})} />
             </div>
         </div>
     </div>
-);
+    );
+};
 
 const InputGroup = ({ label, value, onChange, prefix }: { label: string, value: number, onChange: (v: number) => void, prefix?: string }) => (
     <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:border-indigo-500 transition-colors">
@@ -854,3 +924,8 @@ const formatCurrency = (val: number, symbol: string, compact: boolean = false) =
         notation: compact ? 'compact' : 'standard'
     }).format(val).replace('$', symbol);
 }
+
+// Additional Icon for Chart Toggle
+const BarChart4 = (props: any) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M3 3v18h18"/><path d="M13 17V9"/><path d="M18 17V5"/><path d="M8 17v-3"/></svg>
+);

@@ -9,7 +9,8 @@ import {
   ShoppingBag, CheckCircle, Clock, FileText, Send, Sparkles, 
   Trash2, TrendingUp, AlertCircle, Camera, Download, Share2,
   Pencil, Edit2, X, Briefcase, Layers, Receipt,
-  ArrowRight, DollarSign, CalendarHeart, Bell, BellRing, ChevronDown, Check
+  ArrowRight, DollarSign, CalendarHeart, Bell, BellRing, ChevronDown, Check,
+  Shield, Mail, User, UserPlus
 } from 'lucide-react';
 import { Doughnut } from 'react-chartjs-2';
 import { jsPDF } from 'jspdf';
@@ -1047,17 +1048,352 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
     );
 };
 
-const EventTeamTab = ({ event, onUpdate, currencySymbol }: any) => {
+// --- UPDATED EVENT TEAM TAB ---
+const EventTeamTab = ({ event, onUpdate, currencySymbol }: { event: EventData, onUpdate: (e: EventData) => void, currencySymbol: string }) => {
+    const [view, setView] = useState<'members' | 'settle'>('members');
     const [isInviteOpen, setIsInviteOpen] = useState(false);
-    const [isSplitOpen, setIsSplitOpen] = useState(false);
-    const handleInvite = (data: any) => { onUpdate({ ...event, members: [...event.members, { id: generateId(), name: data.name, role: data.role }] }); setIsInviteOpen(false); };
+    const [isSettleOpen, setIsSettleOpen] = useState(false);
+    const [editingMember, setEditingMember] = useState<EventMember | null>(null);
+
+    // Calculate Financials per Member
+    const memberStats = useMemo(() => {
+        const totalExpense = event.expenses.reduce((s, e) => s + e.amount, 0);
+        const perPerson = event.members.length > 0 ? totalExpense / event.members.length : 0;
+
+        return event.members.map(m => {
+            const paid = event.expenses
+                .filter(e => e.paidBy === m.id || (m.id === 'me' && (!e.paidBy || e.paidBy === 'me')))
+                .reduce((s, e) => s + e.amount, 0);
+            
+            return {
+                ...m,
+                paid,
+                fairShare: perPerson,
+                balance: paid - perPerson // Positive = Owed money, Negative = Owes money
+            };
+        });
+    }, [event]);
+
+    const handleInvite = (data: any) => {
+        const newMember: EventMember = {
+            id: generateId(),
+            name: data.name,
+            role: data.role,
+            avatar: `bg-${['blue','green','yellow','purple','pink'][Math.floor(Math.random()*5)]}-500`
+        };
+        onUpdate({ ...event, members: [...event.members, newMember] });
+        setIsInviteOpen(false);
+    };
+
+    const handleUpdateMember = (updated: EventMember) => {
+        onUpdate({ ...event, members: event.members.map(m => m.id === updated.id ? updated : m) });
+        setEditingMember(null);
+    };
+
+    const handleRemoveMember = (id: string) => {
+        if(confirm('Remove this member?')) {
+            onUpdate({ ...event, members: event.members.filter(m => m.id !== id) });
+            setEditingMember(null);
+        }
+    };
+
     return (
         <div className="space-y-4 animate-in fade-in slide-in-from-right-2">
-            <Card className="p-4 bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-none"><h3 className="font-bold flex items-center gap-2 mb-2"><Users size={18} /> Team Collaboration</h3><button onClick={() => setIsInviteOpen(true)} className="w-full py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors"><Plus size={16} /> Invite Member</button></Card>
-            <div className="space-y-3">{event.members.map((m: any) => (<Card key={m.id} className="p-3 flex items-center justify-between"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-slate-600 dark:text-slate-300">{m.name.charAt(0)}</div><div><h4 className="font-bold text-sm text-slate-900 dark:text-white">{m.name}</h4><span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 uppercase">{m.role}</span></div></div></Card>))}</div>
-            <Card className="p-4 mt-4"><h3 className="font-bold text-sm text-slate-900 dark:text-white mb-2">Expense Splitter</h3><button onClick={() => setIsSplitOpen(true)} className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">Calculate Splits</button></Card>
+            
+            {/* View Toggle */}
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
+                <button 
+                    onClick={() => setView('members')} 
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${view === 'members' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600 dark:text-white' : 'text-slate-500'}`}
+                >
+                    Member List
+                </button>
+                <button 
+                    onClick={() => setView('settle')} 
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${view === 'settle' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600 dark:text-white' : 'text-slate-500'}`}
+                >
+                    Settlement Plan
+                </button>
+            </div>
+
+            {view === 'members' ? (
+                <>
+                    <Card className="p-4 bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-none shadow-lg">
+                        <div className="flex justify-between items-center mb-4">
+                            <div>
+                                <h3 className="font-bold flex items-center gap-2 mb-1"><Users size={18} /> Team Overview</h3>
+                                <p className="text-xs text-blue-100">{event.members.length} members involved</p>
+                            </div>
+                            <button 
+                                onClick={() => setIsInviteOpen(true)} 
+                                className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors border border-white/30"
+                            >
+                                <Plus size={14} /> Invite
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 border-t border-white/20 pt-4">
+                            <div>
+                                <p className="text-[10px] text-blue-200 uppercase font-bold">Total Spent</p>
+                                <p className="text-xl font-bold">{formatCurrency(memberStats.reduce((s, m) => s + m.paid, 0), currencySymbol)}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[10px] text-blue-200 uppercase font-bold">Per Person</p>
+                                <p className="text-xl font-bold">{formatCurrency(memberStats[0]?.fairShare || 0, currencySymbol)}</p>
+                            </div>
+                        </div>
+                    </Card>
+
+                    <div className="space-y-3">
+                        {memberStats.map((m) => (
+                            <Card key={m.id} className="p-3">
+                                <div className="flex justify-between items-center mb-2">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-10 h-10 rounded-full ${m.avatar || 'bg-slate-500'} flex items-center justify-center font-bold text-white shadow-sm`}>
+                                            {m.name.charAt(0)}
+                                        </div>
+                                        <div>
+                                            <h4 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                                                {m.name}
+                                                <span className="text-[9px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 uppercase tracking-wide border border-slate-200 dark:border-slate-700">{m.role}</span>
+                                            </h4>
+                                            <p className="text-[10px] text-slate-500">Paid: {formatCurrency(m.paid, currencySymbol)}</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setEditingMember(m)} className="p-2 text-slate-300 hover:text-indigo-500 transition-colors">
+                                        <Edit2 size={14} />
+                                    </button>
+                                </div>
+                                
+                                {/* Balance Indicator */}
+                                <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase">Balance</div>
+                                    <div className={`text-xs font-bold px-2 py-1 rounded ${m.balance >= 0 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'}`}>
+                                        {m.balance >= 0 ? 'Gets back ' : 'Owes '}{formatCurrency(Math.abs(m.balance), currencySymbol)}
+                                    </div>
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
+                </>
+            ) : (
+                /* SETTLEMENT VIEW */
+                <div className="space-y-4">
+                    <Card className="p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                        <div className="text-center mb-4">
+                            <h3 className="font-bold text-slate-900 dark:text-white">Debt Settlement</h3>
+                            <p className="text-xs text-slate-500">Efficient transfers to square up.</p>
+                        </div>
+                        <button 
+                            onClick={() => setIsSettleOpen(true)}
+                            className="w-full py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-600/20 active:scale-95 transition-all"
+                        >
+                            Generate Settlement Plan
+                        </button>
+                    </Card>
+                </div>
+            )}
+
             <EventInviteModal isOpen={isInviteOpen} onClose={() => setIsInviteOpen(false)} onConfirm={handleInvite} />
-            <EventSplitModal isOpen={isSplitOpen} onClose={() => setIsSplitOpen(false)} event={event} currencySymbol={currencySymbol} />
+            
+            <EventSettlementModal 
+                isOpen={isSettleOpen} 
+                onClose={() => setIsSettleOpen(false)} 
+                members={memberStats} 
+                currencySymbol={currencySymbol} 
+                onSettle={(transfers) => {
+                    // In a real app, this would create expense records
+                    alert("Settlement recorded!");
+                    setIsSettleOpen(false);
+                }}
+            />
+
+            <EditMemberModal 
+                isOpen={!!editingMember}
+                onClose={() => setEditingMember(null)}
+                member={editingMember}
+                onConfirm={handleUpdateMember}
+                onDelete={handleRemoveMember}
+            />
+        </div>
+    );
+};
+
+// --- UPDATED Event Invite Modal ---
+const EventInviteModal = ({ isOpen, onClose, onConfirm }: any) => {
+    const [name, setName] = useState(''); 
+    const [email, setEmail] = useState('');
+    const [role, setRole] = useState('viewer');
+    
+    useEffect(() => { if(isOpen) { setName(''); setEmail(''); setRole('viewer'); } }, [isOpen]);
+    if(!isOpen) return null;
+    
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                    <UserPlus size={20} className="text-indigo-500" /> Invite Member
+                </h3>
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Name</label>
+                        <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none text-sm focus:border-indigo-500 transition-colors" placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Email (Optional)</label>
+                        <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none text-sm focus:border-indigo-500 transition-colors" placeholder="email@example.com" value={email} onChange={e => setEmail(e.target.value)} />
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Role</label>
+                        <div className="grid grid-cols-3 gap-2">
+                            {['admin', 'editor', 'viewer'].map(r => (
+                                <button 
+                                    key={r}
+                                    onClick={() => setRole(r)}
+                                    className={`py-2 rounded-lg text-xs font-bold capitalize transition-all ${role === r ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                                >
+                                    {r}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <button onClick={() => onConfirm({ name, email, role })} disabled={!name} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2 shadow-lg shadow-indigo-600/20 active:scale-95 transition-all disabled:opacity-50">
+                        Send Invite
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- NEW Event Settlement Modal (Replaces Split Modal) ---
+const EventSettlementModal = ({ isOpen, onClose, members, currencySymbol, onSettle }: any) => {
+    if(!isOpen) return null;
+
+    // Debt Simplification Logic
+    const debts: {from: string, to: string, amount: number}[] = [];
+    const debtors = members.filter((m: any) => m.balance < -0.01).sort((a: any, b: any) => a.balance - b.balance);
+    const creditors = members.filter((m: any) => m.balance > 0.01).sort((a: any, b: any) => b.balance - a.balance);
+
+    let i = 0; let j = 0;
+    while(i < debtors.length && j < creditors.length) {
+        const debtor = debtors[i];
+        const creditor = creditors[j];
+        const amount = Math.min(Math.abs(debtor.balance), creditor.balance);
+        
+        debts.push({ from: debtor.name, to: creditor.name, amount });
+        
+        debtor.balance += amount;
+        creditor.balance -= amount;
+        
+        if(Math.abs(debtor.balance) < 0.01) i++;
+        if(creditor.balance < 0.01) j++;
+    }
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <CheckCircle size={20} className="text-emerald-500" /> Settlement Plan
+                    </h3>
+                    <button onClick={onClose} className="text-slate-400"><X size={20}/></button>
+                </div>
+
+                {debts.length > 0 ? (
+                    <div className="space-y-3 mb-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                        {debts.map((d, idx) => (
+                            <div key={idx} className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                                <div className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                                    <span className="font-bold">{d.from}</span>
+                                    <ArrowRight size={14} className="text-slate-400" />
+                                    <span className="font-bold">{d.to}</span>
+                                </div>
+                                <div className="font-bold text-emerald-600 dark:text-emerald-400">
+                                    {formatCurrency(d.amount, currencySymbol)}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="text-center py-8 text-slate-400">
+                        <CheckCircle size={32} className="mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">All settled up! No debts found.</p>
+                    </div>
+                )}
+
+                {debts.length > 0 && (
+                    <button 
+                        onClick={() => onSettle(debts)}
+                        className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 active:scale-95 transition-all"
+                    >
+                        Mark All as Settled
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// --- NEW Edit Member Modal ---
+const EditMemberModal = ({ isOpen, onClose, member, onConfirm, onDelete }: any) => {
+    const [role, setRole] = useState(member?.role || 'viewer');
+    
+    useEffect(() => { if (isOpen && member) setRole(member.role); }, [isOpen, member]);
+    
+    if (!isOpen || !member) return null;
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Manage Member</h3>
+                
+                <div className="flex items-center gap-3 mb-6 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl">
+                    <div className={`w-10 h-10 rounded-full ${member.avatar || 'bg-slate-500'} flex items-center justify-center font-bold text-white`}>
+                        {member.name.charAt(0)}
+                    </div>
+                    <div>
+                        <div className="font-bold text-slate-900 dark:text-white">{member.name}</div>
+                        <div className="text-xs text-slate-500">{member.id === 'me' ? 'You' : 'Member'}</div>
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Change Role</label>
+                        <div className="grid grid-cols-3 gap-2">
+                            {['admin', 'editor', 'viewer'].map(r => (
+                                <button 
+                                    key={r}
+                                    onClick={() => setRole(r)}
+                                    className={`py-2 rounded-lg text-xs font-bold capitalize transition-all ${role === r ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                                >
+                                    {r}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-2">
+                        {member.id !== 'me' && (
+                            <button 
+                                onClick={() => onDelete(member.id)}
+                                className="flex-1 py-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-red-100 transition-colors"
+                            >
+                                <Trash2 size={16} /> Remove
+                            </button>
+                        )}
+                        <button 
+                            onClick={() => onConfirm({ ...member, role })}
+                            className="flex-[2] py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors"
+                        >
+                            Save Changes
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
@@ -1191,22 +1527,4 @@ const EditVendorModal = ({ isOpen, onClose, onConfirm, onDelete, vendor, currenc
     useEffect(() => { if (isOpen && vendor) { setName(vendor.name); setService(vendor.service); setTotal(vendor.totalAmount.toString()); setDueDate(vendor.dueDate || ''); } }, [isOpen, vendor]);
     if (!isOpen) return null;
     return (<div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} /><div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl"><h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Edit Vendor</h3><div className="space-y-3"><input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={name} onChange={e => setName(e.target.value)} /><select className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={service} onChange={e => setService(e.target.value)}>{categories?.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}</select><input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={total} onChange={e => setTotal(e.target.value)} /><input type="date" className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={dueDate} onChange={e => setDueDate(e.target.value)} /><div className="flex gap-2 mt-2"><button onClick={() => onDelete(vendor.id)} className="flex-1 py-3 bg-red-500/10 text-red-600 dark:text-red-400 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-red-500/20"><Trash2 size={16}/> Delete</button><button onClick={() => onConfirm({ ...vendor, name, service, totalAmount: parseFloat(total) || 0, dueDate })} className="flex-[2] py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700">Update</button></div></div></div></div>);
-};
-
-const EventInviteModal = ({ isOpen, onClose, onConfirm }: any) => {
-    const [name, setName] = useState(''); const [role, setRole] = useState('Viewer');
-    useEffect(() => { if(isOpen) { setName(''); setRole('Viewer'); } }, [isOpen]);
-    if(!isOpen) return null;
-    return (<div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} /><div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl"><h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Invite Member</h3><div className="space-y-3"><input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Name" value={name} onChange={e => setName(e.target.value)} /><select className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={role} onChange={e => setRole(e.target.value)}><option>Viewer</option><option>Editor</option><option>Admin</option></select><button onClick={() => onConfirm({ name, role })} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Send Invite</button></div></div></div>);
-};
-
-const EventSplitModal = ({ isOpen, onClose, event, currencySymbol }: any) => {
-    if(!isOpen) return null;
-    const total = event.expenses.reduce((s:number, e:any) => s + e.amount, 0);
-    const perPerson = event.members.length > 0 ? total / event.members.length : 0;
-    const balances = event.members.map((m: any) => {
-        const paid = event.expenses.filter((e: any) => e.paidBy === m.id || (m.id === 'me' && (!e.paidBy || e.paidBy === 'me'))).reduce((s:number, e:any) => s + e.amount, 0);
-        return { ...m, paid, balance: paid - perPerson };
-    });
-    return (<div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} /><div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95"><h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Expense Split</h3><div className="bg-slate-100 dark:bg-slate-800 rounded-xl p-4 mb-4 text-center"><p className="text-xs text-slate-500 uppercase font-bold">Total</p><p className="text-2xl font-bold">{formatCurrency(total, currencySymbol)}</p><p className="text-xs text-slate-500 mt-1">~ {formatCurrency(perPerson, currencySymbol)} / person</p></div><div className="space-y-3">{balances.map((b: any) => (<div key={b.id} className="flex justify-between items-center p-3 border border-slate-100 dark:border-slate-800 rounded-xl"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold">{b.name.charAt(0)}</div><div><div className="font-bold text-sm">{b.name}</div><div className="text-[10px] text-slate-500">Paid: {formatCurrency(b.paid, currencySymbol)}</div></div></div><div className="text-right"><div className={`font-bold text-sm ${b.balance >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{b.balance >= 0 ? '+' : ''}{formatCurrency(b.balance, currencySymbol)}</div><div className="text-[10px] text-slate-400">{b.balance > 0 ? 'Gets back' : 'Owes'}</div></div></div>))}</div><button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X size={20}/></button></div></div>);
 };

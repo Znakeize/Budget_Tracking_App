@@ -61,7 +61,15 @@ export const calculateTotals = (data: BudgetData) => {
   };
 };
 
-export const formatCurrency = (amount: number, symbol: string) => {
+export const formatCurrency = (amount: number, symbol: string, compact: boolean = false) => {
+  if (compact) {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      notation: 'compact',
+      maximumFractionDigits: 1
+    }).format(amount).replace('$', symbol);
+  }
   return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 

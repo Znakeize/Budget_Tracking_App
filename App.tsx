@@ -134,6 +134,13 @@ const AppContent: React.FC = () => {
       setActiveTab(tab);
   };
 
+  // Handle redirect for 'add' tab (prevents render side-effect)
+  useEffect(() => {
+    if (activeTab === 'add') {
+      handleTabSwitch('budget');
+    }
+  }, [activeTab]);
+
   const handleUpdateData = (newData: BudgetData, addToHistory = true) => {
       if (addToHistory) {
           setUndoStack(prev => [...prev, budgetData]);
@@ -221,7 +228,7 @@ const AppContent: React.FC = () => {
       alert(`Synced ${budgetData.currencySymbol}${amount} to Budget as "${shopName}"`);
   };
 
-  const handleCreateShoppingList = (name: string, budget: number, members: EventMember[] = []) => {
+  const handleCreateShoppingList = (name: string, budget: number, members: EventMember[] = [], redirect: boolean = true) => {
       const newList: ShoppingListData = {
           id: generateId(),
           name: name,
@@ -242,7 +249,13 @@ const AppContent: React.FC = () => {
           lastModified: Date.now()
       };
       setShoppingLists([...shoppingLists, newList]);
-      navigate('shopping-list');
+      
+      if (redirect) {
+          navigate('shopping-list');
+      } else {
+          // Provide visual feedback if not redirecting
+          setTimeout(() => alert(`Shopping List "${name}" created successfully!`), 100);
+      }
   };
 
   // Rollover Logic
@@ -343,7 +356,7 @@ const AppContent: React.FC = () => {
                   focusTarget={budgetFocus}
                   clearFocusTarget={() => setBudgetFocus(null)}
                   onProfileClick={handleProfileClick}
-                  onCreateShoppingList={handleCreateShoppingList}
+                  onCreateShoppingList={(name, budget) => handleCreateShoppingList(name, budget, [], false)}
                   onAddInvestmentGoal={(goal) => setInvestmentGoals([...investmentGoals, goal])}
                   onGoalUpdate={(goal) => {
                       setBudgetData(prev => ({
@@ -353,8 +366,7 @@ const AppContent: React.FC = () => {
                   }}
               />;
           case 'add':
-              // Normally not reached directly, button opens modal
-              handleTabSwitch('budget'); 
+              // Handled by useEffect redirect
               return null;
           case 'ai':
               return <AIView 
@@ -436,7 +448,7 @@ const AppContent: React.FC = () => {
                   onBack={() => goBack('menu')}
                   onProfileClick={handleProfileClick}
                   focusEventId={eventFocus}
-                  onCreateShoppingList={handleCreateShoppingList}
+                  onCreateShoppingList={(name, budget, members) => handleCreateShoppingList(name, budget, members, false)}
               />;
           case 'profile':
               return <ProfileView 
@@ -473,7 +485,7 @@ const AppContent: React.FC = () => {
                           role: m.role === 'Owner' ? 'admin' : m.role === 'Editor' ? 'editor' : 'viewer',
                           avatar: m.avatarColor
                       }));
-                      handleCreateShoppingList(`${gName} - ${eName}`, amt, eventMembers);
+                      handleCreateShoppingList(`${gName} - ${eName}`, amt, eventMembers, false);
                   }}
               />;
           case 'investments':
@@ -596,6 +608,13 @@ const AppContent: React.FC = () => {
                   onProfileClick={handleProfileClick}
               />;
       }
+  };
+
+  const getNavTab = (tab: string) => {
+    if (['dashboard'].includes(tab)) return 'dashboard';
+    if (['budget'].includes(tab)) return 'budget';
+    if (['ai', 'analysis', 'investments', 'events', 'simulator', 'social'].includes(tab)) return 'ai';
+    return 'menu';
   };
 
   return (
