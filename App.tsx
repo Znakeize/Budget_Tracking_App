@@ -62,13 +62,41 @@ const AppContent: React.FC = () => {
   const [navHistory, setNavHistory] = useState<string[]>([]); // Stack-based navigation history
   const [appDemoTab, setAppDemoTab] = useState('calculators'); // Persist App Demo Tab state
 
-  const [budgetData, setBudgetData] = useState<BudgetData>(INITIAL_DATA);
-  const [history, setHistory] = useState<BudgetData[]>([]);
-  const [shoppingLists, setShoppingLists] = useState<ShoppingListData[]>(SAMPLE_SHOPPING_LISTS);
-  const [events, setEvents] = useState<EventData[]>(SAMPLE_EVENTS);
-  const [groups, setGroups] = useState<SharedGroup[]>(MOCK_GROUPS);
-  const [investmentGoals, setInvestmentGoals] = useState<InvestmentGoal[]>(SAMPLE_INVESTMENT_GOALS);
-  const [investmentAlerts, setInvestmentAlerts] = useState<InvestmentAlert[]>([]);
+  // Initialize state from Local Storage or fallback to defaults
+  const [budgetData, setBudgetData] = useState<BudgetData>(() => {
+    const saved = localStorage.getItem('budget_current');
+    return saved ? JSON.parse(saved) : INITIAL_DATA;
+  });
+  
+  const [history, setHistory] = useState<BudgetData[]>(() => {
+    const saved = localStorage.getItem('budget_history');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [shoppingLists, setShoppingLists] = useState<ShoppingListData[]>(() => {
+    const saved = localStorage.getItem('budget_shopping');
+    return saved ? JSON.parse(saved) : SAMPLE_SHOPPING_LISTS;
+  });
+
+  const [events, setEvents] = useState<EventData[]>(() => {
+    const saved = localStorage.getItem('budget_events');
+    return saved ? JSON.parse(saved) : SAMPLE_EVENTS;
+  });
+
+  const [groups, setGroups] = useState<SharedGroup[]>(() => {
+    const saved = localStorage.getItem('budget_groups');
+    return saved ? JSON.parse(saved) : MOCK_GROUPS;
+  });
+
+  const [investmentGoals, setInvestmentGoals] = useState<InvestmentGoal[]>(() => {
+    const saved = localStorage.getItem('budget_invest_goals');
+    return saved ? JSON.parse(saved) : SAMPLE_INVESTMENT_GOALS;
+  });
+
+  const [investmentAlerts, setInvestmentAlerts] = useState<InvestmentAlert[]>(() => {
+    const saved = localStorage.getItem('budget_invest_alerts');
+    return saved ? JSON.parse(saved) : [];
+  });
   
   const [user, setUser] = useState<any>(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -106,6 +134,35 @@ const AppContent: React.FC = () => {
       if (isDarkMode) document.documentElement.classList.add('dark');
       else document.documentElement.classList.remove('dark');
   }, [isDarkMode]);
+
+  // --- Persistence Effects ---
+  useEffect(() => {
+    localStorage.setItem('budget_current', JSON.stringify(budgetData));
+  }, [budgetData]);
+
+  useEffect(() => {
+    localStorage.setItem('budget_history', JSON.stringify(history));
+  }, [history]);
+
+  useEffect(() => {
+    localStorage.setItem('budget_shopping', JSON.stringify(shoppingLists));
+  }, [shoppingLists]);
+
+  useEffect(() => {
+    localStorage.setItem('budget_events', JSON.stringify(events));
+  }, [events]);
+
+  useEffect(() => {
+    localStorage.setItem('budget_groups', JSON.stringify(groups));
+  }, [groups]);
+
+  useEffect(() => {
+    localStorage.setItem('budget_invest_goals', JSON.stringify(investmentGoals));
+  }, [investmentGoals]);
+
+  useEffect(() => {
+    localStorage.setItem('budget_invest_alerts', JSON.stringify(investmentAlerts));
+  }, [investmentAlerts]);
 
   // --- Navigation Logic ---
 
