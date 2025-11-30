@@ -33,7 +33,7 @@ import { NotificationPopup } from './components/ui/NotificationPopup';
 import { NewPeriodModal } from './components/ui/NewPeriodModal';
 import { RolloverModal } from './components/ui/RolloverModal';
 
-import { BudgetData, ShoppingListData, EventData, SharedGroup, InvestmentGoal, InvestmentAlert, EventMember } from './types';
+import { BudgetData, ShoppingListData, EventData, SharedGroup, InvestmentGoal, InvestmentAlert, EventMember, Shop } from './types';
 import { INITIAL_DATA, SAMPLE_EVENTS, SAMPLE_SHOPPING_LISTS, MOCK_GROUPS, SAMPLE_INVESTMENT_GOALS } from './constants';
 import { getNotifications, calculateTotals, generateId } from './utils/calculations';
 import { LanguageProvider } from './contexts/LanguageContext';
@@ -285,11 +285,90 @@ const AppContent: React.FC = () => {
       alert(`Synced ${budgetData.currencySymbol}${amount} to Budget as "${shopName}"`);
   };
 
-  const handleCreateShoppingList = (name: string, budget: number, members: EventMember[] = [], redirect: boolean = true) => {
+  // New Handler for Granular Shopping Item Sync (Budget + Events + Groups)
+  const handleShoppingItemChange = (amount: number, categoryName?: string, eventId?: string, expenseId?: string, groupId?: string, groupExpenseId?: string) => {
+      // 1. Budget Category Sync
+      if (categoryName) {
+          const categoryIndex = budgetData.expenses.findIndex(e => e.name === categoryName);
+          if (categoryIndex >= 0) {
+              const updatedExpenses = [...budgetData.expenses];
+              const newSpent = Math.max(0, updatedExpenses[categoryIndex].spent + amount);
+              updatedExpenses[categoryIndex] = {
+                  ...updatedExpenses[categoryIndex],
+                  spent: newSpent
+              };
+              handleUpdateData({ ...budgetData, expenses: updatedExpenses }, false); // False to avoid heavy history stack for rapid toggles
+          }
+      }
+
+      // 2. Event Expense Sync
+      if (eventId && expenseId) {
+          const eventIndex = events.findIndex(e => e.id === eventId);
+          if (eventIndex >= 0) {
+              const event = events[eventIndex];
+              const expenseIndex = event.expenses.findIndex(e => e.id === expenseId);
+              if (expenseIndex >= 0) {
+                  const updatedExpenses = [...event.expenses];
+                  const newAmount = Math.max(0, updatedExpenses[expenseIndex].amount + amount);
+                  updatedExpenses[expenseIndex] = {
+                      ...updatedExpenses[expenseIndex],
+                      amount: newAmount
+                  };
+                  
+                  const updatedEvents = [...events];
+                  updatedEvents[eventIndex] = {
+                      ...event,
+                      expenses: updatedExpenses
+                  };
+                  setEvents(updatedEvents);
+              }
+          }
+      }
+
+      // 3. Collaboration Group Expense Sync
+      if (groupId && groupExpenseId) {
+          const groupIndex = groups.findIndex(g => g.id === groupId);
+          if (groupIndex >= 0) {
+              const group = groups[groupIndex];
+              const expenseIndex = group.expenses.findIndex(e => e.id === groupExpenseId);
+              if (expenseIndex >= 0) {
+                  const updatedExpenses = [...group.expenses];
+                  const newAmount = Math.max(0, updatedExpenses[expenseIndex].amount + amount);
+                  updatedExpenses[expenseIndex] = {
+                      ...updatedExpenses[expenseIndex],
+                      amount: newAmount
+                  };
+
+                  const updatedGroups = [...groups];
+                  updatedGroups[groupIndex] = {
+                      ...group,
+                      expenses: updatedExpenses
+                  };
+                  setGroups(updatedGroups);
+              }
+          }
+      }
+  };
+
+  const handleCreateShoppingList = (name: string, budget: number, members: EventMember[] = [], redirect: boolean = true, linkedData?: {eventId?: string, expenseId?: string, expenseName: string, groupId?: string, groupExpenseId?: string}) => {
+      const shopName = linkedData ? linkedData.expenseName : 'General Items';
+      
+      const defaultShop: Shop = {
+          id: generateId(),
+          name: shopName,
+          items: [],
+          budget: budget,
+          budgetCategory: undefined,
+          eventId: linkedData?.eventId,
+          expenseId: linkedData?.expenseId,
+          groupId: linkedData?.groupId,
+          groupExpenseId: linkedData?.groupExpenseId
+      };
+
       const newList: ShoppingListData = {
           id: generateId(),
           name: name,
-          shops: [],
+          shops: [defaultShop],
           members: [
               { id: 'me', name: 'You', role: 'owner', avatarColor: 'bg-indigo-500' },
               ...members.map(m => ({
@@ -309,9 +388,10 @@ const AppContent: React.FC = () => {
       
       if (redirect) {
           navigate('shopping-list');
+          setShoppingFocus({ listId: newList.id, shopId: defaultShop.id });
       } else {
           // Provide visual feedback if not redirecting
-          setTimeout(() => alert(`Shopping List "${name}" created successfully!`), 100);
+          setTimeout(() => alert(`Shopping List "${name}" created! Check the Shopping tab.`), 100);
       }
   };
 
@@ -505,7 +585,7 @@ const AppContent: React.FC = () => {
                   onBack={() => goBack('menu')}
                   onProfileClick={handleProfileClick}
                   focusEventId={eventFocus}
-                  onCreateShoppingList={(name, budget, members) => handleCreateShoppingList(name, budget, members, false)}
+                  onCreateShoppingList={(name, budget, members, linkedData) => handleCreateShoppingList(name, budget, members, false, linkedData)}
               />;
           case 'profile':
               return <ProfileView 
@@ -528,6 +608,8 @@ const AppContent: React.FC = () => {
                   focusListId={shoppingFocus?.listId} 
                   focusShopId={shoppingFocus?.shopId} 
                   clearFocus={() => setShoppingFocus(null)} 
+                  expenseCategories={budgetData.expenses.map(e => e.name)}
+                  onItemChange={handleShoppingItemChange}
               />;
           case 'social':
               return <CollaborativeView 
@@ -535,14 +617,14 @@ const AppContent: React.FC = () => {
                   onProfileClick={handleProfileClick}
                   groups={groups}
                   onUpdateGroups={setGroups}
-                  onCreateShoppingList={(gName, eName, amt, members) => {
+                  onCreateShoppingList={(gName, eName, amt, members, linkedData) => {
                       const eventMembers: EventMember[] = members.map(m => ({
                           id: m.id,
                           name: m.name,
                           role: m.role === 'Owner' ? 'admin' : m.role === 'Editor' ? 'editor' : 'viewer',
                           avatar: m.avatarColor
                       }));
-                      handleCreateShoppingList(`${gName} - ${eName}`, amt, eventMembers, false);
+                      handleCreateShoppingList(`${gName} - ${eName}`, amt, eventMembers, false, linkedData);
                   }}
               />;
           case 'investments':

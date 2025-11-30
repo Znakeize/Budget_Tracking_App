@@ -7,7 +7,7 @@ import {
   Wallet, ArrowLeft, Edit2, List, Bell, Download, Users, Pencil,
   User, ShoppingBag, Tag, DollarSign, Copy, Calendar, Zap, Settings, BrainCircuit,
   ArrowRight as ArrowRightIcon, AlertTriangle, Sparkles, Clock, UserPlus, Package,
-  AlertCircle
+  AlertCircle, ChevronDown
 } from 'lucide-react';
 import { ShoppingListData, Shop, ShopItem, ShopMember } from '../types';
 import { generateId, formatCurrency, getShoppingNotifications, NotificationItem } from '../utils/calculations';
@@ -25,6 +25,8 @@ interface ShoppingListViewProps {
   focusListId?: string;
   focusShopId?: string;
   clearFocus?: () => void;
+  expenseCategories?: string[];
+  onItemChange?: (amount: number, category?: string, eventId?: string, expenseId?: string, groupId?: string, groupExpenseId?: string) => void;
 }
 
 export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ 
@@ -37,7 +39,9 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
   onSyncToBudget,
   focusListId,
   focusShopId,
-  clearFocus
+  clearFocus,
+  expenseCategories = [],
+  onItemChange
 }) => {
   // Navigation State: null = Main View, string = List ID, obj = Shop ID inside List
   const [activeListId, setActiveListId] = useState<string | null>(null);
@@ -150,8 +154,30 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
             role: 'viewer',
             avatarColor: ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500'][Math.floor(Math.random() * 4)]
         };
+        // Update the sharingList reference directly to reflect in UI immediately if modal stays open (though we close it)
+        // But crucially, call updateList to persist
         handleUpdateList({ ...sharingList, members: [...sharingList.members, newMember] });
         setSharingList(null);
+      }
+  };
+
+  const handleRemoveMemberFromList = (memberId: string) => {
+      if (sharingList) {
+          const updatedMembers = sharingList.members.filter(m => m.id !== memberId);
+          const updatedList = { ...sharingList, members: updatedMembers };
+          handleUpdateList(updatedList);
+          setSharingList(updatedList); // Update local state for modal
+      }
+  };
+
+  const handleUpdateMemberRole = (memberId: string, newRole: 'editor' | 'viewer') => {
+      if (sharingList) {
+          const updatedMembers = sharingList.members.map(m => 
+              m.id === memberId ? { ...m, role: newRole } : m
+          );
+          const updatedList = { ...sharingList, members: updatedMembers };
+          handleUpdateList(updatedList);
+          setSharingList(updatedList); // Update local state for modal
       }
   };
 
@@ -228,6 +254,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
             notificationCount={activeNotifications.length}
             onToggleNotifications={() => setShowNotifications(!showNotifications)}
             onProfileClick={onProfileClick}
+            onItemChange={onItemChange}
           />
       );
   }
@@ -244,6 +271,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
             notificationCount={activeNotifications.length}
             onToggleNotifications={() => setShowNotifications(!showNotifications)}
             onProfileClick={onProfileClick}
+            expenseCategories={expenseCategories}
           />
       );
   }
@@ -363,7 +391,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
                                 {/* Completion Progress */}
                                 <div className="mb-2">
                                     <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase mb-1">
-                                        <span>Shopping Progress</span>
+                                        <span>SHOPPING PROGRESS</span>
                                         <span className="text-blue-600 dark:text-blue-400">{Math.round(itemProgress)}%</span>
                                     </div>
                                     <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -378,7 +406,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
                                 {budget > 0 && (
                                     <div className="mb-2">
                                         <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase mb-1">
-                                            <span>Budget Used</span>
+                                            <span>BUDGET USED</span>
                                             <span className={`${budgetProgress > 100 ? 'text-red-500' : ''}`}>{Math.round(budgetProgress)}%</span>
                                         </div>
                                         <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -470,6 +498,8 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
             onClose={() => setSharingList(null)}
             onConfirm={handleInviteMember}
             members={sharingList?.members || []}
+            onRemoveMember={handleRemoveMemberFromList}
+            onUpdateRole={handleUpdateMemberRole}
        />
 
        <NotificationSettingsModal 
@@ -491,8 +521,9 @@ const ListDetailView: React.FC<{
     onEditList: () => void,
     notificationCount: number,
     onToggleNotifications: () => void,
-    onProfileClick: () => void
-}> = ({ list, onUpdateList, onBack, onSelectShop, onDeleteList, onEditList, notificationCount, onToggleNotifications, onProfileClick }) => {
+    onProfileClick: () => void,
+    expenseCategories: string[]
+}> = ({ list, onUpdateList, onBack, onSelectShop, onDeleteList, onEditList, notificationCount, onToggleNotifications, onProfileClick, expenseCategories }) => {
     const [isAddShopOpen, setIsAddShopOpen] = useState(false);
     const [editingShop, setEditingShop] = useState<Shop | null>(null);
     const [isShareOpen, setIsShareOpen] = useState(false);
@@ -531,6 +562,24 @@ const ListDetailView: React.FC<{
         setIsShareOpen(false);
     };
 
+    const handleRemoveMemberFromList = (memberId: string) => {
+        const updatedMembers = list.members.filter(m => m.id !== memberId);
+        onUpdateList({ ...list, members: updatedMembers });
+    };
+
+    const handleUpdateMemberRole = (memberId: string, newRole: 'editor' | 'viewer') => {
+        const updatedMembers = list.members.map(m => 
+            m.id === memberId ? { ...m, role: newRole } : m
+        );
+        onUpdateList({ ...list, members: updatedMembers });
+    };
+
+    const totalSpent = list.shops.reduce((acc, shop) => {
+        return acc + shop.items.reduce((s, i) => s + (i.actualPrice !== undefined ? i.actualPrice : (i.price || 0)), 0);
+    }, 0);
+    const listBudget = list.budget || 0;
+    const listBudgetProgress = listBudget > 0 ? (totalSpent / listBudget) * 100 : 0;
+
     return (
         <div className="flex flex-col h-full relative bg-slate-50 dark:bg-slate-900">
             {/* Header */}
@@ -560,6 +609,22 @@ const ListDetailView: React.FC<{
                         </button>
                     </div>
                 </div>
+
+                {/* List Global Budget Bar */}
+                {listBudget > 0 && (
+                    <div className="mt-3 mb-2">
+                        <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1">
+                            <span>TOTAL BUDGET USED</span>
+                            <span>{Math.round(listBudgetProgress)}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div 
+                                className={`h-full rounded-full transition-all duration-500 ${listBudgetProgress > 100 ? 'bg-red-500' : listBudgetProgress > 85 ? 'bg-orange-500' : 'bg-emerald-500'}`}
+                                style={{ width: `${Math.min(listBudgetProgress, 100)}%` }}
+                            ></div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-28 space-y-4">
@@ -590,6 +655,8 @@ const ListDetailView: React.FC<{
                                     <div>
                                         <h4 className="text-lg font-bold text-slate-900 dark:text-white leading-tight">{shop.name}</h4>
                                         <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">{checkedCount}/{itemCount} Items • {formatCurrency(shopCost, list.currencySymbol)}</p>
+                                        {shop.budgetCategory && <p className="text-[10px] text-indigo-500 font-bold mt-0.5">Linked: {shop.budgetCategory}</p>}
+                                        {shop.eventId && <p className="text-[10px] text-pink-500 font-bold mt-0.5">Event Linked</p>}
                                     </div>
                                 </div>
                                 <ChevronRight size={20} className="text-slate-300 mt-1 group-hover:text-slate-500 dark:group-hover:text-slate-200 transition-colors" />
@@ -645,6 +712,7 @@ const ListDetailView: React.FC<{
                 onConfirm={editingShop ? handleEditShop : handleAddShop}
                 initialData={editingShop}
                 currencySymbol={list.currencySymbol}
+                categories={expenseCategories}
             />
 
             <ShareListModal 
@@ -652,10 +720,15 @@ const ListDetailView: React.FC<{
                 onClose={() => setIsShareOpen(false)}
                 onConfirm={handleInviteMember}
                 members={list.members}
+                onRemoveMember={handleRemoveMemberFromList}
+                onUpdateRole={handleUpdateMemberRole}
             />
         </div>
     );
 };
+
+// ... ShopItemsView, AddItemModal, NotificationSettingsModal, CreateListModal, EditListModal, AddShopModal remain unchanged ...
+// NOTE: Including them here for completeness if required, but focusing on the requested changes above.
 
 const ShopItemsView: React.FC<{ 
     list: ShoppingListData,
@@ -664,8 +737,9 @@ const ShopItemsView: React.FC<{
     onBack: () => void,
     notificationCount: number,
     onToggleNotifications: () => void,
-    onProfileClick: () => void
-}> = ({ list, shop, onUpdateList, onBack, notificationCount, onToggleNotifications, onProfileClick }) => {
+    onProfileClick: () => void,
+    onItemChange?: (amount: number, category?: string, eventId?: string, expenseId?: string, groupId?: string, groupExpenseId?: string) => void
+}> = ({ list, shop, onUpdateList, onBack, notificationCount, onToggleNotifications, onProfileClick, onItemChange }) => {
     const [search, setSearch] = useState('');
     const [isAddItemOpen, setIsAddItemOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<ShopItem | null>(null);
@@ -692,13 +766,34 @@ const ShopItemsView: React.FC<{
     };
 
     const handleEditItem = (itemData: any) => {
-        const updatedItems = shop.items.map(i => i.id === editingItem?.id ? { ...i, ...itemData } : i);
+        if (!editingItem) return;
+        const oldItem = editingItem;
+        
+        const updatedItems = shop.items.map(i => i.id === editingItem.id ? { ...i, ...itemData } : i);
         handleUpdateShop({ ...shop, items: updatedItems });
+        
+        // Sync if checked
+        if (onItemChange && (shop.budgetCategory || (shop.eventId && shop.expenseId) || (shop.groupId && shop.groupExpenseId)) && oldItem.checked) {
+             const oldContribution = oldItem.actualPrice || oldItem.price || 0;
+             const newActual = itemData.actualPrice !== undefined ? itemData.actualPrice : oldItem.actualPrice;
+             const newEst = itemData.price !== undefined ? itemData.price : oldItem.price;
+             const newContribution = newActual || newEst || 0;
+             
+             const diff = newContribution - oldContribution;
+             if (diff !== 0) onItemChange(diff, shop.budgetCategory, shop.eventId, shop.expenseId, shop.groupId, shop.groupExpenseId);
+        }
+
         setEditingItem(null);
         setIsAddItemOpen(false);
     };
 
     const handleDeleteItem = (itemId: string) => {
+        const item = shop.items.find(i => i.id === itemId);
+        if (item && onItemChange && (shop.budgetCategory || (shop.eventId && shop.expenseId) || (shop.groupId && shop.groupExpenseId)) && item.checked) {
+             const contribution = item.actualPrice || item.price || 0;
+             onItemChange(-contribution, shop.budgetCategory, shop.eventId, shop.expenseId, shop.groupId, shop.groupExpenseId);
+        }
+        
         handleUpdateShop({ ...shop, items: shop.items.filter(i => i.id !== itemId) });
         setEditingItem(null);
         setIsAddItemOpen(false);
@@ -708,6 +803,17 @@ const ShopItemsView: React.FC<{
         const updatedItems = shop.items.map(i => {
             if (i.id === itemId) {
                 const newChecked = !i.checked;
+                
+                // Sync to Budget/Event/Group if linked
+                if (onItemChange && (shop.budgetCategory || (shop.eventId && shop.expenseId) || (shop.groupId && shop.groupExpenseId))) {
+                    const price = i.actualPrice || i.price || 0;
+                    if (newChecked) {
+                        onItemChange(price, shop.budgetCategory, shop.eventId, shop.expenseId, shop.groupId, shop.groupExpenseId);
+                    } else {
+                        onItemChange(-price, shop.budgetCategory, shop.eventId, shop.expenseId, shop.groupId, shop.groupExpenseId);
+                    }
+                }
+
                 return { 
                     ...i, 
                     checked: newChecked,
@@ -720,10 +826,23 @@ const ShopItemsView: React.FC<{
     };
 
     const handlePriceChange = (itemId: string, newPrice: number) => {
+        const oldItem = shop.items.find(i => i.id === itemId);
+        if (!oldItem) return;
+        
+        // Calculate diff before update
+        const oldContribution = oldItem.actualPrice || oldItem.price || 0;
+        const newContribution = newPrice || oldItem.price || 0;
+        
         const updatedItems = shop.items.map(i =>
             i.id === itemId ? { ...i, actualPrice: newPrice } : i
         );
         handleUpdateShop({ ...shop, items: updatedItems });
+
+        // Update budget/event/group if item was already checked
+        if (onItemChange && (shop.budgetCategory || (shop.eventId && shop.expenseId) || (shop.groupId && shop.groupExpenseId)) && oldItem.checked) {
+            const diff = newContribution - oldContribution;
+            if (diff !== 0) onItemChange(diff, shop.budgetCategory, shop.eventId, shop.expenseId, shop.groupId, shop.groupExpenseId);
+        }
     };
 
     const filteredItems = shop.items
@@ -732,6 +851,10 @@ const ShopItemsView: React.FC<{
             if (a.checked === b.checked) return 0;
             return a.checked ? 1 : -1;
         });
+
+    const shopSpent = shop.items.reduce((sum, i) => sum + (i.actualPrice !== undefined ? i.actualPrice : (i.price || 0)), 0);
+    const shopBudget = shop.budget || 0;
+    const shopBudgetProgress = shopBudget > 0 ? (shopSpent / shopBudget) * 100 : 0;
 
     return (
         <div className="flex flex-col h-full relative bg-slate-50 dark:bg-slate-900">
@@ -744,10 +867,26 @@ const ShopItemsView: React.FC<{
                         </button>
                         <div className="flex-1 min-w-0">
                             <h1 className="text-xl font-bold text-slate-900 dark:text-white leading-tight truncate">{shop.name}</h1>
-                            <p className="text-xs text-slate-500 truncate">in {list.name}</p>
+                            <p className="text-xs text-slate-500 truncate">in {list.name} {shop.budgetCategory ? `• ${shop.budgetCategory}` : ''} {shop.eventId ? `• Event Linked` : ''} {shop.groupId ? `• Group Linked` : ''}</p>
                         </div>
                     </div>
                 </div>
+
+                {/* Shop Budget Bar */}
+                {shopBudget > 0 && (
+                    <div className="mb-3">
+                        <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1">
+                            <span className="uppercase tracking-wider">BUDGET ({Math.round(shopBudgetProgress)}%)</span>
+                            <span>{formatCurrency(shopSpent, list.currencySymbol)} / {formatCurrency(shopBudget, list.currencySymbol)}</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div 
+                                className={`h-full rounded-full transition-all duration-500 ${shopBudgetProgress > 100 ? 'bg-red-500' : shopBudgetProgress > 85 ? 'bg-orange-500' : 'bg-emerald-500'}`}
+                                style={{ width: `${Math.min(shopBudgetProgress, 100)}%` }}
+                            ></div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Search */}
                 <div className="relative mb-2">
@@ -1076,18 +1215,21 @@ const EditListModal = ({ isOpen, onClose, onConfirm, initialData }: any) => {
     );
 };
 
-const AddShopModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol }: any) => {
+const AddShopModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol, categories }: any) => {
     const [name, setName] = useState('');
     const [budget, setBudget] = useState('');
+    const [budgetCategory, setBudgetCategory] = useState('');
 
     useEffect(() => {
         if (isOpen) {
             if (initialData) {
                 setName(initialData.name);
                 setBudget(initialData.budget ? initialData.budget.toString() : '');
+                setBudgetCategory(initialData.budgetCategory || '');
             } else {
                 setName('');
                 setBudget('');
+                setBudgetCategory('');
             }
         }
     }, [isOpen, initialData]);
@@ -1096,13 +1238,14 @@ const AddShopModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol 
 
     const handleSubmit = () => {
         if (initialData) {
-            onConfirm({ name, budget: parseFloat(budget) || 0 });
+            onConfirm({ name, budget: parseFloat(budget) || 0, budgetCategory });
         } else {
             onConfirm({
                 id: generateId(),
                 name,
                 budget: parseFloat(budget) || 0,
-                items: []
+                items: [],
+                budgetCategory
             });
         }
     };
@@ -1114,7 +1257,27 @@ const AddShopModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol 
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">{initialData ? 'Edit Shop' : 'Add Shop'}</h3>
                 <div className="space-y-3">
                     <input className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none" placeholder="Shop Name (e.g. Target)" value={name} onChange={e => setName(e.target.value)} autoFocus />
-                    <div className="relative"><span className="absolute left-3 top-3 text-slate-500 font-bold">{currencySymbol}</span><input className="w-full p-3 pl-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none" placeholder="Shop Budget (Optional)" type="number" value={budget} onChange={e => setBudget(e.target.value)} /></div>
+                    
+                    <div className="relative">
+                        <span className="absolute left-3 top-3 text-slate-500 font-bold">{currencySymbol}</span>
+                        <input className="w-full p-3 pl-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none" placeholder="Shop Budget (Optional)" type="number" value={budget} onChange={e => setBudget(e.target.value)} />
+                    </div>
+
+                    <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase mb-1.5 block ml-1">Link to Budget Category</label>
+                        <select 
+                            className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-sm text-slate-700 dark:text-slate-300"
+                            value={budgetCategory}
+                            onChange={(e) => setBudgetCategory(e.target.value)}
+                        >
+                            <option value="">Select Category (Optional)</option>
+                            {categories && categories.map((cat: string) => (
+                                <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                        </select>
+                        <p className="text-[10px] text-slate-400 mt-1 ml-1">Purchases will automatically update this budget category.</p>
+                    </div>
+
                     <button onClick={handleSubmit} disabled={!name} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl mt-2 disabled:opacity-50">{initialData ? 'Update' : 'Add Shop'}</button>
                 </div>
             </div>
@@ -1122,7 +1285,14 @@ const AddShopModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol 
     );
 };
 
-const ShareListModal = ({ isOpen, onClose, onConfirm, members }: any) => {
+const ShareListModal = ({ isOpen, onClose, onConfirm, members, onRemoveMember, onUpdateRole }: { 
+    isOpen: boolean, 
+    onClose: () => void, 
+    onConfirm: (email: string) => void, 
+    members: ShopMember[],
+    onRemoveMember: (id: string) => void,
+    onUpdateRole: (id: string, role: 'editor' | 'viewer') => void
+}) => {
     const [email, setEmail] = useState('');
     
     if (!isOpen) return null;
@@ -1139,21 +1309,44 @@ const ShareListModal = ({ isOpen, onClose, onConfirm, members }: any) => {
                 <div className="space-y-4">
                     <div>
                         <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Current Members</label>
-                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                        <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
                             {members.map((m: any) => (
-                                <div key={m.id} className="flex items-center gap-3 p-2 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                                <div key={m.id} className="flex items-center gap-3 p-2 bg-slate-50 dark:bg-slate-800 rounded-lg group">
                                     <div className={`w-8 h-8 rounded-full ${m.avatarColor} flex items-center justify-center text-white font-bold text-xs`}>{m.name.charAt(0)}</div>
                                     <div className="flex-1 min-w-0">
                                         <div className="text-sm font-bold text-slate-900 dark:text-white truncate">{m.name}</div>
                                         <div className="text-[10px] text-slate-500 truncate">{m.email || 'Owner'}</div>
                                     </div>
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase">{m.role}</span>
+                                    
+                                    {/* Role Management */}
+                                    {m.role === 'owner' ? (
+                                        <span className="text-[10px] font-bold text-indigo-500 uppercase bg-indigo-50 dark:bg-indigo-900/20 px-2 py-1 rounded">Owner</span>
+                                    ) : (
+                                        <div className="flex items-center gap-2">
+                                            <select 
+                                                value={m.role}
+                                                onChange={(e) => onUpdateRole(m.id, e.target.value as 'editor' | 'viewer')}
+                                                className="bg-transparent text-[10px] font-bold text-slate-500 uppercase outline-none cursor-pointer hover:text-indigo-500 transition-colors"
+                                            >
+                                                <option value="editor">Editor</option>
+                                                <option value="viewer">Viewer</option>
+                                            </select>
+                                            
+                                            <button 
+                                                onClick={() => onRemoveMember(m.id)}
+                                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                                                title="Remove Member"
+                                            >
+                                                <Trash2 size={12} />
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
                     </div>
 
-                    <div>
+                    <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
                         <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Invite Person</label>
                         <div className="flex gap-2">
                             <input className="flex-1 p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-sm" placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} />

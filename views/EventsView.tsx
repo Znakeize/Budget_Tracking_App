@@ -10,7 +10,7 @@ import {
   Trash2, TrendingUp, AlertCircle, Camera, Download, Share2,
   Pencil, Edit2, X, Briefcase, Layers, Receipt,
   ArrowRight, DollarSign, CalendarHeart, Bell, BellRing, ChevronDown, Check,
-  Shield, Mail, User, UserPlus
+  Shield, Mail, User, UserPlus, Loader2, RefreshCw, HandCoins, CircleDollarSign
 } from 'lucide-react';
 import { Doughnut } from 'react-chartjs-2';
 import { jsPDF } from 'jspdf';
@@ -25,7 +25,7 @@ interface EventsViewProps {
   onProfileClick: () => void;
   focusEventId?: string;
   focusTab?: string;
-  onCreateShoppingList?: (name: string, budget: number, members: EventMember[]) => void;
+  onCreateShoppingList?: (name: string, budget: number, members: EventMember[], linkedData?: {eventId: string, expenseId: string, expenseName: string}) => void;
 }
 
 export const getEventNotifications = (events: EventData[], currencySymbol: string): NotificationItem[] => {
@@ -343,7 +343,7 @@ const EventDetailView: React.FC<{
     initialTab?: string, 
     focusItemId?: string,
     onProfileClick: () => void,
-    onCreateShoppingList?: (name: string, budget: number, members: EventMember[]) => void
+    onCreateShoppingList?: (name: string, budget: number, members: EventMember[], linkedData?: {eventId: string, expenseId: string, expenseName: string}) => void
 }> = ({ event, onUpdate, onBack, currencySymbol, initialTab, focusItemId, onProfileClick, onCreateShoppingList }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'budget' | 'vendors' | 'team' | 'ai'>((initialTab as any) || 'dashboard');
   const [isEditEventOpen, setIsEditEventOpen] = useState(false);
@@ -356,8 +356,10 @@ const EventDetailView: React.FC<{
   }, [event, currencySymbol, dismissedIds]);
 
   useEffect(() => {
-      if (initialTab) {
+      if (initialTab && initialTab !== 'settlement') { // Redirect settlement tab requests to team
           setActiveTab(initialTab as any);
+      } else if (initialTab === 'settlement') {
+          setActiveTab('team');
       }
   }, [initialTab]);
 
@@ -493,14 +495,226 @@ const EventDashboardTab = ({ event, totalSpent, remaining, currencySymbol }: any
     }), { total: 0, paid: 0 });
     const vendorProgress = vendorStats.total > 0 ? (vendorStats.paid / vendorStats.total) * 100 : 0;
 
+    const handleShare = async () => {
+        const shareData = {
+            title: `Event Plan: ${event.name}`,
+            text: `Event: ${event.name}\nType: ${event.type}\nDate: ${new Date(event.date).toLocaleDateString()}\nLocation: ${event.location}\nBudget: ${currencySymbol}${event.totalBudget.toLocaleString()}\nRemaining: ${currencySymbol}${remaining.toLocaleString()}\n\nManaged with BudgetFlow.`
+        };
+
+        if (navigator.share) {
+            try {
+                await navigator.share(shareData);
+            } catch (err) {
+                console.log('Error sharing:', err);
+            }
+        } else {
+            try {
+                await navigator.clipboard.writeText(shareData.text);
+                alert('Event details copied to clipboard!');
+            } catch (err) {
+                console.error('Copy failed', err);
+                alert('Could not share event.');
+            }
+        }
+    };
+
     const handleExport = () => {
         const doc = new jsPDF();
-        doc.setFontSize(20);
-        doc.text(`Event Report: ${event.name}`, 20, 20);
-        doc.setFontSize(12);
-        doc.text(`Total Budget: ${currencySymbol}${event.totalBudget}`, 20, 40);
-        doc.text(`Total Spent: ${currencySymbol}${totalSpent}`, 20, 50);
-        doc.save(`${event.name}_report.pdf`);
+        let y = 20;
+        const pageHeight = doc.internal.pageSize.height;
+        const checkPageBreak = (needed: number) => {
+            if (y + needed > pageHeight - 15) {
+                doc.addPage();
+                y = 20;
+            }
+        };
+
+        // Title
+        doc.setFontSize(22);
+        doc.setTextColor(79, 70, 229); // Indigo
+        doc.text(event.name, 20, y);
+        y += 8;
+
+        // Subtitle
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text(`${event.type} • ${new Date(event.date).toLocaleDateString()} • ${event.location}`, 20, y);
+        y += 15;
+
+        // --- FINANCIAL SUMMARY BOX ---
+        doc.setFillColor(245, 247, 250);
+        doc.setDrawColor(230, 230, 230);
+        doc.rect(20, y, 170, 25, 'F');
+        doc.rect(20, y, 170, 25, 'S');
+        
+        let boxY = y + 8;
+        doc.setFontSize(9);
+        doc.setTextColor(100);
+        doc.text("Total Budget", 30, boxY); 
+        doc.text("Total Spent", 80, boxY); 
+        doc.text("Remaining", 130, boxY);
+        
+        boxY += 10;
+        doc.setFontSize(14);
+        doc.setTextColor(0);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${currencySymbol}${event.totalBudget.toLocaleString()}`, 30, boxY);
+        doc.text(`${currencySymbol}${totalSpent.toLocaleString()}`, 80, boxY);
+        
+        const remColor = remaining >= 0 ? [16, 185, 129] : [239, 68, 68]; // Green or Red
+        doc.setTextColor(remColor[0], remColor[1], remColor[2]);
+        doc.text(`${currencySymbol}${remaining.toLocaleString()}`, 130, boxY);
+        
+        y += 35;
+
+        // --- BUDGET BREAKDOWN TABLE ---
+        checkPageBreak(60);
+        doc.setTextColor(0);
+        doc.setFontSize(14);
+        doc.text("Budget Breakdown", 20, y);
+        y += 8;
+
+        // Table Header
+        doc.setFillColor(230, 230, 230);
+        doc.rect(20, y-5, 170, 8, 'F');
+        doc.setFontSize(9);
+        doc.setTextColor(50);
+        doc.setFont('helvetica', 'bold');
+        doc.text("Category", 25, y);
+        doc.text("Allocated", 80, y);
+        doc.text("Spent", 120, y);
+        doc.text("Status", 160, y);
+        y += 10;
+
+        // Table Rows
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(0);
+        
+        event.categories.forEach((cat: any) => {
+            checkPageBreak(10);
+            const spent = event.expenses.filter((e: any) => e.category === cat.name).reduce((sum: number, e: any) => sum + e.amount, 0);
+            const status = spent > cat.allocated ? 'Over' : `${Math.round((spent/cat.allocated)*100)}%`;
+            
+            doc.text(cat.name, 25, y);
+            doc.text(`${currencySymbol}${cat.allocated.toLocaleString()}`, 80, y);
+            doc.text(`${currencySymbol}${spent.toLocaleString()}`, 120, y);
+            
+            if(status === 'Over') doc.setTextColor(220, 0, 0);
+            else doc.setTextColor(0, 150, 0);
+            doc.text(status, 160, y);
+            doc.setTextColor(0);
+            
+            y += 8;
+        });
+        y += 10;
+
+        // --- VENDORS SECTION ---
+        checkPageBreak(60);
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text("Vendors & Payments", 20, y);
+        y += 8;
+
+        // Vendor Header
+        doc.setFillColor(230, 230, 230);
+        doc.rect(20, y-5, 170, 8, 'F');
+        doc.setFontSize(9);
+        doc.setTextColor(50);
+        doc.text("Vendor", 25, y);
+        doc.text("Service", 70, y);
+        doc.text("Cost", 110, y);
+        doc.text("Paid", 140, y);
+        doc.text("Status", 170, y);
+        y += 10;
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(0);
+
+        if (event.vendors.length === 0) {
+            doc.text("- No vendors recorded -", 25, y);
+            y += 10;
+        } else {
+            event.vendors.forEach((v: any) => {
+                checkPageBreak(10);
+                doc.text(v.name, 25, y);
+                doc.text(v.service, 70, y);
+                doc.text(`${currencySymbol}${v.totalAmount.toLocaleString()}`, 110, y);
+                doc.text(`${currencySymbol}${v.paidAmount.toLocaleString()}`, 140, y);
+                
+                doc.setFont('helvetica', 'bold');
+                if (v.status === 'paid') doc.setTextColor(0, 150, 0);
+                else if (v.status === 'partial') doc.setTextColor(200, 100, 0);
+                else doc.setTextColor(100);
+                
+                doc.text(v.status.toUpperCase(), 170, y);
+                doc.setTextColor(0);
+                doc.setFont('helvetica', 'normal');
+                y += 8;
+            });
+        }
+        y += 10;
+
+        // --- EXPENSE LOG ---
+        checkPageBreak(60);
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text("Expense Log", 20, y);
+        y += 8;
+
+        // Expense Header
+        doc.setFillColor(230, 230, 230);
+        doc.rect(20, y-5, 170, 8, 'F');
+        doc.setFontSize(9);
+        doc.setTextColor(50);
+        doc.text("Date", 25, y);
+        doc.text("Item", 55, y);
+        doc.text("Category", 110, y);
+        doc.text("Amount", 170, y, {align: 'right'});
+        y += 10;
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(0);
+
+        if (event.expenses.length === 0) {
+            doc.text("- No expenses recorded -", 25, y);
+            y += 10;
+        } else {
+            const sortedExpenses = [...event.expenses].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            sortedExpenses.forEach((exp: any) => {
+                checkPageBreak(10);
+                doc.text(new Date(exp.date).toLocaleDateString(), 25, y);
+                doc.text(exp.name.substring(0, 25) + (exp.name.length > 25 ? '...' : ''), 55, y);
+                doc.text(exp.category, 110, y);
+                doc.text(`${currencySymbol}${exp.amount.toLocaleString()}`, 170, y, {align: 'right'});
+                y += 8;
+            });
+        }
+        y += 10;
+
+        // --- TEAM ---
+        checkPageBreak(40);
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text("Event Team", 20, y);
+        y += 8;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        const membersStr = event.members.map((m: any) => `${m.name} (${m.role})`).join(', ');
+        doc.text(membersStr, 20, y, {maxWidth: 170});
+
+        // --- FOOTER ---
+        const pageCount = doc.internal.getNumberOfPages();
+        for(let i = 1; i <= pageCount; i++) {
+            doc.setPage(i);
+            doc.setFontSize(8);
+            doc.setTextColor(150);
+            doc.text(`Generated by BudgetFlow • Page ${i} of ${pageCount}`, 105, 290, {align: 'center'});
+        }
+
+        doc.save(`${event.name}_Full_Report.pdf`);
     };
 
     return (
@@ -563,10 +777,247 @@ const EventDashboardTab = ({ event, totalSpent, remaining, currencySymbol }: any
                  <button onClick={handleExport} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
                      <Download size={16} /> Export Report
                  </button>
-                 <button className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                 <button onClick={handleShare} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
                      <Share2 size={16} /> Share Event
                  </button>
             </div>
+        </div>
+    );
+};
+
+const EventSettlementTab = ({ event, currencySymbol, onUpdate }: { event: EventData, currencySymbol: string, onUpdate: (e: EventData) => void }) => {
+    
+    // State for Partial Settlement
+    const [partialMode, setPartialMode] = useState<string | null>(null); // Stores ID of the settlement being partially paid
+    const [partialAmount, setPartialAmount] = useState('');
+
+    // Logic to calculate settlements
+    const calculateSettlements = () => {
+        const members = event.members;
+        const expenses = event.expenses;
+        
+        // 1. Calculate Net Balances
+        const balances: Record<string, number> = {};
+        members.forEach(m => balances[m.id] = 0);
+        
+        let totalExpense = 0;
+
+        expenses.forEach(e => {
+            if (e.category === 'Settlement') {
+                // If it's a settlement, it's a transfer.
+                // It increases the payer's contribution (balance) without increasing the total shared cost of the event.
+                // We assume 'paidBy' is the person sending the money.
+                const payerId = e.paidBy || 'me';
+                if (balances[payerId] !== undefined) {
+                    balances[payerId] += e.amount;
+                }
+                
+                // NEW: Handle receiver logic via vendorId convention or direct calculation
+                // For proper settlement logic, we need to debit the receiver.
+                // We assume the settlement expense `vendorId` field stores the receiver's member ID.
+                // This is a convention we will use in handleSettle.
+                const receiverId = e.vendorId;
+                if (receiverId && balances[receiverId] !== undefined) {
+                    balances[receiverId] -= e.amount;
+                }
+            } else if (e.category !== 'Reminder') {
+                const amount = e.amount;
+                totalExpense += amount;
+                // Default to 'me' if paidBy is undefined, assuming the current user paid
+                const payerId = e.paidBy || 'me';
+                
+                // Payer gets credit
+                if (balances[payerId] !== undefined) {
+                    balances[payerId] += amount;
+                } else {
+                    // If payer isn't in member list (edge case), default to 'me' bucket or ignore
+                    if (balances['me'] !== undefined) balances['me'] += amount;
+                }
+            }
+        });
+
+        // Simple equal split logic for events
+        const splitAmount = members.length > 0 ? totalExpense / members.length : 0;
+
+        // Subtract fair share from everyone
+        members.forEach(m => {
+            balances[m.id] -= splitAmount;
+        });
+
+        // 2. Resolve Debts
+        const debtors = members.filter(m => balances[m.id] < -0.01).map(m => ({ ...m, balance: balances[m.id] })).sort((a,b) => a.balance - b.balance);
+        const creditors = members.filter(m => balances[m.id] > 0.01).map(m => ({ ...m, balance: balances[m.id] })).sort((a,b) => b.balance - a.balance);
+
+        const settlements = [];
+        let i = 0; 
+        let j = 0;
+
+        while (i < debtors.length && j < creditors.length) {
+            const debtor = debtors[i];
+            const creditor = creditors[j];
+            
+            const amount = Math.min(Math.abs(debtor.balance), creditor.balance);
+            
+            settlements.push({
+                id: `settle-${debtor.id}-${creditor.id}`, // Generate a key for UI
+                from: debtor,
+                to: creditor,
+                amount: amount
+            });
+
+            debtor.balance += amount;
+            creditor.balance -= amount;
+
+            if (Math.abs(debtor.balance) < 0.01) i++;
+            if (creditor.balance < 0.01) j++;
+        }
+
+        return { settlements, totalExpense, splitAmount };
+    };
+
+    const { settlements, totalExpense, splitAmount } = calculateSettlements();
+
+    const handleSettle = (settlement: any, amount: number) => {
+        const newExpense: EventExpense = {
+            id: generateId(),
+            name: `Settlement to ${settlement.to.name}`,
+            amount: amount,
+            category: 'Settlement',
+            date: new Date().toISOString(),
+            paidBy: settlement.from.id,
+            vendorId: settlement.to.id // Use vendorId to store receiver ID for internal logic
+        };
+        
+        onUpdate({ ...event, expenses: [...event.expenses, newExpense] });
+        setPartialMode(null);
+        setPartialAmount('');
+    };
+
+    const handleRemind = (settlement: any) => {
+        const newExpense: EventExpense = {
+            id: generateId(),
+            name: `Reminder: ${settlement.from.name} owes ${currencySymbol}${settlement.amount.toLocaleString()}`,
+            amount: 0, // No financial impact
+            category: 'Reminder',
+            date: new Date().toISOString(),
+            paidBy: 'me',
+            vendorId: settlement.from.id // Target of reminder
+        };
+        
+        onUpdate({ ...event, expenses: [...event.expenses, newExpense] });
+        
+        // Visual feedback
+        alert(`Reminder sent to ${settlement.from.name}`);
+    }
+
+    return (
+        <div className="space-y-4 animate-in fade-in slide-in-from-right-2">
+            <Card className="p-4 bg-gradient-to-r from-emerald-500 to-teal-600 text-white border-none shadow-lg">
+                <div className="grid grid-cols-2 gap-4 divide-x divide-white/20">
+                    <div className="text-center">
+                        <p className="text-[10px] uppercase font-bold text-emerald-100">Total Event Cost</p>
+                        <p className="text-xl font-bold">{formatCurrency(totalExpense, currencySymbol)}</p>
+                    </div>
+                    <div className="text-center">
+                        <p className="text-[10px] uppercase font-bold text-emerald-100">Cost Per Person</p>
+                        <p className="text-xl font-bold">{formatCurrency(splitAmount, currencySymbol)}</p>
+                    </div>
+                </div>
+            </Card>
+
+            <h3 className="text-sm font-bold text-slate-700 dark:text-white mt-2">Settlement Plan</h3>
+            
+            {settlements.length > 0 ? (
+                <div className="space-y-3">
+                    {settlements.map((s, i) => {
+                        const isPartialMode = partialMode === s.id;
+
+                        return (
+                        <Card key={s.id} className="p-4 bg-white dark:bg-slate-800 border-l-4 border-l-indigo-500">
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white bg-slate-400`}>
+                                            {s.from.name.charAt(0)}
+                                        </div>
+                                        <ArrowRight size={16} className="text-slate-300" />
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white bg-indigo-500`}>
+                                            {s.to.name.charAt(0)}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="text-sm font-bold text-slate-900 dark:text-white">
+                                            {s.from.id === 'me' ? 'You' : s.from.name} pays {s.to.id === 'me' ? 'You' : s.to.name}
+                                        </div>
+                                        <div className="text-[10px] text-slate-500">to settle share</div>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                                        {formatCurrency(s.amount, currencySymbol)}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Actions Row */}
+                            {isPartialMode ? (
+                                <div className="flex gap-2 items-center animate-in slide-in-from-top-2">
+                                    <div className="relative flex-1">
+                                        <span className="absolute left-3 top-2.5 text-xs text-slate-400">{currencySymbol}</span>
+                                        <input 
+                                            type="number" 
+                                            className="w-full bg-slate-100 dark:bg-slate-900 rounded-xl py-2 pl-7 pr-3 text-sm font-bold outline-none border border-slate-200 dark:border-slate-700" 
+                                            placeholder="Amount"
+                                            value={partialAmount}
+                                            onChange={(e) => setPartialAmount(e.target.value)}
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <button 
+                                        onClick={() => handleSettle(s, parseFloat(partialAmount) || 0)}
+                                        className="p-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors"
+                                    >
+                                        <Check size={18} />
+                                    </button>
+                                    <button 
+                                        onClick={() => { setPartialMode(null); setPartialAmount(''); }}
+                                        className="p-2 bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-xl hover:bg-slate-300 transition-colors"
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={() => handleSettle(s, s.amount)}
+                                        className="flex-1 py-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 hover:bg-emerald-200 transition-colors"
+                                    >
+                                        <CheckCircle size={12} /> Full Settle
+                                    </button>
+                                    <button 
+                                        onClick={() => setPartialMode(s.id)}
+                                        className="flex-1 py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 hover:bg-blue-200 transition-colors"
+                                    >
+                                        <CircleDollarSign size={12} /> Partial
+                                    </button>
+                                    <button 
+                                        onClick={() => handleRemind(s)}
+                                        className="flex-1 py-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 hover:bg-indigo-200 transition-colors"
+                                    >
+                                        <Bell size={12} /> Remind
+                                    </button>
+                                </div>
+                            )}
+                        </Card>
+                    )})}
+                </div>
+            ) : (
+                <div className="text-center py-10 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+                    <CheckCircle size={32} className="mx-auto mb-2 text-emerald-500 opacity-80" />
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">All Settled Up!</p>
+                    <p className="text-xs text-slate-500">Everyone has paid their fair share.</p>
+                </div>
+            )}
         </div>
     );
 };
@@ -593,10 +1044,12 @@ const EventBudgetTab = ({ event, onUpdate, currencySymbol, focusItemId, onCreate
     }, [focusItemId]);
 
     const handleAddExpense = (exp: any) => {
+        // If exp.id is passed (from linked shopping list creation), use it. Else generate new.
         const newExpense: EventExpense = {
-            id: generateId(),
+            id: exp.id || generateId(),
             ...exp,
-            date: new Date().toISOString()
+            date: new Date().toISOString(),
+            paidBy: exp.paidBy || 'me' // Default to 'me' if not specified
         };
         const updatedEvent = {
             ...event,
@@ -1048,381 +1501,172 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
     );
 };
 
-// --- UPDATED EVENT TEAM TAB ---
-const EventTeamTab = ({ event, onUpdate, currencySymbol }: { event: EventData, onUpdate: (e: EventData) => void, currencySymbol: string }) => {
-    const [view, setView] = useState<'members' | 'settle'>('members');
-    const [isInviteOpen, setIsInviteOpen] = useState(false);
-    const [isSettleOpen, setIsSettleOpen] = useState(false);
+const EventTeamTab = ({ event, onUpdate, currencySymbol }: any) => {
+    const [newMemberEmail, setNewMemberEmail] = useState('');
     const [editingMember, setEditingMember] = useState<EventMember | null>(null);
-
-    // Calculate Financials per Member
-    const memberStats = useMemo(() => {
-        const totalExpense = event.expenses.reduce((s, e) => s + e.amount, 0);
-        const perPerson = event.members.length > 0 ? totalExpense / event.members.length : 0;
-
-        return event.members.map(m => {
-            const paid = event.expenses
-                .filter(e => e.paidBy === m.id || (m.id === 'me' && (!e.paidBy || e.paidBy === 'me')))
-                .reduce((s, e) => s + e.amount, 0);
-            
-            return {
-                ...m,
-                paid,
-                fairShare: perPerson,
-                balance: paid - perPerson // Positive = Owed money, Negative = Owes money
-            };
-        });
-    }, [event]);
-
-    const handleInvite = (data: any) => {
+    
+    const handleAddMember = () => {
+        if (!newMemberEmail) return;
         const newMember: EventMember = {
             id: generateId(),
-            name: data.name,
-            role: data.role,
-            avatar: `bg-${['blue','green','yellow','purple','pink'][Math.floor(Math.random()*5)]}-500`
+            name: newMemberEmail.split('@')[0],
+            role: 'viewer',
+            avatar: undefined // Using default logic in avatar rendering
         };
         onUpdate({ ...event, members: [...event.members, newMember] });
-        setIsInviteOpen(false);
-    };
-
-    const handleUpdateMember = (updated: EventMember) => {
-        onUpdate({ ...event, members: event.members.map(m => m.id === updated.id ? updated : m) });
-        setEditingMember(null);
+        setNewMemberEmail('');
     };
 
     const handleRemoveMember = (id: string) => {
-        if(confirm('Remove this member?')) {
-            onUpdate({ ...event, members: event.members.filter(m => m.id !== id) });
-            setEditingMember(null);
+        if (confirm('Remove this member?')) {
+            onUpdate({ ...event, members: event.members.filter((m: any) => m.id !== id) });
         }
+    };
+
+    const handleUpdateMemberRole = (memberId: string, newRole: 'admin' | 'editor' | 'viewer') => {
+        const updatedMembers = event.members.map((m: any) => 
+            m.id === memberId ? { ...m, role: newRole } : m
+        );
+        onUpdate({ ...event, members: updatedMembers });
+        setEditingMember(null);
+    };
+
+    const getMemberContribution = (memberId: string) => {
+        return event.expenses
+            .filter((e: any) => (e.paidBy === memberId) || (memberId === 'me' && !e.paidBy)) // Handle default 'me'
+            .reduce((sum: number, e: any) => sum + e.amount, 0);
     };
 
     return (
         <div className="space-y-4 animate-in fade-in slide-in-from-right-2">
-            
-            {/* View Toggle */}
-            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
-                <button 
-                    onClick={() => setView('members')} 
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${view === 'members' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600 dark:text-white' : 'text-slate-500'}`}
-                >
-                    Member List
-                </button>
-                <button 
-                    onClick={() => setView('settle')} 
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${view === 'settle' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600 dark:text-white' : 'text-slate-500'}`}
-                >
-                    Settlement Plan
-                </button>
-            </div>
-
-            {view === 'members' ? (
-                <>
-                    <Card className="p-4 bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-none shadow-lg">
-                        <div className="flex justify-between items-center mb-4">
-                            <div>
-                                <h3 className="font-bold flex items-center gap-2 mb-1"><Users size={18} /> Team Overview</h3>
-                                <p className="text-xs text-blue-100">{event.members.length} members involved</p>
-                            </div>
-                            <button 
-                                onClick={() => setIsInviteOpen(true)} 
-                                className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors border border-white/30"
-                            >
-                                <Plus size={14} /> Invite
-                            </button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 border-t border-white/20 pt-4">
-                            <div>
-                                <p className="text-[10px] text-blue-200 uppercase font-bold">Total Spent</p>
-                                <p className="text-xl font-bold">{formatCurrency(memberStats.reduce((s, m) => s + m.paid, 0), currencySymbol)}</p>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-[10px] text-blue-200 uppercase font-bold">Per Person</p>
-                                <p className="text-xl font-bold">{formatCurrency(memberStats[0]?.fairShare || 0, currencySymbol)}</p>
-                            </div>
-                        </div>
-                    </Card>
-
-                    <div className="space-y-3">
-                        {memberStats.map((m) => (
-                            <Card key={m.id} className="p-3">
-                                <div className="flex justify-between items-center mb-2">
-                                    <div className="flex items-center gap-3">
-                                        <div className={`w-10 h-10 rounded-full ${m.avatar || 'bg-slate-500'} flex items-center justify-center font-bold text-white shadow-sm`}>
-                                            {m.name.charAt(0)}
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                                                {m.name}
-                                                <span className="text-[9px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 uppercase tracking-wide border border-slate-200 dark:border-slate-700">{m.role}</span>
-                                            </h4>
-                                            <p className="text-[10px] text-slate-500">Paid: {formatCurrency(m.paid, currencySymbol)}</p>
+            <Card className="p-4">
+                <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4">Team Members</h3>
+                <div className="space-y-3">
+                    {event.members.map((member: any) => {
+                        const paidAmount = getMemberContribution(member.id);
+                        
+                        return (
+                            <div key={member.id} className="flex items-center justify-between p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg group">
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300`}>
+                                        {member.name.charAt(0)}
+                                    </div>
+                                    <div>
+                                        <div className="text-sm font-bold text-slate-900 dark:text-white">{member.name}</div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] text-slate-500 capitalize">{member.role}</span>
+                                            {paidAmount > 0 && (
+                                                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 py-0.5 rounded-full">
+                                                    Paid: {formatCurrency(paidAmount, currencySymbol)}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
-                                    <button onClick={() => setEditingMember(m)} className="p-2 text-slate-300 hover:text-indigo-500 transition-colors">
-                                        <Edit2 size={14} />
-                                    </button>
                                 </div>
                                 
-                                {/* Balance Indicator */}
-                                <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                                    <div className="text-[10px] font-bold text-slate-400 uppercase">Balance</div>
-                                    <div className={`text-xs font-bold px-2 py-1 rounded ${m.balance >= 0 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'}`}>
-                                        {m.balance >= 0 ? 'Gets back ' : 'Owes '}{formatCurrency(Math.abs(m.balance), currencySymbol)}
-                                    </div>
-                                </div>
-                            </Card>
-                        ))}
-                    </div>
-                </>
-            ) : (
-                /* SETTLEMENT VIEW */
-                <div className="space-y-4">
-                    <Card className="p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                        <div className="text-center mb-4">
-                            <h3 className="font-bold text-slate-900 dark:text-white">Debt Settlement</h3>
-                            <p className="text-xs text-slate-500">Efficient transfers to square up.</p>
-                        </div>
-                        <button 
-                            onClick={() => setIsSettleOpen(true)}
-                            className="w-full py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-600/20 active:scale-95 transition-all"
-                        >
-                            Generate Settlement Plan
-                        </button>
-                    </Card>
-                </div>
-            )}
-
-            <EventInviteModal isOpen={isInviteOpen} onClose={() => setIsInviteOpen(false)} onConfirm={handleInvite} />
-            
-            <EventSettlementModal 
-                isOpen={isSettleOpen} 
-                onClose={() => setIsSettleOpen(false)} 
-                members={memberStats} 
-                currencySymbol={currencySymbol} 
-                onSettle={(transfers) => {
-                    // In a real app, this would create expense records
-                    alert("Settlement recorded!");
-                    setIsSettleOpen(false);
-                }}
-            />
-
-            <EditMemberModal 
-                isOpen={!!editingMember}
-                onClose={() => setEditingMember(null)}
-                member={editingMember}
-                onConfirm={handleUpdateMember}
-                onDelete={handleRemoveMember}
-            />
-        </div>
-    );
-};
-
-// --- UPDATED Event Invite Modal ---
-const EventInviteModal = ({ isOpen, onClose, onConfirm }: any) => {
-    const [name, setName] = useState(''); 
-    const [email, setEmail] = useState('');
-    const [role, setRole] = useState('viewer');
-    
-    useEffect(() => { if(isOpen) { setName(''); setEmail(''); setRole('viewer'); } }, [isOpen]);
-    if(!isOpen) return null;
-    
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                    <UserPlus size={20} className="text-indigo-500" /> Invite Member
-                </h3>
-                <div className="space-y-4">
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Name</label>
-                        <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none text-sm focus:border-indigo-500 transition-colors" placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Email (Optional)</label>
-                        <input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none text-sm focus:border-indigo-500 transition-colors" placeholder="email@example.com" value={email} onChange={e => setEmail(e.target.value)} />
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Role</label>
-                        <div className="grid grid-cols-3 gap-2">
-                            {['admin', 'editor', 'viewer'].map(r => (
-                                <button 
-                                    key={r}
-                                    onClick={() => setRole(r)}
-                                    className={`py-2 rounded-lg text-xs font-bold capitalize transition-all ${role === r ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
-                                >
-                                    {r}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                    <button onClick={() => onConfirm({ name, email, role })} disabled={!name} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2 shadow-lg shadow-indigo-600/20 active:scale-95 transition-all disabled:opacity-50">
-                        Send Invite
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// --- NEW Event Settlement Modal (Replaces Split Modal) ---
-const EventSettlementModal = ({ isOpen, onClose, members, currencySymbol, onSettle }: any) => {
-    if(!isOpen) return null;
-
-    // Debt Simplification Logic
-    const debts: {from: string, to: string, amount: number}[] = [];
-    const debtors = members.filter((m: any) => m.balance < -0.01).sort((a: any, b: any) => a.balance - b.balance);
-    const creditors = members.filter((m: any) => m.balance > 0.01).sort((a: any, b: any) => b.balance - a.balance);
-
-    let i = 0; let j = 0;
-    while(i < debtors.length && j < creditors.length) {
-        const debtor = debtors[i];
-        const creditor = creditors[j];
-        const amount = Math.min(Math.abs(debtor.balance), creditor.balance);
-        
-        debts.push({ from: debtor.name, to: creditor.name, amount });
-        
-        debtor.balance += amount;
-        creditor.balance -= amount;
-        
-        if(Math.abs(debtor.balance) < 0.01) i++;
-        if(creditor.balance < 0.01) j++;
-    }
-
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <CheckCircle size={20} className="text-emerald-500" /> Settlement Plan
-                    </h3>
-                    <button onClick={onClose} className="text-slate-400"><X size={20}/></button>
-                </div>
-
-                {debts.length > 0 ? (
-                    <div className="space-y-3 mb-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                        {debts.map((d, idx) => (
-                            <div key={idx} className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
-                                <div className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                                    <span className="font-bold">{d.from}</span>
-                                    <ArrowRight size={14} className="text-slate-400" />
-                                    <span className="font-bold">{d.to}</span>
-                                </div>
-                                <div className="font-bold text-emerald-600 dark:text-emerald-400">
-                                    {formatCurrency(d.amount, currencySymbol)}
+                                <div className="flex gap-1">
+                                    <button 
+                                        onClick={() => setEditingMember(member)}
+                                        className="p-2 text-slate-400 hover:text-indigo-500 transition-colors"
+                                    >
+                                        <Pencil size={16} />
+                                    </button>
+                                    {member.id !== 'me' && (
+                                        <button 
+                                            onClick={() => handleRemoveMember(member.id)}
+                                            className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
-                        ))}
-                    </div>
-                ) : (
-                    <div className="text-center py-8 text-slate-400">
-                        <CheckCircle size={32} className="mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">All settled up! No debts found.</p>
-                    </div>
-                )}
-
-                {debts.length > 0 && (
-                    <button 
-                        onClick={() => onSettle(debts)}
-                        className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 active:scale-95 transition-all"
-                    >
-                        Mark All as Settled
-                    </button>
-                )}
-            </div>
-        </div>
-    );
-};
-
-// --- NEW Edit Member Modal ---
-const EditMemberModal = ({ isOpen, onClose, member, onConfirm, onDelete }: any) => {
-    const [role, setRole] = useState(member?.role || 'viewer');
-    
-    useEffect(() => { if (isOpen && member) setRole(member.role); }, [isOpen, member]);
-    
-    if (!isOpen || !member) return null;
-
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Manage Member</h3>
-                
-                <div className="flex items-center gap-3 mb-6 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl">
-                    <div className={`w-10 h-10 rounded-full ${member.avatar || 'bg-slate-500'} flex items-center justify-center font-bold text-white`}>
-                        {member.name.charAt(0)}
-                    </div>
-                    <div>
-                        <div className="font-bold text-slate-900 dark:text-white">{member.name}</div>
-                        <div className="text-xs text-slate-500">{member.id === 'me' ? 'You' : 'Member'}</div>
-                    </div>
+                        );
+                    })}
                 </div>
-
-                <div className="space-y-4">
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Change Role</label>
-                        <div className="grid grid-cols-3 gap-2">
-                            {['admin', 'editor', 'viewer'].map(r => (
-                                <button 
-                                    key={r}
-                                    onClick={() => setRole(r)}
-                                    className={`py-2 rounded-lg text-xs font-bold capitalize transition-all ${role === r ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
-                                >
-                                    {r}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="flex gap-2 pt-2">
-                        {member.id !== 'me' && (
-                            <button 
-                                onClick={() => onDelete(member.id)}
-                                className="flex-1 py-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-red-100 transition-colors"
-                            >
-                                <Trash2 size={16} /> Remove
-                            </button>
-                        )}
-                        <button 
-                            onClick={() => onConfirm({ ...member, role })}
-                            className="flex-[2] py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors"
-                        >
-                            Save Changes
+                
+                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <div className="flex gap-2">
+                        <input 
+                            className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none"
+                            placeholder="Email address"
+                            value={newMemberEmail}
+                            onChange={(e) => setNewMemberEmail(e.target.value)}
+                        />
+                        <button onClick={handleAddMember} disabled={!newMemberEmail} className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-bold disabled:opacity-50">
+                            Invite
                         </button>
                     </div>
                 </div>
-            </div>
+            </Card>
+
+            <EditEventMemberModal 
+                isOpen={!!editingMember}
+                onClose={() => setEditingMember(null)}
+                onConfirm={handleUpdateMemberRole}
+                member={editingMember}
+            />
+
+            {/* Added Settlement Section within Team Tab */}
+            <div className="my-6 border-t border-slate-200 dark:border-slate-700"></div>
+            
+            <EventSettlementTab event={event} currencySymbol={currencySymbol} onUpdate={onUpdate} />
         </div>
     );
 };
 
 const EventAITab = ({ event }: any) => {
     const [query, setQuery] = useState('');
-    const [response, setResponse] = useState<string | null>(null);
+    const [response, setResponse] = useState('');
     const [loading, setLoading] = useState(false);
-    const handleAskAI = async () => { if(!query) return; setLoading(true); const res = await analyzeEventWithAI(event, query); setResponse(res); setLoading(false); };
+
+    const handleAskAI = async () => {
+        if (!query) return;
+        setLoading(true);
+        const res = await analyzeEventWithAI(event, query);
+        setResponse(res);
+        setLoading(false);
+    };
+
     return (
-        <div className="space-y-4 animate-in fade-in slide-in-from-right-2 h-full flex flex-col">
-            <Card className="p-4 bg-gradient-to-br from-fuchsia-600 to-purple-600 text-white border-none shrink-0"><div className="flex items-start gap-3"><Sparkles className="shrink-0 mt-1 text-yellow-300" /><div><h3 className="font-bold text-lg">AI Event Planner</h3><p className="text-xs opacity-90">Ask me about budget allocation, vendor suggestions, or cost cutting tips.</p></div></div></Card>
-            <div className="flex-1 overflow-y-auto min-h-[150px] space-y-4">{response && (<div className="flex gap-3"><div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0"><Sparkles size={16} className="text-indigo-600" /></div><Card className="p-3 bg-white dark:bg-slate-800 border border-indigo-100 dark:border-indigo-500/20 rounded-tl-none"><p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{response}</p></Card></div>)}</div>
-            <div className="shrink-0 mt-auto pt-2"><div className="relative"><input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Ask your AI planner..." className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-3 pl-4 pr-12 text-sm outline-none focus:border-indigo-500 transition-colors" onKeyDown={(e) => e.key === 'Enter' && handleAskAI()} /><button onClick={handleAskAI} disabled={loading || !query} className="absolute right-2 top-2 p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"><Send size={16} /></button></div></div>
+        <div className="space-y-4 animate-in fade-in slide-in-from-right-2">
+            <Card className="p-4 bg-gradient-to-br from-indigo-600 to-purple-700 text-white border-none">
+                <div className="flex items-center gap-2 mb-2">
+                    <Sparkles size={20} className="text-yellow-300" />
+                    <h3 className="font-bold">Event AI Planner</h3>
+                </div>
+                <p className="text-xs text-indigo-100 opacity-90">
+                    Ask for budget advice, vendor suggestions, or schedule planning.
+                </p>
+            </Card>
+
+            <Card className="p-4">
+                <div className="space-y-3">
+                    <textarea 
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm outline-none resize-none h-24"
+                        placeholder="e.g. How can I reduce catering costs?"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                    />
+                    <button 
+                        onClick={handleAskAI} 
+                        disabled={loading || !query}
+                        className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                        {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                        Ask AI
+                    </button>
+                </div>
+            </Card>
+
+            {response && (
+                <Card className="p-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-500/20">
+                    <h4 className="text-xs font-bold text-indigo-700 dark:text-indigo-300 uppercase mb-2">AI Suggestion</h4>
+                    <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{response}</p>
+                </Card>
+            )}
         </div>
     );
-};
-
-const CreateEventModal = ({ isOpen, onClose, onConfirm, currencySymbol }: any) => {
-    const [name, setName] = useState(''); const [type, setType] = useState('General'); const [budget, setBudget] = useState(''); const [date, setDate] = useState(''); const [location, setLocation] = useState('');
-    if(!isOpen) return null;
-    const handleSubmit = () => { onConfirm({ id: generateId(), name, type, date, location, totalBudget: parseFloat(budget) || 0, currencySymbol, categories: [{ id: generateId(), name: 'General', allocated: parseFloat(budget)||0, color: '#6366f1' }], expenses: [], vendors: [], members: [{ id: 'me', name: 'You', role: 'admin' }], notes: '', created: Date.now(), theme: 'colorful' }); };
-    return (<div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} /><div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl"><h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Plan New Event</h3><div className="space-y-3"><input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Event Name" value={name} onChange={e => setName(e.target.value)} /><input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Budget" value={budget} onChange={e => setBudget(e.target.value)} /><input type="date" className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={date} onChange={e => setDate(e.target.value)} /><button onClick={handleSubmit} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Start Planning</button></div></div></div>);
-};
-
-const EditEventModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol }: any) => {
-    const [name, setName] = useState(initialData.name); const [budget, setBudget] = useState(initialData.totalBudget.toString()); const [date, setDate] = useState(initialData.date);
-    if (!isOpen) return null;
-    return (<div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} /><div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl"><h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Edit Event</h3><div className="space-y-3"><input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={name} onChange={e => setName(e.target.value)} /><input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={budget} onChange={e => setBudget(e.target.value)} /><button onClick={() => onConfirm({ name, totalBudget: parseFloat(budget) || 0, date })} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Save Changes</button></div></div></div>);
 };
 
 // --- UPDATED ADD EXPENSE MODAL ---
@@ -1430,6 +1674,7 @@ const AddEventExpenseModal = ({ isOpen, onClose, onConfirm, categories, currency
     const [name, setName] = useState('');
     const [amount, setAmount] = useState('');
     const [category, setCategory] = useState(categories[0]?.name || '');
+    const [paidBy, setPaidBy] = useState('me');
     const [shouldCreateList, setShouldCreateList] = useState(false); // New state for checkbox
 
     useEffect(() => {
@@ -1437,6 +1682,7 @@ const AddEventExpenseModal = ({ isOpen, onClose, onConfirm, categories, currency
             setName('');
             setAmount('');
             setCategory(categories[0]?.name || '');
+            setPaidBy('me');
             setShouldCreateList(false); // Reset checkbox
         }
     }, [isOpen, categories]);
@@ -1444,12 +1690,19 @@ const AddEventExpenseModal = ({ isOpen, onClose, onConfirm, categories, currency
     if(!isOpen) return null;
 
     const handleSave = () => {
+        const newExpenseId = generateId(); // Generate ID here to link
+        
         if (shouldCreateList && onCreateShoppingList && event) {
              const listName = `${event.name} - ${name || 'Expense'}`;
-             // Create list logic triggered alongside confirm
-             onCreateShoppingList(listName, parseFloat(amount) || 0, event.members);
+             // Pass linked data including the future expense ID
+             onCreateShoppingList(listName, parseFloat(amount) || 0, event.members, {
+                 eventId: event.id,
+                 expenseId: newExpenseId,
+                 expenseName: name || 'Expense'
+             });
         }
-        onConfirm({ name, amount: parseFloat(amount), category });
+        
+        onConfirm({ id: newExpenseId, name, amount: parseFloat(amount), category, paidBy });
     };
 
     return (
@@ -1469,9 +1722,18 @@ const AddEventExpenseModal = ({ isOpen, onClose, onConfirm, categories, currency
                         <span className="absolute left-3 top-3 text-slate-500">{currencySymbol}</span>
                         <input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 pl-8 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Amount" value={amount} onChange={e => setAmount(e.target.value)} />
                     </div>
-                    <select className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={category} onChange={e => setCategory(e.target.value)}>
-                        {categories.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
-                    </select>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                        <select className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none text-xs" value={category} onChange={e => setCategory(e.target.value)}>
+                            {categories.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                        </select>
+                        <select className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none text-xs" value={paidBy} onChange={e => setPaidBy(e.target.value)}>
+                            <option value="me">Paid by Me</option>
+                            {event.members.filter((m:any) => m.id !== 'me').map((m: any) => (
+                                <option key={m.id} value={m.id}>Paid by {m.name}</option>
+                            ))}
+                        </select>
+                    </div>
                     
                     {/* Updated Checkbox Row for Shopping List Link */}
                     <div 
@@ -1493,6 +1755,20 @@ const AddEventExpenseModal = ({ isOpen, onClose, onConfirm, categories, currency
             </div>
         </div>
     );
+};
+
+// ... other modals ...
+const CreateEventModal = ({ isOpen, onClose, onConfirm, currencySymbol }: any) => {
+    const [name, setName] = useState(''); const [type, setType] = useState('General'); const [budget, setBudget] = useState(''); const [date, setDate] = useState(''); const [location, setLocation] = useState('');
+    if(!isOpen) return null;
+    const handleSubmit = () => { onConfirm({ id: generateId(), name, type, date, location, totalBudget: parseFloat(budget) || 0, currencySymbol, categories: [{ id: generateId(), name: 'General', allocated: parseFloat(budget)||0, color: '#6366f1' }], expenses: [], vendors: [], members: [{ id: 'me', name: 'You', role: 'admin' }], notes: '', created: Date.now(), theme: 'colorful' }); };
+    return (<div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} /><div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl"><h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Plan New Event</h3><div className="space-y-3"><input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Event Name" value={name} onChange={e => setName(e.target.value)} /><input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" placeholder="Budget" value={budget} onChange={e => setBudget(e.target.value)} /><input type="date" className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={date} onChange={e => setDate(e.target.value)} /><button onClick={handleSubmit} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Start Planning</button></div></div></div>);
+};
+
+const EditEventModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol }: any) => {
+    const [name, setName] = useState(initialData.name); const [budget, setBudget] = useState(initialData.totalBudget.toString()); const [date, setDate] = useState(initialData.date);
+    if (!isOpen) return null;
+    return (<div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} /><div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl"><h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Edit Event</h3><div className="space-y-3"><input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={name} onChange={e => setName(e.target.value)} /><input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={budget} onChange={e => setBudget(e.target.value)} /><button onClick={() => onConfirm({ name, totalBudget: parseFloat(budget) || 0, date })} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2">Save Changes</button></div></div></div>);
 };
 
 const AddCategoryModal = ({ isOpen, onClose, onConfirm, currencySymbol }: any) => {
@@ -1527,4 +1803,47 @@ const EditVendorModal = ({ isOpen, onClose, onConfirm, onDelete, vendor, currenc
     useEffect(() => { if (isOpen && vendor) { setName(vendor.name); setService(vendor.service); setTotal(vendor.totalAmount.toString()); setDueDate(vendor.dueDate || ''); } }, [isOpen, vendor]);
     if (!isOpen) return null;
     return (<div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} /><div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl"><h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Edit Vendor</h3><div className="space-y-3"><input className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={name} onChange={e => setName(e.target.value)} /><select className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={service} onChange={e => setService(e.target.value)}>{categories?.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}</select><input type="number" className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={total} onChange={e => setTotal(e.target.value)} /><input type="date" className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 outline-none" value={dueDate} onChange={e => setDueDate(e.target.value)} /><div className="flex gap-2 mt-2"><button onClick={() => onDelete(vendor.id)} className="flex-1 py-3 bg-red-500/10 text-red-600 dark:text-red-400 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-red-500/20"><Trash2 size={16}/> Delete</button><button onClick={() => onConfirm({ ...vendor, name, service, totalAmount: parseFloat(total) || 0, dueDate })} className="flex-[2] py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700">Update</button></div></div></div></div>);
+};
+
+const EditEventMemberModal = ({ isOpen, onClose, onConfirm, member }: any) => {
+    const [role, setRole] = useState(member?.role || 'viewer');
+    
+    useEffect(() => {
+        if (member) setRole(member.role);
+    }, [member]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Edit Member</h3>
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Name</label>
+                        <div className="w-full p-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-300">
+                            {member.name}
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Role</label>
+                        <select 
+                            value={role} 
+                            onChange={(e) => setRole(e.target.value)}
+                            className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-sm font-bold"
+                        >
+                            <option value="admin">Admin</option>
+                            <option value="editor">Editor</option>
+                            <option value="viewer">Viewer</option>
+                        </select>
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={onClose} className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold rounded-xl text-sm">Cancel</button>
+                        <button onClick={() => onConfirm(member.id, role)} className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 };

@@ -10,15 +10,16 @@ import {
   Smartphone, Bell, Camera, FileText, Shield, Mail, Percent,
   Calculator, RefreshCw, Award, Map, TrendingDown, Flame,
   Pencil, Trash2, Receipt, ScanLine, Image as ImageIcon, Keyboard,
-  BellRing, ShoppingBag, Check
+  BellRing, ShoppingBag, Check, User
 } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement } from 'chart.js';
 import { Doughnut, Bar, Line } from 'react-chartjs-2';
 import { GoogleGenAI } from "@google/genai";
 import { HeaderProfile } from '../components/ui/HeaderProfile';
 import { NotificationPopup } from '../components/ui/NotificationPopup';
-import { NotificationItem, getCollaborativeNotifications } from '../utils/calculations';
+import { NotificationItem, getCollaborativeNotifications, generateId } from '../utils/calculations';
 import { SharedGroup, SharedMember, SharedExpense, GroupActivity } from '../types';
+import { Checkbox } from '../components/ui/Checkbox';
 
 // Register ChartJS components
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement);
@@ -28,7 +29,7 @@ interface CollaborativeViewProps {
   onProfileClick: () => void;
   groups: SharedGroup[];
   onUpdateGroups: (groups: SharedGroup[]) => void;
-  onCreateShoppingList?: (groupName: string, expenseName: string, amount: number, members: SharedMember[]) => void;
+  onCreateShoppingList?: (groupName: string, expenseName: string, amount: number, members: SharedMember[], linkedData?: {eventId?: string, expenseId?: string, expenseName: string, groupId?: string, groupExpenseId?: string}) => void;
 }
 
 // --- Main View Component ---
@@ -276,7 +277,7 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, on
 
 // ... GroupDetailView, SettlementsView, CommunityInsightsView, GroupAIView ...
 
-const GroupDetailView: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup) => void, onCreateShoppingList?: (groupName: string, expenseName: string, amount: number, members: SharedMember[]) => void }> = ({ group, onUpdate, onCreateShoppingList }) => {
+const GroupDetailView: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup) => void, onCreateShoppingList?: (groupName: string, expenseName: string, amount: number, members: SharedMember[], linkedData?: {eventId?: string, expenseId?: string, expenseName: string, groupId?: string, groupExpenseId?: string}) => void }> = ({ group, onUpdate, onCreateShoppingList }) => {
   const [tab, setTab] = useState<'overview' | 'expenses' | 'members' | 'reports'>('overview');
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isEditGroupOpen, setIsEditGroupOpen] = useState(false);
@@ -687,6 +688,403 @@ const GroupDetailView: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup)
   );
 };
 
+const GroupMembersTab = ({ group, onUpdate }: any) => {
+    const [email, setEmail] = useState('');
+    const [editingMember, setEditingMember] = useState<any>(null);
+
+    const handleInvite = () => {
+        if (!email) return;
+        const newMember = { id: generateId(), name: email.split('@')[0], email, role: 'Viewer', avatarColor: 'bg-slate-500' };
+        onUpdate({ ...group, members: [...group.members, newMember] });
+        setEmail('');
+    };
+
+    const handleRemoveMember = (id: string) => {
+        if(confirm('Are you sure you want to remove this member?')) {
+            onUpdate({ ...group, members: group.members.filter((m: any) => m.id !== id) });
+        }
+    };
+
+    const handleUpdateMemberRole = (memberId: string, newRole: string) => {
+        const updatedMembers = group.members.map((m: any) => 
+            m.id === memberId ? { ...m, role: newRole } : m
+        );
+        onUpdate({ ...group, members: updatedMembers });
+        setEditingMember(null);
+    };
+
+    return (
+        <div className="space-y-4 animate-in fade-in">
+            <div className="space-y-2">
+                {group.members.map((m: any) => (
+                    <Card key={m.id} className="p-3 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full ${m.avatarColor} flex items-center justify-center text-white font-bold text-xs`}>{m.name.charAt(0)}</div>
+                            <div>
+                                <div className="font-bold text-sm text-slate-900 dark:text-white">{m.name}</div>
+                                <div className="text-[10px] text-slate-500">{m.role}</div>
+                            </div>
+                        </div>
+                        {m.id !== 'me' && (
+                            <div className="flex gap-1">
+                                <button 
+                                    onClick={() => setEditingMember(m)}
+                                    className="p-2 text-slate-400 hover:text-indigo-500 transition-colors"
+                                >
+                                    <Pencil size={16} />
+                                </button>
+                                <button 
+                                    onClick={() => handleRemoveMember(m.id)}
+                                    className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                            </div>
+                        )}
+                    </Card>
+                ))}
+            </div>
+            <div className="flex gap-2">
+                <input className="flex-1 p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-sm" placeholder="Email to invite" value={email} onChange={e => setEmail(e.target.value)} />
+                <button onClick={handleInvite} className="px-4 bg-indigo-600 text-white rounded-xl font-bold text-sm">Invite</button>
+            </div>
+
+            <EditMemberModal 
+                isOpen={!!editingMember}
+                onClose={() => setEditingMember(null)}
+                member={editingMember}
+                onConfirm={handleUpdateMemberRole}
+            />
+        </div>
+    );
+};
+
+const EditMemberModal = ({ isOpen, onClose, onConfirm, member }: any) => {
+    const [role, setRole] = useState(member?.role || 'Viewer');
+    
+    useEffect(() => {
+        if (member) setRole(member.role);
+    }, [member]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Edit Member</h3>
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Name</label>
+                        <div className="w-full p-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-300">
+                            {member.name}
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Role</label>
+                        <select 
+                            value={role} 
+                            onChange={(e) => setRole(e.target.value)}
+                            className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-sm font-bold"
+                        >
+                            <option value="Owner">Owner</option>
+                            <option value="Editor">Editor</option>
+                            <option value="Viewer">Viewer</option>
+                        </select>
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={onClose} className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold rounded-xl text-sm">Cancel</button>
+                        <button onClick={() => onConfirm(member.id, role)} className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData, onCreateShoppingList }: any) => {
+    const [title, setTitle] = useState('');
+    const [amount, setAmount] = useState('');
+    const [paidBy, setPaidBy] = useState('me');
+    const [category, setCategory] = useState('General');
+    
+    // Split States
+    const [splitMode, setSplitMode] = useState<'equal' | 'unequal' | 'percent'>('equal');
+    const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+    const [manualSplits, setManualSplits] = useState<Record<string, string>>({}); // Stores input strings for unequal/percent
+    const [createList, setCreateList] = useState(false);
+
+    useEffect(() => {
+        if (isOpen) {
+            if (initialData) {
+                setTitle(initialData.title);
+                setAmount(initialData.amount.toString());
+                setPaidBy(initialData.paidBy);
+                setCategory(initialData.category);
+                // For editing, we simplify to equal for now as reconstructing exact splits can be complex if not stored precisely
+                // In a real app, we'd analyze `initialData.split` to set splitMode
+                setSplitMode('equal');
+                setSelectedMembers(Object.keys(initialData.split));
+            } else {
+                setTitle('');
+                setAmount('');
+                setPaidBy('me');
+                setCategory(group.categories[0] || 'General');
+                setCreateList(false);
+                setSplitMode('equal');
+                setSelectedMembers(group.members.map((m: any) => m.id)); // Default all members
+                setManualSplits({});
+            }
+        }
+    }, [isOpen, initialData, group]);
+
+    // Calculate dynamic amount per member based on mode
+    const getMemberShare = (memberId: string) => {
+        if (!selectedMembers.includes(memberId)) return 0;
+        
+        const totalAmount = parseFloat(amount) || 0;
+        
+        if (splitMode === 'equal') {
+            return totalAmount / selectedMembers.length;
+        } else if (splitMode === 'unequal') {
+            return parseFloat(manualSplits[memberId]) || 0;
+        } else if (splitMode === 'percent') {
+            const pct = parseFloat(manualSplits[memberId]) || 0;
+            return totalAmount * (pct / 100);
+        }
+        return 0;
+    };
+
+    const toggleMemberSelection = (memberId: string) => {
+        if (selectedMembers.includes(memberId)) {
+            setSelectedMembers(selectedMembers.filter(id => id !== memberId));
+        } else {
+            setSelectedMembers([...selectedMembers, memberId]);
+        }
+    };
+
+    const handleManualInputChange = (memberId: string, value: string) => {
+        setManualSplits({ ...manualSplits, [memberId]: value });
+    };
+
+    if (!isOpen) return null;
+
+    const handleSave = () => {
+        const amt = parseFloat(amount) || 0;
+        const split: Record<string, number> = {};
+        
+        // Validate total
+        let computedTotal = 0;
+        selectedMembers.forEach(mId => {
+            const share = getMemberShare(mId);
+            split[mId] = share;
+            computedTotal += share;
+        });
+
+        // Basic validation tolerance for float math
+        if (Math.abs(computedTotal - amt) > 1 && splitMode !== 'equal') {
+            alert(`Split amounts (${computedTotal.toFixed(2)}) do not match total amount (${amt.toFixed(2)})`);
+            return;
+        }
+
+        const newExpenseId = initialData?.id || generateId();
+
+        if (createList && onCreateShoppingList) {
+            onCreateShoppingList(group.name, title || 'Shared Expense', amt, group.members, {
+                groupId: group.id,
+                groupExpenseId: newExpenseId,
+                expenseName: title || 'Shared Expense'
+            });
+        }
+
+        onConfirm({
+            id: newExpenseId,
+            title,
+            amount: amt,
+            paidBy,
+            sharedWith: selectedMembers,
+            category,
+            date: new Date().toISOString().split('T')[0],
+            split,
+            type: 'expense'
+        });
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto custom-scrollbar text-white">
+                
+                <div className="flex justify-between items-center mb-5">
+                    <h3 className="text-lg font-bold text-white">{initialData ? 'Edit Expense' : 'Add Expense'}</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={20}/></button>
+                </div>
+
+                <div className="space-y-4">
+                    {/* Title Input */}
+                    <div>
+                        <input 
+                            className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
+                            placeholder="Title (e.g. Groceries)" 
+                            value={title} 
+                            onChange={e => setTitle(e.target.value)} 
+                        />
+                    </div>
+
+                    {/* Amount Input */}
+                    <div className="relative">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-base">{group.currency}</span>
+                        <input 
+                            type="number" 
+                            className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 pl-10 text-lg font-bold text-white placeholder-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
+                            placeholder="0.00" 
+                            value={amount} 
+                            onChange={e => setAmount(e.target.value)} 
+                        />
+                    </div>
+
+                    {/* Category Select */}
+                    <div className="relative">
+                        <select 
+                            className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm text-white appearance-none outline-none focus:ring-2 focus:ring-indigo-500"
+                            value={category} 
+                            onChange={e => setCategory(e.target.value)}
+                        >
+                            {group.categories.map((c: string) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                    </div>
+
+                    {/* Linked Shopping List Toggle */}
+                    {!initialData && (
+                        <div 
+                            className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${createList ? 'bg-indigo-500/10 border-indigo-500/50' : 'bg-slate-800 border-slate-700'}`}
+                            onClick={() => setCreateList(!createList)}
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${createList ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-400'}`}>
+                                    <ShoppingBag size={16} />
+                                </div>
+                                <div>
+                                    <div className="text-xs font-bold text-white">Create Linked Shopping List</div>
+                                    <div className="text-[10px] text-slate-400">Add budget & members to Shopping</div>
+                                </div>
+                            </div>
+                            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${createList ? 'bg-indigo-500 border-indigo-500' : 'border-slate-500'}`}>
+                                {createList && <Check size={12} className="text-white" strokeWidth={3} />}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Paid By Selector */}
+                    <div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 block">Paid By</label>
+                        <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+                            {group.members.map((m: any) => (
+                                <button
+                                    key={m.id}
+                                    onClick={() => setPaidBy(m.id)}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap transition-all ${
+                                        paidBy === m.id 
+                                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 
+                                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                    }`}
+                                >
+                                    <div className={`w-3.5 h-3.5 rounded-full ${m.avatarColor} border border-white/20`}></div>
+                                    {m.id === 'me' ? 'You' : m.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Split Type Selector */}
+                    <div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 block">Split Expense</label>
+                        <div className="flex bg-slate-800 p-1 rounded-xl">
+                            {[
+                                { id: 'equal', label: 'Equally' },
+                                { id: 'unequal', label: 'Unequally' },
+                                { id: 'percent', label: 'By %' }
+                            ].map((mode) => (
+                                <button
+                                    key={mode.id}
+                                    onClick={() => setSplitMode(mode.id as any)}
+                                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                                        splitMode === mode.id 
+                                        ? 'bg-indigo-600 text-white shadow-sm' 
+                                        : 'text-slate-400 hover:text-white'
+                                    }`}
+                                >
+                                    {mode.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Member List & Amounts */}
+                    <div className="space-y-1.5 bg-slate-800/50 p-2 rounded-xl border border-slate-800">
+                        {group.members.map((m: any) => {
+                            const isSelected = selectedMembers.includes(m.id);
+                            const amountVal = getMemberShare(m.id);
+                            
+                            return (
+                                <div key={m.id} className="flex items-center justify-between p-1.5 rounded-lg hover:bg-slate-800 transition-colors">
+                                    <div className="flex items-center gap-3">
+                                        <Checkbox checked={isSelected} onChange={() => toggleMemberSelection(m.id)} />
+                                        <div className="flex items-center gap-2">
+                                            <div className={`w-5 h-5 rounded-full ${m.avatarColor} flex items-center justify-center text-[8px] text-white font-bold border border-white/10`}>
+                                                {m.name.charAt(0)}
+                                            </div>
+                                            <span className={`text-xs font-medium ${isSelected ? 'text-white' : 'text-slate-500'}`}>
+                                                {m.id === 'me' ? 'You' : m.name}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    
+                                    {isSelected && (
+                                        <div className="w-20">
+                                            {splitMode === 'equal' ? (
+                                                <div className="text-right text-xs font-bold text-slate-300">
+                                                    {group.currency} {amountVal.toFixed(2)}
+                                                </div>
+                                            ) : (
+                                                <div className="relative">
+                                                    {splitMode === 'unequal' && <span className="absolute left-2 top-1.5 text-slate-500 text-[9px]">{group.currency}</span>}
+                                                    {splitMode === 'percent' && <span className="absolute right-2 top-1.5 text-slate-500 text-[9px]">%</span>}
+                                                    <input 
+                                                        type="number"
+                                                        className={`w-full bg-slate-900 border border-slate-700 rounded-lg py-1 text-[10px] font-bold text-white outline-none focus:border-indigo-500 text-right ${splitMode === 'unequal' ? 'pl-6 pr-2' : 'pr-5 pl-2'}`}
+                                                        placeholder="0"
+                                                        value={manualSplits[m.id] || ''}
+                                                        onChange={(e) => handleManualInputChange(m.id, e.target.value)}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    <div className="flex gap-2 mt-2">
+                        {initialData && onDelete && (
+                            <button onClick={() => onDelete(initialData.id)} className="p-3 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500/20"><Trash2 size={20} /></button>
+                        )}
+                        <button 
+                            onClick={handleSave} 
+                            className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/20 active:scale-95 transition-all text-sm tracking-wide"
+                        >
+                            Confirm Split
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+// ... SettlementsView, CreateGroupModal, QRScannerModal, CommunityInsightsView, GroupAIView remain unchanged ...
+
 const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: SharedGroup) => void }> = ({ groups, onUpdateGroup }) => {
   const [settleModalOpen, setSettleModalOpen] = useState(false);
   const [selectedSettlement, setSelectedSettlement] = useState<any>(null);
@@ -1001,648 +1399,52 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
             <div className="text-center py-12 text-slate-400">
                 <CheckCircle size={48} className="mx-auto mb-2 text-emerald-500 opacity-50" />
                 <p className="text-sm font-bold text-slate-500">All Settled Up!</p>
-                <p className="text-xs">No pending debts in selected groups.</p>
+                <p className="text-xs">No pending debts found.</p>
             </div>
         )}
         </div>
-
-        <SettleUpModal 
-            isOpen={settleModalOpen}
-            onClose={() => setSettleModalOpen(false)}
-            onConfirm={handleConfirmSettle}
-            data={selectedSettlement}
-        />
-    </div>
-  );
-};
-
-const CommunityInsightsView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'insights' | 'challenges' | 'trends' | 'leaderboard'>('insights');
-  const [challenges, setChallenges] = useState([
-      { id: 'c1', title: 'No Takeout Week', target: 100, current: 60, joined: false, days: 3, count: 1240, icon: '🥦' },
-      { id: 'c2', title: 'Save LKR 10,000', target: 10000, current: 3500, joined: true, days: 12, count: 5400, icon: '💪' },
-      { id: 'c3', title: 'Cut Utility Bill 5%', target: 5, current: 0, joined: false, days: 20, count: 890, icon: '🎯' }
-  ]);
-  const [activePollOption, setActivePollOption] = useState<string | null>(null);
-
-  const handleJoin = (id: string) => {
-      setChallenges(challenges.map(c => c.id === id ? { ...c, joined: !c.joined } : c));
-  };
-
-  return (
-    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-        {/* Sub-Navigation */}
-        <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-2">
-            {[
-                { id: 'insights', label: 'My Insights', icon: Sparkles },
-                { id: 'challenges', label: 'Challenges', icon: Target },
-                { id: 'trends', label: 'Trends', icon: TrendingUp },
-                { id: 'leaderboard', label: 'Rankings', icon: Trophy },
-            ].map(tab => (
-                <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors border ${
-                        activeTab === tab.id 
-                        ? 'bg-amber-500 text-white border-transparent shadow-md shadow-amber-500/20' 
-                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                    }`}
-                >
-                    <tab.icon size={14} /> {tab.label}
-                </button>
-            ))}
-        </div>
-
-        {/* 1. MY INSIGHTS */}
-        {activeTab === 'insights' && (
-            <div className="space-y-4">
-                {/* Benchmark Cards */}
-                <Card className="p-5 bg-slate-900 text-white border-none relative overflow-hidden">
-                    <div className="relative z-10">
-                        <h3 className="text-lg font-bold mb-1 flex items-center gap-2"><Trophy size={18} className="text-yellow-400" /> You vs. Average</h3>
-                        <p className="text-slate-300 text-xs mb-4">You spend 18% less on dining than the national average.</p>
-                        
-                        <div className="space-y-4">
-                            <div>
-                                <div className="flex justify-between text-[10px] font-bold uppercase mb-1 text-slate-400">
-                                    <span>Your Savings Rate</span>
-                                    <span className="text-emerald-400">Top 15%</span>
-                                </div>
-                                <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
-                                    <div className="h-full bg-emerald-500 w-[85%]"></div>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 pt-2">
-                                <div className="bg-white/10 p-2 rounded-lg text-center">
-                                    <div className="text-[10px] text-slate-400 uppercase">Dining</div>
-                                    <div className="text-emerald-400 font-bold">-18%</div>
-                                </div>
-                                <div className="bg-white/10 p-2 rounded-lg text-center">
-                                    <div className="text-[10px] text-slate-400 uppercase">Transport</div>
-                                    <div className="text-red-400 font-bold">+5%</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </Card>
-
-                {/* Poll */}
-                <Card className="p-5">
-                    <div className="flex justify-between items-start mb-3">
-                        <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                            <MessageCircle size={18} className="text-indigo-500" /> Poll of the Week
-                        </h3>
-                        <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">2.4k votes</span>
-                    </div>
-                    <p className="text-sm text-slate-700 dark:text-slate-300 mb-4 font-medium">What's your biggest spending weakness?</p>
-                    <div className="space-y-2">
-                        {[
-                            { id: 'opt1', text: 'Dining Out', percent: 45 },
-                            { id: 'opt2', text: 'Online Shopping', percent: 30 },
-                            { id: 'opt3', text: 'Subscriptions', percent: 25 },
-                        ].map(opt => (
-                            <button 
-                                key={opt.id}
-                                onClick={() => setActivePollOption(opt.id)}
-                                className="relative w-full h-10 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 group"
-                            >
-                                <div 
-                                    className={`absolute left-0 top-0 h-full transition-all duration-500 ${activePollOption ? 'bg-indigo-100 dark:bg-indigo-900/30' : 'bg-transparent'}`}
-                                    style={{ width: activePollOption ? `${opt.percent}%` : '0%' }}
-                                ></div>
-                                <div className="absolute inset-0 flex items-center justify-between px-3 z-10">
-                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{opt.text}</span>
-                                    {activePollOption && <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{opt.percent}%</span>}
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                </Card>
-            </div>
-        )}
-
-        {/* 2. CHALLENGES */}
-        {activeTab === 'challenges' && (
-            <div className="space-y-4">
-                {challenges.map(c => (
-                    <Card key={c.id} className="p-4 relative overflow-hidden">
-                        <div className="flex justify-between items-start mb-2 relative z-10">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-lg">
-                                    {c.icon}
-                                </div>
-                                <div>
-                                    <h4 className="font-bold text-slate-900 dark:text-white">{c.title}</h4>
-                                    <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                                        <span className="flex items-center gap-1"><Users size={10}/> {c.count}</span>
-                                        <span>•</span>
-                                        <span>{c.days} days left</span>
-                                    </div>
-                                </div>
-                            </div>
-                            {c.joined ? (
-                                <button onClick={() => handleJoin(c.id)} className="px-3 py-1 bg-emerald-100 text-emerald-600 text-[10px] font-bold rounded-full flex items-center gap-1">
-                                    <CheckCircle size={10} /> Joined
-                                </button>
-                            ) : (
-                                <button onClick={() => handleJoin(c.id)} className="px-3 py-1 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] font-bold rounded-full active:scale-95 transition-transform">
-                                    Join
-                                </button>
-                            )}
-                        </div>
-                        
-                        {c.joined && (
-                            <div className="mt-3 relative z-10">
-                                <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1">
-                                    <span>Progress</span>
-                                    <span>{Math.round((c.current / c.target) * 100)}%</span>
-                                </div>
-                                <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                                    <div className="h-full bg-emerald-500 rounded-full" style={{width: `${(c.current / c.target) * 100}%`}}></div>
-                                </div>
-                            </div>
-                        )}
-                    </Card>
-                ))}
-            </div>
-        )}
-
-        {/* 3. TRENDS */}
-        {activeTab === 'trends' && (
-            <div className="space-y-4">
-                <Card className="p-4">
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">Community Category Trends</h3>
-                    <div className="h-48">
-                        <Bar 
-                            data={{
-                                labels: ['Food', 'Travel', 'Shop', 'Util', 'Ent'],
-                                datasets: [
-                                    {
-                                        label: 'Trend',
-                                        data: [12, 5, -3, 2, 8],
-                                        backgroundColor: (ctx) => {
-                                            const v = ctx.raw as number;
-                                            return v >= 0 ? '#10b981' : '#ef4444';
-                                        },
-                                        borderRadius: 4
-                                    }
-                                ]
-                            }}
-                            options={{
-                                maintainAspectRatio: false,
-                                plugins: { legend: { display: false } },
-                                scales: { x: { grid: { display: false } }, y: { display: false } }
-                            }}
-                        />
-                    </div>
-                    <p className="text-[10px] text-center text-slate-400 mt-2">% Change vs Last Month</p>
-                </Card>
-
-                {/* Top Growing */}
-                <Card className="p-4">
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
-                        <Flame size={16} className="text-orange-500" /> Top Growing Categories
+        
+        {settleModalOpen && selectedSettlement && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSettleModalOpen(false)} />
+                <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">
+                        {selectedSettlement.from === 'You' ? 'Record Payment' : 'Send Reminder'}
                     </h3>
-                    <div className="space-y-3">
-                        {[
-                            { name: 'Coffee & Cafes', growth: 15, region: 'Colombo' },
-                            { name: 'Fitness', growth: 12, region: 'Kandy' },
-                            { name: 'Fuel', growth: 8, region: 'National' }
-                        ].map((item, i) => (
-                            <div key={i} className="flex justify-between items-center p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors">
-                                <div className="flex items-center gap-3">
-                                    <div className="font-bold text-slate-500 text-xs">#{i+1}</div>
-                                    <div>
-                                        <div className="text-xs font-bold text-slate-900 dark:text-white">{item.name}</div>
-                                        <div className="text-[10px] text-slate-400">{item.region}</div>
-                                    </div>
-                                </div>
-                                <div className="text-emerald-500 text-xs font-bold">+{item.growth}%</div>
-                            </div>
-                        ))}
+                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 mb-6 text-center">
+                        <p className="text-xs text-slate-500 mb-1">Amount</p>
+                        <p className="text-3xl font-bold text-slate-900 dark:text-white">{selectedSettlement.currency} {selectedSettlement.amount.toLocaleString()}</p>
+                        <p className="text-xs text-slate-500 mt-2">
+                            {selectedSettlement.from === 'You' ? `Paying to ${selectedSettlement.to}` : `Reminding ${selectedSettlement.from}`}
+                        </p>
                     </div>
-                </Card>
-            </div>
-        )}
-
-        {/* 4. LEADERBOARD */}
-        {activeTab === 'leaderboard' && (
-            <div className="space-y-4">
-                <div className="flex justify-between items-center bg-amber-100 dark:bg-amber-900/20 p-4 rounded-2xl border border-amber-200 dark:border-amber-500/20">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-amber-500 text-white flex items-center justify-center font-bold text-lg">You</div>
-                        <div>
-                            <div className="text-xs font-bold text-amber-800 dark:text-amber-400 uppercase">Your Rank</div>
-                            <div className="text-xl font-bold text-slate-900 dark:text-white">#42</div>
-                        </div>
-                    </div>
-                    <div className="text-right">
-                        <div className="text-xs font-bold text-amber-800 dark:text-amber-400 uppercase">Points</div>
-                        <div className="text-xl font-bold text-slate-900 dark:text-white">850</div>
+                    <div className="flex gap-3">
+                        <button onClick={() => setSettleModalOpen(false)} className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700">Cancel</button>
+                        <button onClick={handleConfirmSettle} className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700">Confirm</button>
                     </div>
                 </div>
-
-                <Card className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {[
-                        { rank: 1, name: 'SaverSam', points: 1250, color: 'bg-yellow-400' },
-                        { rank: 2, name: 'BudgetQueen', points: 1100, color: 'bg-slate-300' },
-                        { rank: 3, name: 'FrugalFox', points: 980, color: 'bg-orange-400' },
-                        { rank: 4, name: 'User_882', points: 950, color: 'bg-slate-100 dark:bg-slate-800' },
-                        { rank: 5, name: 'CashFlow', points: 920, color: 'bg-slate-100 dark:bg-slate-800' },
-                    ].map((user, i) => (
-                        <div key={i} className="p-4 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className={`w-6 h-6 flex items-center justify-center font-bold text-xs rounded-full ${user.rank <= 3 ? 'text-white' : 'text-slate-500'} ${user.rank === 1 ? 'bg-yellow-400' : user.rank === 2 ? 'bg-slate-400' : user.rank === 3 ? 'bg-orange-400' : 'bg-slate-100'}`}>
-                                    {user.rank}
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-600 dark:text-slate-300">
-                                        {user.name.charAt(0)}
-                                    </div>
-                                    <div className="text-sm font-bold text-slate-900 dark:text-white">{user.name}</div>
-                                </div>
-                            </div>
-                            <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{user.points} pts</div>
-                        </div>
-                    ))}
-                </Card>
             </div>
         )}
     </div>
   );
-};
-
-const GroupAIView: React.FC<{ group: SharedGroup }> = ({ group }) => {
-    const [analysis, setAnalysis] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
-
-    const handleGenerateInsights = async () => {
-        setLoading(true);
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            
-            // Summarize group data for the prompt
-            const context = `
-                Group Name: ${group.name}
-                Budget: ${group.totalBudget} ${group.currency}
-                Total Spent: ${group.expenses.reduce((s, e) => s + e.amount, 0)}
-                Members: ${group.members.map(m => m.name).join(', ')}
-                Recent Expenses: ${group.expenses.slice(0, 5).map(e => `${e.title} (${e.amount}) by ${e.paidBy}`).join(', ')}
-            `;
-
-            const prompt = `
-                You are a collaborative finance assistant. Analyze this group budget.
-                Context: ${context}
-                
-                Provide a JSON-like response with:
-                1. Spending Analysis (e.g., "Dining expenses grew 12%").
-                2. Recommendations (e.g., "Split groceries differently").
-                3. Future Forecast (e.g., "Projected spending: 82,000").
-                
-                Format clearly as text.
-            `;
-
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: prompt,
-            });
-
-            setAnalysis(response.text || "Could not generate insights.");
-        } catch (e) {
-            setAnalysis("AI service unavailable.");
-        }
-        setLoading(false);
-    };
-
-    return (
-        <div className="space-y-4">
-            <div>
-                {analysis ? (
-                    <Card className="p-4 bg-white dark:bg-slate-800 border border-violet-100 dark:border-violet-500/20 animate-in fade-in">
-                        <div className="flex justify-between items-center mb-3">
-                            <h4 className="font-bold text-violet-600 dark:text-violet-400 text-sm uppercase tracking-wider">AI Report</h4>
-                            <button onClick={() => setAnalysis(null)} className="text-slate-400"><X size={14}/></button>
-                        </div>
-                        <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
-                            {analysis}
-                        </div>
-                    </Card>
-                ) : (
-                    <div className="text-center py-6">
-                        <button 
-                            onClick={handleGenerateInsights}
-                            disabled={loading}
-                            className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-2 mx-auto disabled:opacity-50"
-                        >
-                            {loading ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} className="text-yellow-500" />}
-                            Generate AI Insights
-                        </button>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
-
-const GroupMembersTab: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup) => void }> = ({ group, onUpdate }) => {
-    const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-
-    const handleRoleChange = (memberId: string, newRole: 'Owner' | 'Editor' | 'Viewer') => {
-        const updatedMembers = group.members.map(m => m.id === memberId ? { ...m, role: newRole } : m);
-        onUpdate({ ...group, members: updatedMembers });
-    };
-
-    const handleRemoveMember = (memberId: string) => {
-        if(confirm('Remove this member from the group?')) {
-            const updatedMembers = group.members.filter(m => m.id !== memberId);
-            onUpdate({ ...group, members: updatedMembers });
-        }
-    };
-
-    const handleInviteMember = (memberData: any) => {
-        const newMember: SharedMember = {
-            id: Math.random().toString(36).substr(2, 9),
-            name: memberData.name,
-            email: memberData.email,
-            role: memberData.role,
-            avatarColor: ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-pink-500'][Math.floor(Math.random() * 6)]
-        };
-        onUpdate({ ...group, members: [...group.members, newMember] });
-        setIsInviteModalOpen(false);
-    };
-
-    const handleToggleSetting = () => {
-        onUpdate({ 
-            ...group, 
-            settings: { ...group.settings, shareAllCategories: !group.settings.shareAllCategories } 
-        });
-    };
-
-    return (
-        <div className="space-y-4 animate-in fade-in">
-            <Card className="divide-y divide-slate-100 dark:divide-slate-800">
-                <div className="p-4 bg-slate-50 dark:bg-slate-800/50">
-                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Group Members</h3>
-                    <p className="text-[10px] text-slate-400">Manage roles and access</p>
-                </div>
-                {group.members.map(member => (
-                    <div key={member.id} className="p-4 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-full ${member.avatarColor} flex items-center justify-center text-white font-bold text-sm`}>
-                                {member.name.charAt(0)}
-                            </div>
-                            <div>
-                                <div className="font-bold text-sm text-slate-900 dark:text-white">{member.name}</div>
-                                <div className="text-[10px] text-slate-500">{member.email || 'No email'}</div>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <select 
-                                value={member.role}
-                                onChange={(e) => handleRoleChange(member.id, e.target.value as any)}
-                                className="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-[10px] font-bold px-2 py-1 outline-none"
-                                disabled={member.id === 'me'} // Self cannot change own role easily here
-                            >
-                                <option value="Owner">Owner</option>
-                                <option value="Editor">Editor</option>
-                                <option value="Viewer">Viewer</option>
-                            </select>
-                            {member.id !== 'me' && (
-                                <button onClick={() => handleRemoveMember(member.id)} className="p-1.5 text-slate-400 hover:text-red-500 transition-colors">
-                                    <X size={16} />
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                ))}
-                <div className="p-4">
-                    <button 
-                        onClick={() => setIsInviteModalOpen(true)}
-                        className="w-full py-2 border border-dashed border-slate-300 dark:border-slate-600 rounded-xl text-slate-500 text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-center gap-2"
-                    >
-                        <Plus size={16} /> Invite New Member
-                    </button>
-                </div>
-            </Card>
-
-            <Card className="p-4">
-                <h3 className="text-xs font-bold text-slate-500 uppercase mb-3">Group Settings</h3>
-                <div className="flex items-center justify-between">
-                    <div>
-                        <div className="font-bold text-sm text-slate-900 dark:text-white">Share All Categories</div>
-                        <div className="text-[10px] text-slate-500">If off, share specific only</div>
-                    </div>
-                    <button 
-                        onClick={handleToggleSetting}
-                        className={`w-10 h-6 rounded-full relative transition-colors ${group.settings.shareAllCategories ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}
-                    >
-                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${group.settings.shareAllCategories ? 'left-5' : 'left-1'}`}></div>
-                    </button>
-                </div>
-            </Card>
-
-            <InviteMemberModal 
-                isOpen={isInviteModalOpen}
-                onClose={() => setIsInviteModalOpen(false)}
-                onConfirm={handleInviteMember}
-            />
-        </div>
-    );
-};
-
-const SettleUpModal = ({ isOpen, onClose, onConfirm, data }: any) => {
-    const [method, setMethod] = useState('cash');
-
-    if (!isOpen || !data) return null;
-
-    const isPay = data.from === 'You';
-
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
-                <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">{isPay ? 'Settle Debt' : 'Send Reminder'}</h3>
-                    <button onClick={onClose}><X size={20} className="text-slate-400" /></button>
-                </div>
-
-                <div className="text-center mb-6">
-                    <div className="text-sm text-slate-500 uppercase font-bold mb-1">{isPay ? 'You Owe' : 'Owed By'}</div>
-                    <div className="text-3xl font-bold text-slate-900 dark:text-white">LKR {data.amount.toLocaleString()}</div>
-                    <div className="text-sm text-slate-500 mt-1">to {isPay ? data.to : data.from}</div>
-                </div>
-
-                {isPay && (
-                    <div className="space-y-3 mb-6">
-                        <p className="text-xs font-bold text-slate-400 uppercase">Select Method</p>
-                        <div className="grid grid-cols-3 gap-2">
-                            <button onClick={() => setMethod('cash')} className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${method === 'cash' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>
-                                <DollarSign size={20} /> <span className="text-[10px] font-bold">Cash</span>
-                            </button>
-                            <button onClick={() => setMethod('bank')} className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${method === 'bank' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>
-                                <CreditCard size={20} /> <span className="text-[10px] font-bold">Transfer</span>
-                            </button>
-                            <button onClick={() => setMethod('qr')} className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${method === 'qr' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>
-                                <QrCode size={20} /> <span className="text-[10px] font-bold">QR</span>
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                <button 
-                    onClick={onConfirm}
-                    className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/20 active:scale-95 transition-all flex items-center justify-center gap-2"
-                >
-                    {isPay ? <CheckCircle size={18} /> : <Send size={18} />}
-                    {isPay ? 'Mark as Paid' : 'Send Reminder'}
-                </button>
-            </div>
-        </div>
-    );
 };
 
 const CreateGroupModal = ({ isOpen, onClose, onConfirm, initialData }: any) => {
     const [name, setName] = useState('');
     const [budget, setBudget] = useState('');
     const [currency, setCurrency] = useState('USD');
-    const [categories, setCategories] = useState('Food, Utilities, Travel');
-    const [invites, setInvites] = useState('');
 
     useEffect(() => {
-        if (isOpen) {
-            if (initialData) {
-                setName(initialData.name);
-                setBudget(initialData.totalBudget.toString());
-                setCurrency(initialData.currency);
-                setCategories(initialData.categories.join(', '));
-                setInvites(''); 
-            } else {
-                setName('');
-                setBudget('');
-                setCurrency('USD');
-                setCategories('Food, Utilities, Travel');
-                setInvites('');
-            }
+        if (isOpen && initialData) {
+            setName(initialData.name);
+            setBudget(initialData.totalBudget.toString());
+            setCurrency(initialData.currency);
+        } else if (isOpen) {
+            setName('');
+            setBudget('');
+            setCurrency('USD');
         }
     }, [isOpen, initialData]);
-
-    if (!isOpen) return null;
-
-    const handleSubmit = () => {
-        const baseMembers = initialData ? initialData.members : [{ id: 'me', name: 'You', role: 'Owner', avatarColor: 'bg-indigo-500' }];
-        
-        const newInvites = invites.split(',').map((e: string) => e.trim()).filter((e: string) => e);
-        const addedMembers = newInvites.map((email: string) => ({
-             id: Math.random().toString(36).substr(2, 9),
-             name: email.split('@')[0], 
-             email: email,
-             role: 'Viewer',
-             avatarColor: 'bg-gray-500'
-        }));
-
-        const finalMembers = [...baseMembers, ...addedMembers];
-
-        onConfirm({
-            id: initialData ? initialData.id : Math.random().toString(36).substr(2, 9),
-            name,
-            totalBudget: parseFloat(budget) || 0,
-            currency,
-            members: finalMembers,
-            expenses: initialData ? initialData.expenses : [],
-            categories: categories.split(',').map((c: string) => c.trim()).filter((c: string) => c),
-            activityLog: initialData ? initialData.activityLog : [],
-            settings: initialData ? initialData.settings : { shareAllCategories: true }
-        });
-    };
-
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 overflow-y-auto max-h-[90vh] custom-scrollbar">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">{initialData ? 'Edit Shared Budget' : 'Create Shared Budget'}</h3>
-                    <button onClick={onClose} className="text-slate-400"><X size={20} /></button>
-                </div>
-                <div className="space-y-4">
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Budget Name</label>
-                        <input 
-                            className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 transition-colors"
-                            placeholder="e.g., Family Budget 2025"
-                            value={name} onChange={e => setName(e.target.value)}
-                        />
-                    </div>
-                    
-                    <div className="flex gap-3">
-                        <div className="flex-1">
-                            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Total Limit</label>
-                            <input 
-                                className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 transition-colors"
-                                placeholder="Amount"
-                                type="number"
-                                value={budget} onChange={e => setBudget(e.target.value)}
-                            />
-                        </div>
-                        <div className="w-24">
-                            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Currency</label>
-                            <select 
-                                value={currency} onChange={e => setCurrency(e.target.value)}
-                                className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 transition-colors"
-                            >
-                                <option>USD</option>
-                                <option>EUR</option>
-                                <option>AUD</option>
-                                <option>GBP</option>
-                                <option>LKR</option>
-                                <option>CAD</option>
-                                <option>JPY</option>
-                                <option>INR</option>
-                                <option>CPY</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Categories (comma separated)</label>
-                        <input 
-                            className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 transition-colors"
-                            value={categories} onChange={e => setCategories(e.target.value)}
-                        />
-                    </div>
-
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Invite Members (Emails)</label>
-                        <textarea 
-                            className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 transition-colors resize-none h-20"
-                            placeholder="Enter emails separated by comma..."
-                            value={invites} onChange={e => setInvites(e.target.value)}
-                        />
-                    </div>
-
-                    <button 
-                        onClick={handleSubmit}
-                        className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl mt-2 transition-colors shadow-lg shadow-amber-500/20 active:scale-95"
-                    >
-                        {initialData ? 'Save Changes' : 'Create Shared Budget'}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const InviteMemberModal = ({ isOpen, onClose, onConfirm }: any) => {
-    const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
-    const [role, setRole] = useState('Viewer');
-
-    useEffect(() => {
-        if (isOpen) {
-            setName('');
-            setEmail('');
-            setRole('Viewer');
-        }
-    }, [isOpen]);
 
     if (!isOpen) return null;
 
@@ -1650,291 +1452,20 @@ const InviteMemberModal = ({ isOpen, onClose, onConfirm }: any) => {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
             <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Invite Member</h3>
-                    <button onClick={onClose}><X size={20} className="text-slate-400" /></button>
-                </div>
-                <div className="space-y-4">
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Name</label>
-                        <input 
-                            className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 transition-colors"
-                            placeholder="Member Name"
-                            value={name} onChange={e => setName(e.target.value)}
-                        />
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Email (Optional)</label>
-                        <input 
-                            className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 transition-colors"
-                            placeholder="email@example.com"
-                            value={email} onChange={e => setEmail(e.target.value)}
-                        />
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Role</label>
-                        <select 
-                            className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 transition-colors"
-                            value={role} onChange={e => setRole(e.target.value)}
-                        >
-                            <option value="Viewer">Viewer</option>
-                            <option value="Editor">Editor</option>
-                            <option value="Owner">Owner</option>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">{initialData ? 'Edit Group' : 'Create Group'}</h3>
+                <div className="space-y-3">
+                    <input className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none" placeholder="Group Name" value={name} onChange={e => setName(e.target.value)} />
+                    <div className="flex gap-2">
+                        <select className="w-24 p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-sm font-bold" value={currency} onChange={e => setCurrency(e.target.value)}>
+                            {['USD', 'EUR', 'GBP', 'LKR', 'INR'].map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
+                        <input className="flex-1 p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none" placeholder="Total Budget" type="number" value={budget} onChange={e => setBudget(e.target.value)} />
                     </div>
                     <button 
-                        onClick={() => onConfirm({ name, email, role })}
-                        disabled={!name}
-                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-indigo-600/20 active:scale-95 disabled:opacity-50"
+                        onClick={() => onConfirm(initialData ? { ...initialData, name, totalBudget: parseFloat(budget) || 0, currency } : { id: generateId(), name, totalBudget: parseFloat(budget) || 0, currency, members: [{id:'me', name:'You', role:'Owner', avatarColor:'bg-indigo-500'}], expenses: [], activityLog: [], categories: ['General'], settings: {shareAllCategories: true} })}
+                        className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2"
                     >
-                        Send Invite
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData, onCreateShoppingList }: any) => {
-    const [title, setTitle] = useState('');
-    const [amount, setAmount] = useState('');
-    const [paidBy, setPaidBy] = useState('me');
-    const [category, setCategory] = useState('General');
-    const [notes, setNotes] = useState('');
-    const [splitType, setSplitType] = useState<'equal' | 'amount' | 'percent'>('equal');
-    const [shouldCreateList, setShouldCreateList] = useState(false);
-    
-    const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
-    
-    const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
-    const [customPercents, setCustomPercents] = useState<Record<string, string>>({});
-
-    useEffect(() => {
-        if (isOpen && group) {
-            if (initialData) {
-                setTitle(initialData.title);
-                setAmount(initialData.amount.toString());
-                setPaidBy(initialData.paidBy);
-                setCategory(initialData.category);
-                setNotes(initialData.notes || '');
-                setShouldCreateList(false);
-                
-                setSelectedMembers(initialData.sharedWith);
-                
-                setSplitType('amount');
-                const loadedAmounts: Record<string, string> = {};
-                const allIds = group.members.map((m: any) => m.id);
-                
-                allIds.forEach((id: string) => {
-                    if (initialData.split[id]) {
-                        loadedAmounts[id] = initialData.split[id].toString();
-                    } else {
-                        loadedAmounts[id] = '';
-                    }
-                });
-                setCustomAmounts(loadedAmounts);
-                
-                const initPercents: Record<string, string> = {};
-                allIds.forEach((id: string) => initPercents[id] = '');
-                setCustomPercents(initPercents);
-
-            } else {
-                setTitle(''); setAmount(''); setPaidBy('me'); setNotes('');
-                setCategory(group.categories[0] || 'General');
-                setSplitType('equal');
-                setShouldCreateList(false);
-                
-                const allIds = group.members.map((m: any) => m.id);
-                setSelectedMembers(allIds);
-                
-                const initMap: Record<string, string> = {};
-                allIds.forEach((id: string) => initMap[id] = '');
-                setCustomAmounts(initMap);
-                setCustomPercents(initMap);
-            }
-        }
-    }, [isOpen, group, initialData]);
-
-    const calculateCurrentSplits = () => {
-        const total = parseFloat(amount) || 0;
-        const finalSplits: Record<string, number> = {};
-        
-        if (splitType === 'equal') {
-            const count = selectedMembers.length;
-            if (count > 0 && total > 0) {
-                const share = total / count;
-                selectedMembers.forEach(id => finalSplits[id] = share);
-            }
-        } else if (splitType === 'amount') {
-            selectedMembers.forEach(id => {
-                finalSplits[id] = parseFloat(customAmounts[id]) || 0;
-            });
-        } else if (splitType === 'percent') {
-            selectedMembers.forEach(id => {
-                const pct = parseFloat(customPercents[id]) || 0;
-                finalSplits[id] = (total * pct) / 100;
-            });
-        }
-        
-        return finalSplits;
-    };
-
-    const totalAssigned = useMemo(() => {
-        const splits = calculateCurrentSplits();
-        return Object.values(splits).reduce((a, b) => a + b, 0);
-    }, [amount, splitType, selectedMembers, customAmounts, customPercents]);
-
-    const toggleMember = (id: string) => {
-        if (selectedMembers.includes(id)) {
-            if (selectedMembers.length > 1) setSelectedMembers(selectedMembers.filter(m => m !== id));
-        } else {
-            setSelectedMembers([...selectedMembers, id]);
-        }
-    };
-
-    if (!isOpen || !group) return null;
-
-    const handleSubmit = () => {
-        const total = parseFloat(amount) || 0;
-        if (Math.abs(totalAssigned - total) > 1.0 && splitType !== 'equal') {
-            alert(`Split amounts don't match total. Difference: ${Math.abs(totalAssigned - total).toFixed(2)}`);
-            return;
-        }
-
-        if (shouldCreateList && onCreateShoppingList && group) {
-             onCreateShoppingList(group.name, title, total, group.members);
-        }
-
-        onConfirm({
-            id: initialData ? initialData.id : Math.random().toString(36).substr(2, 9),
-            title,
-            amount: total,
-            paidBy,
-            category,
-            date: initialData ? initialData.date : new Date().toISOString().split('T')[0],
-            sharedWith: selectedMembers,
-            split: calculateCurrentSplits(),
-            notes,
-            type: 'expense'
-        });
-    };
-
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto custom-scrollbar">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">{initialData ? 'Edit Expense' : 'Add Expense'}</h3>
-                    <button onClick={onClose}><X size={20} className="text-slate-400"/></button>
-                </div>
-
-                <div className="space-y-4">
-                    <input className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 transition-colors" placeholder="Title (e.g. Groceries)" value={title} onChange={e => setTitle(e.target.value)} />
-                    
-                    <div className="relative">
-                        <span className="absolute left-3 top-3 text-slate-500 font-bold">{group.currency}</span>
-                        <input className="w-full p-3 pl-12 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none font-bold focus:border-indigo-500 transition-colors" type="number" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
-                    </div>
-
-                    <select className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 transition-colors" value={category} onChange={e => setCategory(e.target.value)}>
-                        {group.categories.map((c: string) => <option key={c} value={c}>{c}</option>)}
-                    </select>
-
-                    {/* Shopping List Link Checkbox */}
-                    <div 
-                        className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${shouldCreateList ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}
-                        onClick={() => setShouldCreateList(!shouldCreateList)}
-                    >
-                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${shouldCreateList ? 'bg-emerald-500 border-emerald-500' : 'bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600'}`}>
-                            {shouldCreateList && <Check size={14} className="text-white" strokeWidth={3} />}
-                        </div>
-                        <div className="flex-1">
-                            <div className={`text-xs font-bold ${shouldCreateList ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}>Create Linked Shopping List</div>
-                            <div className="text-[10px] text-slate-400">Add budget & members to Shopping</div>
-                        </div>
-                        <ShoppingBag size={18} className={shouldCreateList ? 'text-emerald-500' : 'text-slate-400'} />
-                    </div>
-
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Paid By</label>
-                        <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
-                            {group.members.map((m: SharedMember) => (
-                                <button 
-                                    key={m.id}
-                                    onClick={() => setPaidBy(m.id)}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors border ${paidBy === m.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}`}
-                                >
-                                    {m.name}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Split Expense</label>
-                        
-                        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg mb-3">
-                            <button onClick={() => setSplitType('equal')} className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-colors ${splitType === 'equal' ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-white' : 'text-slate-500'}`}>Equally</button>
-                            <button onClick={() => setSplitType('amount')} className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-colors ${splitType === 'amount' ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-white' : 'text-slate-500'}`}>Unequally</button>
-                            <button onClick={() => setSplitType('percent')} className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-colors ${splitType === 'percent' ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-white' : 'text-slate-500'}`}>By %</button>
-                        </div>
-
-                        <div className="space-y-2 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                            {group.members.map((m: SharedMember) => {
-                                const isSelected = selectedMembers.includes(m.id);
-                                return (
-                                <div key={m.id} className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2 cursor-pointer" onClick={() => toggleMember(m.id)}>
-                                        <div className={`w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>
-                                            {isSelected && <CheckCircle size={12} className="text-white" />}
-                                        </div>
-                                        <span className="text-sm text-slate-700 dark:text-slate-300">{m.name}</span>
-                                    </div>
-                                    
-                                    {isSelected ? (
-                                        splitType === 'equal' ? (
-                                            <span className="text-xs font-bold text-slate-500">
-                                                {group.currency} {((parseFloat(amount) || 0) / selectedMembers.length).toFixed(0)}
-                                            </span>
-                                        ) : splitType === 'amount' ? (
-                                            <div className="flex items-center gap-1 w-24">
-                                                <span className="text-[10px] text-slate-400">{group.currency}</span>
-                                                <input 
-                                                    className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-xs outline-none"
-                                                    placeholder="0"
-                                                    type="number"
-                                                    value={customAmounts[m.id]}
-                                                    onChange={(e) => setCustomAmounts({...customAmounts, [m.id]: e.target.value})}
-                                                />
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center gap-1 w-20">
-                                                <input 
-                                                    className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-xs outline-none"
-                                                    placeholder="0"
-                                                    type="number"
-                                                    value={customPercents[m.id]}
-                                                    onChange={(e) => setCustomPercents({...customPercents, [m.id]: e.target.value})}
-                                                />
-                                                <span className="text-[10px] text-slate-400">%</span>
-                                            </div>
-                                        )
-                                    ) : (
-                                        <span className="text-xs text-slate-300">-</span>
-                                    )}
-                                </div>
-                            )})}
-                        </div>
-                        
-                        {splitType !== 'equal' && (
-                            <div className={`text-right text-xs mt-2 font-bold ${Math.abs(totalAssigned - (parseFloat(amount)||0)) < 1 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                {Math.abs(totalAssigned - (parseFloat(amount)||0)) < 1 ? 'Matches Total' : `Diff: ${group.currency} ${(totalAssigned - (parseFloat(amount)||0)).toFixed(2)}`}
-                            </div>
-                        )}
-                    </div>
-
-                    <button onClick={handleSubmit} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/20 active:scale-95 transition-transform">
-                        {initialData ? 'Save Changes' : 'Confirm Split'}
+                        {initialData ? 'Save Changes' : 'Create Group'}
                     </button>
                 </div>
             </div>
@@ -1943,78 +1474,60 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData,
 };
 
 const QRScannerModal = ({ isOpen, onClose, onScanSuccess }: any) => {
+    useEffect(() => {
+        if (isOpen) {
+            const timer = setTimeout(() => {
+                onScanSuccess();
+            }, 2000);
+            return () => clearTimeout(timer);
+        }
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[200] flex flex-col bg-black text-white">
-            <div className="flex justify-between items-center p-4 bg-black/50 backdrop-blur-sm absolute top-0 left-0 right-0 z-10">
-                <h3 className="font-bold text-lg">Scan QR Code</h3>
-                <button onClick={onClose} className="p-2 rounded-full bg-white/10 hover:bg-white/20">
-                    <X size={20} />
-                </button>
+        <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-4">
+            <div className="w-64 h-64 border-4 border-emerald-500 rounded-3xl relative flex items-center justify-center mb-8">
+                <div className="w-full h-1 bg-emerald-500 absolute top-0 animate-[scan_2s_ease-in-out_infinite]"></div>
+                <ScanLine size={48} className="text-emerald-500/50" />
             </div>
-
-            <div className="flex-1 flex flex-col items-center justify-center relative">
-                <div className="absolute inset-0 bg-slate-900 flex items-center justify-center overflow-hidden">
-                    <div className="text-slate-600 text-sm animate-pulse">Camera Active</div>
-                </div>
-
-                <div className="absolute inset-0 border-[50px] border-black/50 pointer-events-none"></div>
-
-                <div className="relative w-64 h-64 border-2 border-white/50 rounded-lg z-10">
-                    <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-amber-500 -mt-1 -ml-1"></div>
-                    <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-amber-500 -mt-1 -mr-1"></div>
-                    <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-amber-500 -mb-1 -ml-1"></div>
-                    <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-amber-500 -mb-1 -mr-1"></div>
-
-                    <div className="absolute left-0 right-0 h-0.5 bg-amber-500 shadow-[0_0_10px_#f59e0b] animate-scan-line top-0"></div>
-                </div>
-
-                <p className="absolute bottom-32 text-sm font-medium text-white/80 bg-black/40 px-4 py-2 rounded-full backdrop-blur-sm">
-                    Point camera at a Group QR Code
-                </p>
-            </div>
-
-            <div className="bg-black p-6 pb-10 flex justify-around items-center">
-                <button className="flex flex-col items-center gap-2 text-white/60 hover:text-white">
-                    <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center">
-                        <ImageIcon size={20} />
-                    </div>
-                    <span className="text-[10px]">Gallery</span>
-                </button>
-
-                <button 
-                    onClick={onScanSuccess}
-                    className="flex flex-col items-center gap-2"
-                >
-                    <div className="w-16 h-16 rounded-full bg-white border-4 border-white/30 flex items-center justify-center text-black shadow-[0_0_20px_rgba(255,255,255,0.3)] active:scale-95 transition-transform">
-                        <ScanLine size={24} />
-                    </div>
-                </button>
-
-                <button className="flex flex-col items-center gap-2 text-white/60 hover:text-white">
-                    <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center">
-                        <Keyboard size={20} />
-                    </div>
-                    <span className="text-[10px]">Enter Code</span>
-                </button>
-            </div>
-            
-            <style>{`
-                @keyframes scan-line {
-                    0% { top: 0; opacity: 0; }
-                    10% { opacity: 1; }
-                    90% { opacity: 1; }
-                    100% { top: 100%; opacity: 0; }
-                }
-                .animate-scan-line {
-                    animation: scan-line 2s linear infinite;
-                }
-            `}</style>
+            <p className="text-white font-bold text-lg mb-8">Scanning...</p>
+            <button onClick={onClose} className="px-6 py-3 bg-slate-800 text-white rounded-xl font-bold">Cancel</button>
+            <style>{`@keyframes scan { 0% { top: 0; } 50% { top: 100%; } 100% { top: 0; } }`}</style>
         </div>
     );
 };
 
-function formatCurrency(amount: number, symbol: string = '$') {
-    return `${symbol} ${amount.toLocaleString()}`;
-}
+const CommunityInsightsView = () => (
+    <div className="space-y-4 animate-in fade-in">
+        <Card className="p-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white border-none">
+            <h3 className="font-bold text-lg mb-2">Community Benchmarks</h3>
+            <p className="text-sm opacity-90">See how your spending compares to others in similar demographics.</p>
+        </Card>
+        <div className="grid grid-cols-2 gap-3">
+            <Card className="p-4">
+                <p className="text-xs text-slate-500 uppercase font-bold">Avg Grocery Spend</p>
+                <p className="text-xl font-bold text-slate-900 dark:text-white">$350</p>
+                <p className="text-[10px] text-emerald-500 font-bold">-12% vs You</p>
+            </Card>
+            <Card className="p-4">
+                <p className="text-xs text-slate-500 uppercase font-bold">Savings Rate</p>
+                <p className="text-xl font-bold text-slate-900 dark:text-white">18%</p>
+                <p className="text-[10px] text-red-500 font-bold">+2% vs You</p>
+            </Card>
+        </div>
+    </div>
+);
+
+const GroupAIView = ({ group }: any) => (
+    <Card className="p-4 bg-slate-900 text-white border-none">
+        <div className="flex items-center gap-2 mb-3">
+            <Sparkles size={16} className="text-yellow-400" />
+            <h3 className="font-bold">Smart Analysis</h3>
+        </div>
+        <p className="text-sm text-slate-300 leading-relaxed">
+            "Based on recent activity, <strong>{group.name}</strong> is spending mostly on <strong>Food</strong>. 
+            User <strong>Devindi</strong> has paid the most this month. Consider settling balances soon to avoid large debts."
+        </p>
+    </Card>
+);

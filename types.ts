@@ -217,6 +217,11 @@ export interface Shop {
   location?: string;
   items: ShopItem[];
   budget?: number;
+  budgetCategory?: string; // Linked Budget Category Name
+  eventId?: string; // Linked Event ID
+  expenseId?: string; // Linked Event Expense ID
+  groupId?: string; // Linked Collaboration Group ID
+  groupExpenseId?: string; // Linked Collaboration Expense ID
 }
 
 export interface ShopMember {
