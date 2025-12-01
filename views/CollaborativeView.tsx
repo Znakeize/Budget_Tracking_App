@@ -10,7 +10,7 @@ import {
   Smartphone, Bell, Camera, FileText, Shield, Mail, Percent,
   Calculator, RefreshCw, Award, Map, TrendingDown, Flame,
   Pencil, Trash2, Receipt, ScanLine, Image as ImageIcon, Keyboard,
-  BellRing, ShoppingBag, Check, User
+  BellRing, ShoppingBag, Check, User, Layers
 } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement } from 'chart.js';
 import { Doughnut, Bar, Line } from 'react-chartjs-2';
@@ -280,6 +280,7 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, on
 const GroupDetailView: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup) => void, onCreateShoppingList?: (groupName: string, expenseName: string, amount: number, members: SharedMember[], linkedData?: {eventId?: string, expenseId?: string, expenseName: string, groupId?: string, groupExpenseId?: string}) => void }> = ({ group, onUpdate, onCreateShoppingList }) => {
   const [tab, setTab] = useState<'overview' | 'expenses' | 'members' | 'reports'>('overview');
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+  const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const [isEditGroupOpen, setIsEditGroupOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<SharedExpense | null>(null);
   const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
@@ -328,6 +329,12 @@ const GroupDetailView: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup)
           });
           setExpandedExpenseId(null);
       }
+  };
+
+  const handleAddCategory = (name: string) => {
+      if (group.categories.includes(name)) return;
+      onUpdate({ ...group, categories: [...group.categories, name] });
+      setIsAddCategoryOpen(false);
   };
 
   const openAddModal = () => {
@@ -475,12 +482,20 @@ const GroupDetailView: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup)
 
       {tab === 'expenses' && (
         <div className="space-y-4 animate-in fade-in">
-          <button 
-            onClick={openAddModal}
-            className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-indigo-600/20"
-          >
-            <Plus size={18} /> Add Expense
-          </button>
+          <div className="flex gap-3">
+            <button 
+                onClick={openAddModal}
+                className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-indigo-600/20"
+            >
+                <Plus size={18} /> Add Expense
+            </button>
+            <button 
+                onClick={() => setIsAddCategoryOpen(true)}
+                className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-slate-200 dark:hover:bg-slate-700"
+            >
+                <Layers size={18} /> Add Category
+            </button>
+          </div>
 
           <div className="space-y-2">
             {group.expenses.map(expense => {
@@ -574,7 +589,7 @@ const GroupDetailView: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup)
                                                 return (
                                                     <div key={userId} className="flex justify-between items-center">
                                                         <div className="flex items-center gap-2">
-                                                            <div className={`w-5 h-5 rounded-full ${member?.avatarColor || 'bg-slate-300'} flex items-center justify-center text-[8px] text-white font-bold`}>
+                                                            <div className={`w-5 h-5 rounded-full ${member?.avatarColor || 'bg-slate-300'} flex items-center justify-center text-[8px] text-white font-bold border border-white/10`}>
                                                                 {member?.name.charAt(0)}
                                                             </div>
                                                             <span className="text-slate-700 dark:text-slate-300">{member?.name || 'Unknown'}</span>
@@ -673,6 +688,7 @@ const GroupDetailView: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup)
         group={group}
         initialData={editingExpense}
         onCreateShoppingList={onCreateShoppingList}
+        onDelete={editingExpense ? () => handleDeleteExpense(editingExpense.id) : undefined}
       />
 
       <CreateGroupModal 
@@ -683,6 +699,12 @@ const GroupDetailView: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup)
             setIsEditGroupOpen(false);
         }}
         initialData={group}
+      />
+
+      <AddGroupCategoryModal 
+        isOpen={isAddCategoryOpen}
+        onClose={() => setIsAddCategoryOpen(false)}
+        onConfirm={handleAddCategory}
       />
     </div>
   );
@@ -802,7 +824,7 @@ const EditMemberModal = ({ isOpen, onClose, onConfirm, member }: any) => {
     );
 };
 
-const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData, onCreateShoppingList }: any) => {
+const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData, onCreateShoppingList, onDelete }: any) => {
     const [title, setTitle] = useState('');
     const [amount, setAmount] = useState('');
     const [paidBy, setPaidBy] = useState('me');
@@ -1083,7 +1105,37 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData,
         </div>
     );
 };
-// ... SettlementsView, CreateGroupModal, QRScannerModal, CommunityInsightsView, GroupAIView remain unchanged ...
+
+const AddGroupCategoryModal = ({ isOpen, onClose, onConfirm }: { isOpen: boolean, onClose: () => void, onConfirm: (name: string) => void }) => {
+    const [name, setName] = useState('');
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">New Category</h3>
+                <div className="space-y-3">
+                    <input 
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-sm text-slate-900 dark:text-white" 
+                        placeholder="Category Name" 
+                        value={name} 
+                        onChange={e => setName(e.target.value)} 
+                        autoFocus 
+                    />
+                    <button 
+                        onClick={() => { if(name) onConfirm(name); setName(''); }} 
+                        disabled={!name}
+                        className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl mt-2 disabled:opacity-50"
+                    >
+                        Add Category
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: SharedGroup) => void }> = ({ groups, onUpdateGroup }) => {
   const [settleModalOpen, setSettleModalOpen] = useState(false);

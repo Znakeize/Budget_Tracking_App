@@ -10,6 +10,7 @@ interface AddItemModalProps {
   collection: keyof BudgetData | null;
   currencySymbol: string;
   onCreateShoppingList?: (name: string, budget: number) => void;
+  initialData?: any;
 }
 
 export const AddItemModal: React.FC<AddItemModalProps> = ({
@@ -18,7 +19,8 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
   onConfirm,
   collection,
   currencySymbol,
-  onCreateShoppingList
+  onCreateShoppingList,
+  initialData
 }) => {
   const [name, setName] = useState('');
   
@@ -32,23 +34,55 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setName('');
-      setVal1('');
-      setVal2('');
-      setVal3('');
-      setDateVal(new Date().toISOString().split('T')[0]);
-      setTextVal('');
-      setCreateList(false);
+      if (initialData) {
+        setName(initialData.name);
+        setDateVal(initialData.dueDate || new Date().toISOString().split('T')[0]);
+        setTextVal(initialData.timeframe || '');
+        setCreateList(false);
+
+        if (collection === 'income') {
+            setVal1(initialData.planned?.toString() || '');
+            setVal2(initialData.actual?.toString() || '');
+        } else if (collection === 'expenses') {
+            setVal1(initialData.budgeted?.toString() || '');
+            setVal2(initialData.spent?.toString() || '');
+        } else if (collection === 'bills') {
+            setVal1(initialData.amount?.toString() || '');
+        } else if (collection === 'goals') {
+            setVal1(initialData.target?.toString() || '');
+            setVal2(initialData.current?.toString() || '');
+            setVal3(initialData.monthly?.toString() || '');
+        } else if (collection === 'savings') {
+            setVal1(initialData.planned?.toString() || '');
+            setVal2(initialData.amount?.toString() || '');
+        } else if (collection === 'debts') {
+            setVal1(initialData.balance?.toString() || '');
+            setVal2(initialData.payment?.toString() || '');
+        } else if (collection === 'investments') {
+            setVal1(initialData.amount?.toString() || '');
+            setVal2(initialData.target?.toString() || '');
+            setVal3(initialData.monthly?.toString() || '');
+        }
+      } else {
+        setName('');
+        setVal1('');
+        setVal2('');
+        setVal3('');
+        setDateVal(new Date().toISOString().split('T')[0]);
+        setTextVal('');
+        setCreateList(false);
+      }
     }
-  }, [isOpen, collection]);
+  }, [isOpen, collection, initialData]);
 
   if (!isOpen || !collection) return null;
 
   const getConfig = () => {
+    const action = initialData ? 'Edit' : 'Add';
     switch (collection) {
       case 'income':
         return {
-          title: 'Add Income Source',
+          title: `${action} Income Source`,
           nameLabel: 'Source Name',
           fields: [
              { label: 'Planned Amount', value: val1, set: setVal1, type: 'number' },
@@ -57,7 +91,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
         };
       case 'expenses':
         return {
-          title: 'Add Expense Category',
+          title: `${action} Expense Category`,
           nameLabel: 'Category Name',
           fields: [
              { label: 'Budgeted Amount', value: val1, set: setVal1, type: 'number' },
@@ -66,7 +100,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
         };
       case 'bills':
         return {
-          title: 'Add Bill',
+          title: `${action} Bill`,
           nameLabel: 'Bill Name',
           fields: [
              { label: 'Amount', value: val1, set: setVal1, type: 'number' },
@@ -75,7 +109,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
         };
       case 'goals':
          return {
-          title: 'Add Money Goal',
+          title: `${action} Money Goal`,
           nameLabel: 'Goal Name',
           fields: [
              { label: 'Target Amount', value: val1, set: setVal1, type: 'number' },
@@ -86,7 +120,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
         };
       case 'savings':
          return {
-          title: 'Add Savings Fund',
+          title: `${action} Savings Fund`,
           nameLabel: 'Fund Name',
           fields: [
              { label: 'Goal Amount', value: val1, set: setVal1, type: 'number' },
@@ -95,7 +129,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
         };
       case 'debts':
          return {
-          title: 'Add Debt',
+          title: `${action} Debt`,
           nameLabel: 'Debt Name',
           fields: [
              { label: 'Total Balance', value: val1, set: setVal1, type: 'number' },
@@ -105,7 +139,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
         };
       case 'investments':
          return {
-          title: 'Add Investment',
+          title: `${action} Investment`,
           nameLabel: 'Asset Name',
           fields: [
              { label: 'Current Value', value: val1, set: setVal1, type: 'number' },
@@ -114,7 +148,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
           ]
         };
       default:
-        return { title: 'Add Item', nameLabel: 'Name', fields: [] };
+        return { title: `${action} Item`, nameLabel: 'Name', fields: [] };
     }
   };
 
@@ -140,13 +174,13 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
     } else if (collection === 'bills') {
         item.amount = num1;
         item.dueDate = dateVal;
-        item.paid = false;
+        if (!initialData) item.paid = false;
     } else if (collection === 'goals') {
         item.target = num1;
         item.current = num2;
         item.monthly = num3;
         item.timeframe = textVal;
-        item.checked = false;
+        if (!initialData) item.checked = false;
     } else if (collection === 'savings') {
         item.planned = num1;
         item.amount = num2;
@@ -154,12 +188,12 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
         item.balance = num1;
         item.payment = num2;
         item.dueDate = dateVal;
-        item.paid = false;
+        if (!initialData) item.paid = false;
     } else if (collection === 'investments') {
         item.amount = num1;
         item.target = num2;
         item.monthly = num3;
-        item.contributed = false;
+        if (!initialData) item.contributed = false;
     }
 
     onConfirm(item);
@@ -216,12 +250,12 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                 </div>
             ))}
 
-            {collection === 'expenses' && (
+            {collection === 'expenses' && !initialData && (
                 <div 
                     className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${createList ? 'bg-pink-50 dark:bg-pink-900/20 border-pink-200 dark:border-pink-800' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}
                     onClick={() => setCreateList(!createList)}
                 >
-                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${createList ? 'bg-pink-500 border-pink-500' : 'bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600'}`}>
+                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${createList ? 'bg-pink-50 border-pink-500' : 'bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600'}`}>
                         {createList && <Check size={14} className="text-white" strokeWidth={3} />}
                     </div>
                     <div className="flex-1">
@@ -236,7 +270,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                 onClick={handleSubmit}
                 className="w-full py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 transition-all active:scale-95 mt-2"
             >
-                Add Item
+                {initialData ? 'Save Changes' : 'Add Item'}
             </button>
          </div>
       </div>

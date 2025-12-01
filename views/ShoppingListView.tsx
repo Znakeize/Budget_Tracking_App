@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card } from '../components/ui/Card';
 import { 
@@ -7,7 +8,7 @@ import {
   Wallet, ArrowLeft, Edit2, List, Bell, Download, Users, Pencil,
   User, ShoppingBag, Tag, DollarSign, Copy, Calendar, Zap, Settings, BrainCircuit,
   ArrowRight as ArrowRightIcon, AlertTriangle, Sparkles, Clock, UserPlus, Package,
-  AlertCircle, ChevronDown
+  AlertCircle, ChevronDown, Lock
 } from 'lucide-react';
 import { ShoppingListData, Shop, ShopItem, ShopMember } from '../types';
 import { generateId, formatCurrency, getShoppingNotifications, NotificationItem } from '../utils/calculations';
@@ -26,7 +27,7 @@ interface ShoppingListViewProps {
   focusShopId?: string;
   clearFocus?: () => void;
   expenseCategories?: string[];
-  onItemChange?: (amount: number, category?: string, eventId?: string, expenseId?: string, groupId?: string, groupExpenseId?: string) => void;
+  onItemChange?: (amount: number, total: number, category?: string, eventId?: string, expenseId?: string, groupId?: string, groupExpenseId?: string) => void;
 }
 
 export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ 
@@ -371,6 +372,20 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
                                         <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                                             <Store size={12} /> {list.shops.length} Shops • {totalItems} Items
                                         </p>
+                                        {(list.eventId || list.groupId) && (
+                                            <div className="flex gap-1 mt-1.5 flex-wrap">
+                                                {list.eventId && (
+                                                    <span className="text-[9px] font-bold text-pink-500 bg-pink-50 dark:bg-pink-900/20 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                                        Event Linked
+                                                    </span>
+                                                )}
+                                                {list.groupId && (
+                                                    <span className="text-[9px] font-bold text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                                        Group Linked
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                     
                                     {/* Right Side: Budget + Notification Icon */}
@@ -529,7 +544,15 @@ const ListDetailView: React.FC<{
     const [isShareOpen, setIsShareOpen] = useState(false);
 
     const handleAddShop = (shop: Shop) => {
-        const updatedList = { ...list, shops: [...list.shops, shop] };
+        // Inherit links from list if they exist (for "Linked Shopping Lists" created from Event/Group)
+        const newShop = { 
+            ...shop,
+            eventId: list.eventId || shop.eventId,
+            expenseId: list.expenseId || shop.expenseId,
+            groupId: list.groupId || shop.groupId,
+            groupExpenseId: list.groupExpenseId || shop.groupExpenseId
+        };
+        const updatedList = { ...list, shops: [...list.shops, newShop] };
         onUpdateList(updatedList);
         setIsAddShopOpen(false);
     };
@@ -657,6 +680,7 @@ const ListDetailView: React.FC<{
                                         <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">{checkedCount}/{itemCount} Items • {formatCurrency(shopCost, list.currencySymbol)}</p>
                                         {shop.budgetCategory && <p className="text-[10px] text-indigo-500 font-bold mt-0.5">Linked: {shop.budgetCategory}</p>}
                                         {shop.eventId && <p className="text-[10px] text-pink-500 font-bold mt-0.5">Event Linked</p>}
+                                        {shop.groupId && <p className="text-[10px] text-amber-500 font-bold mt-0.5">Group Linked</p>}
                                     </div>
                                 </div>
                                 <ChevronRight size={20} className="text-slate-300 mt-1 group-hover:text-slate-500 dark:group-hover:text-slate-200 transition-colors" />
@@ -713,6 +737,7 @@ const ListDetailView: React.FC<{
                 initialData={editingShop}
                 currencySymbol={list.currencySymbol}
                 categories={expenseCategories}
+                isListLinked={!!list.eventId || !!list.groupId}
             />
 
             <ShareListModal 
@@ -727,9 +752,6 @@ const ListDetailView: React.FC<{
     );
 };
 
-// ... ShopItemsView, AddItemModal, NotificationSettingsModal, CreateListModal, EditListModal, AddShopModal remain unchanged ...
-// NOTE: Including them here for completeness if required, but focusing on the requested changes above.
-
 const ShopItemsView: React.FC<{ 
     list: ShoppingListData,
     shop: Shop, 
@@ -738,7 +760,7 @@ const ShopItemsView: React.FC<{
     notificationCount: number,
     onToggleNotifications: () => void,
     onProfileClick: () => void,
-    onItemChange?: (amount: number, category?: string, eventId?: string, expenseId?: string, groupId?: string, groupExpenseId?: string) => void
+    onItemChange?: (amount: number, total: number, category?: string, eventId?: string, expenseId?: string, groupId?: string, groupExpenseId?: string) => void
 }> = ({ list, shop, onUpdateList, onBack, notificationCount, onToggleNotifications, onProfileClick, onItemChange }) => {
     const [search, setSearch] = useState('');
     const [isAddItemOpen, setIsAddItemOpen] = useState(false);
@@ -747,6 +769,29 @@ const ShopItemsView: React.FC<{
     const handleUpdateShop = (updatedShop: Shop) => {
         const updatedShops = list.shops.map(s => s.id === updatedShop.id ? updatedShop : s);
         onUpdateList({ ...list, shops: updatedShops });
+    };
+
+    const syncShopTotal = (currentItems: ShopItem[], diff: number) => {
+        if (!onItemChange) return;
+        
+        // Calculate Total Checked for 1:1 sync (Events/Groups)
+        // This recalculates the total spent from scratch based on the new items state
+        const totalChecked = currentItems
+            .filter(i => i.checked)
+            .reduce((sum, i) => sum + (i.actualPrice !== undefined ? i.actualPrice : (i.price || 0)), 0);
+            
+        // Check if any link exists to optimize
+        if (shop.budgetCategory || (shop.eventId && shop.expenseId) || (shop.groupId && shop.groupExpenseId)) {
+             onItemChange(
+                diff, 
+                totalChecked, 
+                shop.budgetCategory, 
+                shop.eventId, 
+                shop.expenseId, 
+                shop.groupId, 
+                shop.groupExpenseId
+            );
+        }
     };
 
     const handleAddItem = (itemData: any) => {
@@ -761,8 +806,10 @@ const ShopItemsView: React.FC<{
             addedBy: 'You',
             dueDate: itemData.dueDate // Capture due date
         };
-        handleUpdateShop({ ...shop, items: [...shop.items, newItem] });
+        const updatedItems = [...shop.items, newItem];
+        handleUpdateShop({ ...shop, items: updatedItems });
         setIsAddItemOpen(false);
+        // No sync needed for add as it is unchecked by default
     };
 
     const handleEditItem = (itemData: any) => {
@@ -772,16 +819,18 @@ const ShopItemsView: React.FC<{
         const updatedItems = shop.items.map(i => i.id === editingItem.id ? { ...i, ...itemData } : i);
         handleUpdateShop({ ...shop, items: updatedItems });
         
-        // Sync if checked
-        if (onItemChange && (shop.budgetCategory || (shop.eventId && shop.expenseId) || (shop.groupId && shop.groupExpenseId)) && oldItem.checked) {
-             const oldContribution = oldItem.actualPrice || oldItem.price || 0;
+        // Calculate diff if checked status or price changed while checked
+        let diff = 0;
+        if (oldItem.checked) {
+             const oldContribution = oldItem.actualPrice !== undefined ? oldItem.actualPrice : (oldItem.price || 0);
              const newActual = itemData.actualPrice !== undefined ? itemData.actualPrice : oldItem.actualPrice;
              const newEst = itemData.price !== undefined ? itemData.price : oldItem.price;
-             const newContribution = newActual || newEst || 0;
+             const newContribution = newActual !== undefined ? newActual : (newEst || 0);
              
-             const diff = newContribution - oldContribution;
-             if (diff !== 0) onItemChange(diff, shop.budgetCategory, shop.eventId, shop.expenseId, shop.groupId, shop.groupExpenseId);
+             diff = newContribution - oldContribution;
         }
+
+        syncShopTotal(updatedItems, diff);
 
         setEditingItem(null);
         setIsAddItemOpen(false);
@@ -789,60 +838,64 @@ const ShopItemsView: React.FC<{
 
     const handleDeleteItem = (itemId: string) => {
         const item = shop.items.find(i => i.id === itemId);
-        if (item && onItemChange && (shop.budgetCategory || (shop.eventId && shop.expenseId) || (shop.groupId && shop.groupExpenseId)) && item.checked) {
-             const contribution = item.actualPrice || item.price || 0;
-             onItemChange(-contribution, shop.budgetCategory, shop.eventId, shop.expenseId, shop.groupId, shop.groupExpenseId);
+        let diff = 0;
+        if (item && item.checked) {
+             diff = -(item.actualPrice !== undefined ? item.actualPrice : (item.price || 0));
         }
         
-        handleUpdateShop({ ...shop, items: shop.items.filter(i => i.id !== itemId) });
+        const updatedItems = shop.items.filter(i => i.id !== itemId);
+        handleUpdateShop({ ...shop, items: updatedItems });
+        
+        syncShopTotal(updatedItems, diff);
         setEditingItem(null);
         setIsAddItemOpen(false);
     };
 
     const handleToggleCheck = (itemId: string) => {
+        let diff = 0;
         const updatedItems = shop.items.map(i => {
             if (i.id === itemId) {
                 const newChecked = !i.checked;
                 
-                // Sync to Budget/Event/Group if linked
-                if (onItemChange && (shop.budgetCategory || (shop.eventId && shop.expenseId) || (shop.groupId && shop.groupExpenseId))) {
-                    const price = i.actualPrice || i.price || 0;
-                    if (newChecked) {
-                        onItemChange(price, shop.budgetCategory, shop.eventId, shop.expenseId, shop.groupId, shop.groupExpenseId);
-                    } else {
-                        onItemChange(-price, shop.budgetCategory, shop.eventId, shop.expenseId, shop.groupId, shop.groupExpenseId);
-                    }
+                // Auto-fill actual price from estimated price if checking and actual is empty
+                let newActualPrice = i.actualPrice;
+                if (newChecked && !i.actualPrice && i.price) {
+                    newActualPrice = i.price;
                 }
+
+                const priceToUse = newActualPrice !== undefined ? newActualPrice : (i.price || 0);
+                
+                diff = newChecked ? priceToUse : -priceToUse;
 
                 return { 
                     ...i, 
                     checked: newChecked,
-                    purchasedBy: newChecked ? 'You' : undefined
+                    purchasedBy: newChecked ? 'You' : undefined,
+                    actualPrice: newActualPrice
                 };
             }
             return i;
         });
         handleUpdateShop({ ...shop, items: updatedItems });
+        syncShopTotal(updatedItems, diff);
     };
 
     const handlePriceChange = (itemId: string, newPrice: number) => {
         const oldItem = shop.items.find(i => i.id === itemId);
         if (!oldItem) return;
         
-        // Calculate diff before update
-        const oldContribution = oldItem.actualPrice || oldItem.price || 0;
-        const newContribution = newPrice || oldItem.price || 0;
-        
         const updatedItems = shop.items.map(i =>
             i.id === itemId ? { ...i, actualPrice: newPrice } : i
         );
         handleUpdateShop({ ...shop, items: updatedItems });
 
-        // Update budget/event/group if item was already checked
-        if (onItemChange && (shop.budgetCategory || (shop.eventId && shop.expenseId) || (shop.groupId && shop.groupExpenseId)) && oldItem.checked) {
-            const diff = newContribution - oldContribution;
-            if (diff !== 0) onItemChange(diff, shop.budgetCategory, shop.eventId, shop.expenseId, shop.groupId, shop.groupExpenseId);
+        let diff = 0;
+        if (oldItem.checked) {
+             const oldVal = oldItem.actualPrice !== undefined ? oldItem.actualPrice : (oldItem.price || 0);
+             diff = newPrice - oldVal;
         }
+        
+        syncShopTotal(updatedItems, diff);
     };
 
     const filteredItems = shop.items
@@ -1029,6 +1082,7 @@ const ShopItemsView: React.FC<{
     );
 };
 
+// ... AddItemModal, NotificationSettingsModal, CreateListModal, EditListModal, AddShopModal, ShareListModal components ...
 const AddItemModal = ({ isOpen, onClose, onConfirm, onDelete, initialData, currencySymbol }: any) => {
     const [name, setName] = useState('');
     const [quantity, setQuantity] = useState('');
@@ -1053,7 +1107,7 @@ const AddItemModal = ({ isOpen, onClose, onConfirm, onDelete, initialData, curre
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 duration-200">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">{initialData ? 'Edit Item' : 'Add Item'}</h3>
                 
                 <div className="space-y-4">
@@ -1215,7 +1269,7 @@ const EditListModal = ({ isOpen, onClose, onConfirm, initialData }: any) => {
     );
 };
 
-const AddShopModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol, categories }: any) => {
+const AddShopModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol, categories, isListLinked }: any) => {
     const [name, setName] = useState('');
     const [budget, setBudget] = useState('');
     const [budgetCategory, setBudgetCategory] = useState('');
@@ -1266,16 +1320,23 @@ const AddShopModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol,
                     <div>
                         <label className="text-[10px] font-bold text-slate-500 uppercase mb-1.5 block ml-1">Link to Budget Category</label>
                         <select 
-                            className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-sm text-slate-700 dark:text-slate-300"
+                            className={`w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-sm text-slate-700 dark:text-slate-300 ${isListLinked ? 'opacity-50 cursor-not-allowed' : ''}`}
                             value={budgetCategory}
                             onChange={(e) => setBudgetCategory(e.target.value)}
+                            disabled={isListLinked}
                         >
                             <option value="">Select Category (Optional)</option>
                             {categories && categories.map((cat: string) => (
                                 <option key={cat} value={cat}>{cat}</option>
                             ))}
                         </select>
-                        <p className="text-[10px] text-slate-400 mt-1 ml-1">Purchases will automatically update this budget category.</p>
+                        {isListLinked ? (
+                            <p className="text-[10px] text-amber-500 mt-1 ml-1 flex items-center gap-1">
+                                <Lock size={10} /> List linked to external budget (Event/Group)
+                            </p>
+                        ) : (
+                            <p className="text-[10px] text-slate-400 mt-1 ml-1">Purchases will automatically update this budget category.</p>
+                        )}
                     </div>
 
                     <button onClick={handleSubmit} disabled={!name} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl mt-2 disabled:opacity-50">{initialData ? 'Update' : 'Add Shop'}</button>

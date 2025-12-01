@@ -242,6 +242,11 @@ export interface ShoppingListData {
   color: string;
   budget?: number;
   lastModified?: number;
+  // Link fields to associate the entire list with an event or group expense
+  eventId?: string;
+  expenseId?: string;
+  groupId?: string;
+  groupExpenseId?: string;
 }
 
 // --- Collaborative / Shared Budget Interfaces ---

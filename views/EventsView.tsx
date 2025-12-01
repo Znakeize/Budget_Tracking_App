@@ -706,7 +706,7 @@ const EventDashboardTab = ({ event, totalSpent, remaining, currencySymbol }: any
         doc.text(membersStr, 20, y, {maxWidth: 170});
 
         // --- FOOTER ---
-        const pageCount = doc.internal.getNumberOfPages();
+        const pageCount = (doc.internal as any).getNumberOfPages();
         for(let i = 1; i <= pageCount; i++) {
             doc.setPage(i);
             doc.setFontSize(8);
@@ -1247,7 +1247,32 @@ const EventVendorsTab = ({ event, onUpdate, currencySymbol, focusItemId }: any) 
     };
 
     const handleUpdateVendor = (updatedVendor: EventVendor) => {
-        onUpdate({ ...event, vendors: event.vendors.map((v: any) => v.id === updatedVendor.id ? { ...updatedVendor, status: updatedVendor.paidAmount >= updatedVendor.totalAmount ? 'paid' : updatedVendor.paidAmount > 0 ? 'partial' : 'pending' } : v) });
+        const status = updatedVendor.paidAmount >= updatedVendor.totalAmount ? 'paid' : updatedVendor.paidAmount > 0 ? 'partial' : 'pending';
+        const finalVendor = { ...updatedVendor, status };
+
+        // Sync changes to linked expenses in Budget
+        let updatedExpenses = [...event.expenses];
+        const oldVendor = event.vendors.find((v: any) => v.id === updatedVendor.id);
+        
+        if (oldVendor && (oldVendor.name !== updatedVendor.name || oldVendor.service !== updatedVendor.service)) {
+            const newCategory = getMatchingCategory(updatedVendor.service);
+            updatedExpenses = updatedExpenses.map((e: any) => {
+                if (e.vendorId === updatedVendor.id) {
+                    return {
+                        ...e,
+                        name: updatedVendor.name,
+                        category: newCategory
+                    };
+                }
+                return e;
+            });
+        }
+
+        onUpdate({ 
+            ...event, 
+            vendors: event.vendors.map((v: any) => v.id === updatedVendor.id ? finalVendor : v),
+            expenses: updatedExpenses
+        });
         setEditingVendor(null);
     };
 

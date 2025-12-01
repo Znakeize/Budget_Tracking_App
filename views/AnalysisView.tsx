@@ -34,6 +34,8 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { AnalysisReportDashboard } from './AnalysisReportDashboard';
 import { IncomeAnalysisSection } from './IncomeAnalysisSection';
 import { CashFlowAnalysisSection } from './CashFlowAnalysisSection';
+import { AnalysisPlanner } from './AnalysisPlanner';
+import { AnalysisOverview } from './AnalysisOverview';
 
 ChartJS.register(
   CategoryScale,
@@ -117,162 +119,6 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({
   };
 
   const labels = sortedHistory.map(h => h.period === 'monthly' ? MONTH_NAMES[h.month].substring(0, 3) : 'Pd');
-
-  // --- 1. Overview Section Data & Render ---
-  const renderOverview = () => {
-      const netWorth = (currentTotals.totalSavings + currentTotals.totalPortfolioValue) - currentTotals.actualDebts;
-      const totalAllocated = currentTotals.totalExpenses + currentTotals.actualBills + currentTotals.actualDebts + currentTotals.totalSavings + currentTotals.actualInvestments;
-      
-      const debtToIncomeRatio = currentTotals.totalIncome > 0 ? (currentTotals.actualDebts / currentTotals.totalIncome) * 100 : 0;
-      const committedSpend = currentTotals.actualBills + currentTotals.actualDebts; // Fixed costs
-      
-      // Financial Mix Data (Doughnut)
-      const mixData = {
-          labels: ['Living Expenses', 'Bills (Fixed)', 'Debt Repayment', 'Savings & Inv'],
-          datasets: [{
-              data: [
-                  currentTotals.totalExpenses, 
-                  currentTotals.actualBills,
-                  currentTotals.actualDebts,
-                  currentTotals.totalSavings + currentTotals.actualInvestments
-              ],
-              backgroundColor: ['#f59e0b', '#ef4444', '#f97316', '#10b981'],
-              borderWidth: 0,
-              hoverOffset: 4
-          }]
-      };
-
-      // Net Worth Trend Data (Line)
-      const netWorthTrendData = {
-          labels,
-          datasets: [{
-              label: 'Net Worth',
-              data: sortedHistory.map(h => {
-                  const t = calculateTotals(h);
-                  return (t.totalSavings + t.totalPortfolioValue) - t.totalDebts;
-              }),
-              borderColor: '#8b5cf6', // Violet
-              backgroundColor: (context: any) => {
-                  const ctx = context.chart.ctx;
-                  const gradient = ctx.createLinearGradient(0, 0, 0, 200);
-                  gradient.addColorStop(0, 'rgba(139, 92, 246, 0.4)');
-                  gradient.addColorStop(1, 'rgba(139, 92, 246, 0.0)');
-                  return gradient;
-              },
-              fill: true,
-              tension: 0.4,
-              pointRadius: 4
-          }]
-      };
-
-      return (
-      <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-          {/* Top KPI Cards */}
-          <div className="grid grid-cols-2 gap-3">
-              <Card className="p-3 bg-white dark:bg-slate-800">
-                  <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 flex items-center gap-1">
-                      <Wallet size={12}/> Net Worth
-                  </div>
-                  <div className={`text-xl font-bold ${netWorth >= 0 ? 'text-violet-600 dark:text-violet-400' : 'text-red-500'}`}>
-                      {formatCurrency(netWorth, currencySymbol)}
-                  </div>
-              </Card>
-              <Card className="p-3 bg-white dark:bg-slate-800">
-                  <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 flex items-center gap-1">
-                      <Scale size={12}/> Debt Ratio
-                  </div>
-                  <div className={`text-xl font-bold ${debtToIncomeRatio > 40 ? 'text-red-500' : 'text-slate-900 dark:text-white'}`}>
-                      {debtToIncomeRatio.toFixed(1)}%
-                  </div>
-              </Card>
-              <Card className="p-3 bg-white dark:bg-slate-800">
-                  <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 flex items-center gap-1">
-                      <Lock size={12}/> Committed
-                  </div>
-                  <div className="text-lg font-bold text-slate-900 dark:text-white">
-                      {formatCurrency(committedSpend, currencySymbol)}
-                  </div>
-                  <div className="text-[9px] text-slate-400">Bills + Debt Payments</div>
-              </Card>
-              <Card className="p-3 bg-white dark:bg-slate-800">
-                  <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 flex items-center gap-1">
-                      <Target size={12}/> Savings Rate
-                  </div>
-                  <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                      {currentTotals.totalIncome > 0 ? Math.round(((currentTotals.totalSavings + currentTotals.actualInvestments) / currentTotals.totalIncome) * 100) : 0}%
-                  </div>
-                  <div className="text-[9px] text-slate-400">of Total Income</div>
-              </Card>
-          </div>
-
-          {/* Net Worth Chart */}
-          <Card className="p-4">
-              <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4 flex items-center gap-2">
-                  <TrendingUp size={16} className="text-violet-500" /> Net Worth Trend
-              </h3>
-              <div className="h-48 relative">
-                  <Line data={netWorthTrendData} options={chartOptions} />
-              </div>
-          </Card>
-
-          {/* Allocation Breakdown */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card className="p-4">
-                  <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4">Financial Allocation</h3>
-                  <div className="h-40 relative flex justify-center">
-                      <Doughnut 
-                          data={mixData} 
-                          options={{
-                              maintainAspectRatio: false,
-                              plugins: { legend: { display: false } },
-                              cutout: '65%'
-                          }} 
-                      />
-                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                          <span className="text-[10px] text-slate-400 uppercase font-bold">Total Flow</span>
-                          <span className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(totalAllocated, currencySymbol)}</span>
-                      </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 mt-4 text-[10px]">
-                      <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-500"></div> Living Exp.</div>
-                      <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-red-500"></div> Fixed Bills</div>
-                      <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-orange-500"></div> Debt Pay</div>
-                      <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Savings</div>
-                  </div>
-              </Card>
-
-              {/* Quick Insights */}
-              <div className="space-y-3">
-                  <Card className="p-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-500/20">
-                      <div className="flex gap-2">
-                          <Lightbulb size={16} className="text-indigo-600 dark:text-indigo-400 mt-0.5" />
-                          <div>
-                              <h4 className="text-xs font-bold text-indigo-700 dark:text-indigo-300">Observation</h4>
-                              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-                                  Your fixed costs are <strong>{currentTotals.totalIncome > 0 ? Math.round((committedSpend / currentTotals.totalIncome)*100) : 0}%</strong> of income. Ideally, keep this under 50%.
-                              </p>
-                          </div>
-                      </div>
-                  </Card>
-                  
-                  {netWorth < 0 && (
-                      <Card className="p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-500/20">
-                          <div className="flex gap-2">
-                              <TrendingUp size={16} className="text-orange-600 dark:text-orange-400 mt-0.5" />
-                              <div>
-                                  <h4 className="text-xs font-bold text-orange-700 dark:text-orange-300">Goal Focus</h4>
-                                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-                                      Prioritize debt repayment to flip your Net Worth to positive.
-                                  </p>
-                              </div>
-                          </div>
-                      </Card>
-                  )}
-              </div>
-          </div>
-      </div>
-      );
-  };
 
   // --- 3. Expense Section Data ---
   const renderExpenses = () => {
@@ -961,125 +807,6 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({
       );
   };
 
-  const renderPlanner = () => {
-      // 1. Forecast Calculation
-      const last3Months = sortedHistory.slice(-3);
-      const avgExpense = last3Months.length > 0 
-          ? last3Months.reduce((sum, h) => sum + calculateTotals(h).totalExpenses, 0) / last3Months.length
-          : currentTotals.totalExpenses;
-      
-      const predictedExpense = avgExpense * 1.05; // 5% increase assumption
-      const avgIncome = last3Months.length > 0
-          ? last3Months.reduce((sum, h) => sum + calculateTotals(h).totalIncome, 0) / last3Months.length
-          : currentTotals.totalIncome;
-          
-      const estimatedSavings = avgIncome - predictedExpense;
-
-      // 2. Chart Data
-      const activeGoals = currentPeriod.goals.filter(g => !g.checked);
-      const chartData = {
-          labels: activeGoals.map(g => g.name),
-          datasets: [{
-              data: activeGoals.map(g => g.current),
-              backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'],
-              borderWidth: 0,
-              hoverOffset: 4
-          }]
-      };
-
-      return (
-          <div className="space-y-6 animate-in fade-in slide-in-from-right-4 pb-6">
-              {/* Top Chart Card */}
-              <Card className="p-6 bg-[#1e293b] text-white border-none shadow-xl">
-                  <div className="flex items-center gap-2 mb-4">
-                      <Target size={20} className="text-indigo-400" />
-                      <h3 className="text-lg font-bold">Goal Progress Rings</h3>
-                  </div>
-                  <div className="h-48 relative flex items-center justify-center">
-                      <Doughnut 
-                          data={chartData}
-                          options={{
-                              maintainAspectRatio: false,
-                              cutout: '75%',
-                              plugins: {
-                                  legend: {
-                                      position: 'right',
-                                      labels: { color: '#94a3b8', boxWidth: 10, font: { size: 10 } }
-                                  }
-                              }
-                          }}
-                      />
-                  </div>
-              </Card>
-
-              {/* Goals List */}
-              <div>
-                  <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 ml-1">Savings Goals</h3>
-                  <div className="space-y-3">
-                      {activeGoals.map(goal => {
-                          const progress = goal.target > 0 ? (goal.current / goal.target) * 100 : 0;
-                          return (
-                              <Card key={goal.id} className="p-5 bg-[#1e293b] border-slate-700/50 shadow-md">
-                                  <div className="flex justify-between items-end mb-2">
-                                      <span className="font-bold text-white text-base">{goal.name}</span>
-                                      <span className="text-xs font-bold text-indigo-400">{Math.round(progress)}%</span>
-                                  </div>
-                                  
-                                  <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden mb-3">
-                                      <div 
-                                          className="h-full bg-indigo-500 rounded-full shadow-[0_0_10px_rgba(99,102,241,0.5)] transition-all duration-1000" 
-                                          style={{ width: `${Math.min(progress, 100)}%` }}
-                                      ></div>
-                                  </div>
-                                  
-                                  <div className="flex justify-between text-xs text-slate-400 font-medium">
-                                      <span>{formatCurrency(goal.current, currencySymbol)}</span>
-                                      <span>Target: {formatCurrency(goal.target, currencySymbol)}</span>
-                                  </div>
-                              </Card>
-                          );
-                      })}
-                      {activeGoals.length === 0 && (
-                          <div className="text-center p-8 text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
-                              <Target size={24} className="mx-auto mb-2 opacity-50" />
-                              <p className="text-xs">No active goals. Start saving today!</p>
-                          </div>
-                      )}
-                  </div>
-              </div>
-
-              {/* AI Forecast Card */}
-              <Card className="p-5 bg-[#1e293b] border-slate-700/50 shadow-lg relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-600/10 rounded-full blur-3xl -mr-10 -mt-10"></div>
-                  
-                  <div className="flex items-center gap-2 mb-6 relative z-10">
-                      <Activity size={18} className="text-fuchsia-400" />
-                      <h3 className="font-bold text-white">AI Forecast (Next 3 Months)</h3>
-                  </div>
-
-                  <div className="space-y-4 relative z-10">
-                      <div className="flex justify-between items-center border-b border-slate-700/50 pb-3">
-                          <span className="text-sm text-slate-400">Predicted Avg Expense</span>
-                          <span className="font-bold text-white text-lg">~{formatCurrency(predictedExpense, currencySymbol)}</span>
-                      </div>
-                      <div className="flex justify-between items-center border-b border-slate-700/50 pb-3">
-                          <span className="text-sm text-slate-400">Estimated Savings</span>
-                          <span className={`font-bold text-lg ${estimatedSavings >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                              ~{formatCurrency(estimatedSavings, currencySymbol)}
-                          </span>
-                      </div>
-                  </div>
-
-                  <div className="mt-4 pt-2 relative z-10">
-                      <p className="text-xs text-slate-400 italic leading-relaxed">
-                          "Expenses trending up by 5%. Consider reducing subscription costs to maintain savings rate."
-                      </p>
-                  </div>
-              </Card>
-          </div>
-      );
-  };
-
   const renderTools = () => {
       const toggleAlert = (key: keyof typeof alertSettings) => {
           setAlertSettings(prev => ({ ...prev, [key]: !prev[key] }));
@@ -1220,14 +947,14 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({
        </div>
 
        <div className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-28">
-           {activeTab === 'overview' && renderOverview()}
+           {activeTab === 'overview' && <AnalysisOverview history={history} currentPeriod={currentPeriod} currencySymbol={currencySymbol} />}
            {activeTab === 'income' && <IncomeAnalysisSection history={history} currentPeriod={currentPeriod} currencySymbol={currencySymbol} />}
            {activeTab === 'expenses' && renderExpenses()}
            {activeTab === 'bills' && renderBills()}
            {activeTab === 'debts' && renderDebts()}
            {activeTab === 'savings' && renderSavings()}
            {activeTab === 'cashflow' && <CashFlowAnalysisSection history={history} currentPeriod={currentPeriod} currencySymbol={currencySymbol} />}
-           {activeTab === 'planner' && renderPlanner()}
+           {activeTab === 'planner' && <AnalysisPlanner history={history} currentPeriod={currentPeriod} currencySymbol={currencySymbol} />}
            {activeTab === 'reports' && (
                <AnalysisReportDashboard 
                    history={history} 
@@ -1273,7 +1000,6 @@ const CategoryDetailModal = ({ isOpen, onClose, categoryName, currentPeriod, his
     currencySymbol: string;
     shoppingLists: any[];
 }) => {
-    // ... existing implementation ...
     if (!isOpen || !categoryName) return null;
 
     // 1. Calculate Stats
@@ -1306,19 +1032,60 @@ const CategoryDetailModal = ({ isOpen, onClose, categoryName, currentPeriod, his
         }]
     };
 
-    // Estimate Merchants
-    // Fuzzy matching shops to category keyword
+    // Enhanced Merchant Matching Logic
     const merchants: Record<string, number> = {};
-    const keywords = String(categoryName).toLowerCase().split(' ');
     
+    // Keywords mapping for smart categorization
+    const smartKeywords: Record<string, string[]> = {
+         'groceries': ['market','mart','super','fresh','food','grocer', 'trader', 'whole', 'costco', 'walmart', 'kroger', 'safeway', 'aldi'],
+         'food': ['market','mart','super','fresh','grocer', 'cafe', 'restaurant', 'pizza', 'burger', 'grill', 'bistro', 'diner', 'eats', 'starbucks', 'mcdonalds'],
+         'eating out': ['cafe', 'restaurant', 'bistro', 'bar', 'grill', 'pizza', 'burger', 'coffee', 'diner', 'eats', 'uber eats', 'doordash'],
+         'dining': ['cafe', 'restaurant', 'bistro', 'bar', 'grill', 'pizza', 'burger', 'coffee', 'diner'],
+         'fuel': ['station','oil','petrol','gas','pump', 'shell', 'bp', 'mobil', 'energy', 'chevron', 'exxon'],
+         'transport': ['station','oil','petrol','gas','pump', 'uber', 'taxi', 'rail', 'bus', 'train', 'metro', 'lyft'],
+         'shopping': ['mall', 'store', 'shop', 'fashion', 'retail', 'outlet', 'center', 'plaza', 'amazon', 'target', 'ebay'],
+         'gifts': ['gift', 'store', 'shop', 'mall', 'amazon'],
+         'health': ['pharmacy', 'drug', 'med', 'clinic', 'gym', 'fitness', 'salon', 'barber', 'dental', 'doctor', 'walgreens', 'cvs'],
+         'personal care': ['pharmacy', 'drug', 'salon', 'barber', 'hair', 'cosmetic', 'spa', 'ulta', 'sephora'],
+         'home': ['depot', 'hardware', 'furniture', 'decor', 'ikea', 'homeware', 'repair', 'lowes'],
+         'household': ['depot', 'hardware', 'furniture', 'decor', 'ikea'],
+         'entertainment': ['cinema', 'movie', 'theater', 'game', 'bowling', 'fun', 'park', 'netflix', 'spotify', 'hulu', 'disney']
+    };
+
+    const catLower = categoryName.toLowerCase();
+    
+    // Find matching keywords for this category
+    // Either exact key match or partial key match in smartKeywords
+    let categoryKeywords: string[] = [];
+    Object.keys(smartKeywords).forEach(key => {
+        if (catLower.includes(key) || key.includes(catLower)) {
+            categoryKeywords = [...categoryKeywords, ...smartKeywords[key]];
+        }
+    });
+    // Add the category name itself as a keyword
+    categoryKeywords.push(catLower);
+    // Split category name into words and add those too if significant length
+    categoryName.split(' ').forEach(word => {
+        if (word.length > 3) categoryKeywords.push(word.toLowerCase());
+    });
+
     shoppingLists.forEach((list: any) => {
         list.shops.forEach((shop: any) => {
-            // Check if shop name contains category keywords or generic matching
-            const matches = keywords.some((k: string) => shop.name.toLowerCase().includes(k)) || 
-                            (categoryName === 'Groceries' && ['market','food','mart','store'].some(k => shop.name.toLowerCase().includes(k))) ||
-                            (categoryName === 'Fuel' && ['station','oil','petrol','fuel'].some(k => shop.name.toLowerCase().includes(k)));
+            let isMatch = false;
             
-            if (matches || true) { 
+            // 1. Explicit Link
+            if (shop.budgetCategory && shop.budgetCategory === categoryName) {
+                isMatch = true;
+            }
+            // 2. Smart Keyword Matching (If not linked elsewhere)
+            else if (!shop.budgetCategory) {
+                const nameLower = shop.name.toLowerCase();
+                if (categoryKeywords.some(keyword => nameLower.includes(keyword))) {
+                    isMatch = true;
+                }
+            }
+            
+            if (isMatch) { 
                  const shopTotal = shop.items.filter((i: any) => i.checked).reduce((sum: number, i: any) => sum + (i.actualPrice || i.price || 0), 0);
                  if (shopTotal > 0) merchants[shop.name] = (merchants[shop.name] || 0) + shopTotal;
             }
@@ -1327,20 +1094,21 @@ const CategoryDetailModal = ({ isOpen, onClose, categoryName, currentPeriod, his
 
     let topMerchants = Object.entries(merchants)
         .map(([name, amount]) => ({ name, amount }))
-        .sort((a, b) => b.amount - a.amount)
-        .slice(0, 4);
+        .sort((a, b) => b.amount - a.amount);
     
-    if (topMerchants.length === 0) {
-        // Fallback for visual consistency
-        topMerchants = [
-            { name: 'Store A', amount: spent * 0.4 },
-            { name: 'Store B', amount: spent * 0.3 },
-            { name: 'Online', amount: spent * 0.2 },
-            { name: 'Other', amount: spent * 0.1 },
-        ];
-    }
+    // Smart Fallback: "Manual / Other"
+    const trackedSum = topMerchants.reduce((sum, m) => sum + m.amount, 0);
+    const untracked = Math.max(0, spent - trackedSum);
 
-    const maxMerchantSpend = Math.max(...topMerchants.map(m => m.amount), 1);
+    if (untracked > 0) {
+        topMerchants.push({ name: 'Manual / Other', amount: untracked });
+    }
+    
+    // Sort again
+    topMerchants.sort((a, b) => b.amount - a.amount);
+    
+    const displayMerchants = topMerchants.slice(0, 6); // Show top 6
+    const maxMerchantSpend = Math.max(...displayMerchants.map(m => m.amount), 1);
 
     return (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -1396,20 +1164,23 @@ const CategoryDetailModal = ({ isOpen, onClose, categoryName, currentPeriod, his
 
                     {/* Merchants */}
                     <div>
-                        <h4 className="text-xs font-bold text-white mb-3">Top Merchants (Est.)</h4>
+                        <h4 className="text-xs font-bold text-white mb-3">Top Merchants (Matched)</h4>
                         <div className="space-y-3">
-                            {topMerchants.map((m, i) => (
+                            {displayMerchants.map((m, i) => (
                                 <div key={i} className="flex items-center gap-3">
-                                    <span className="text-sm text-slate-300 w-24 truncate">{m.name}</span>
+                                    <span className="text-sm text-slate-300 w-28 truncate">{m.name}</span>
                                     <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
                                         <div 
-                                            className="h-full bg-indigo-500 rounded-full" 
+                                            className={`h-full rounded-full ${m.name === 'Manual / Other' ? 'bg-slate-500' : 'bg-indigo-500'}`} 
                                             style={{ width: `${(m.amount / maxMerchantSpend) * 100}%` }}
                                         ></div>
                                     </div>
                                     <span className="text-sm font-bold text-white w-20 text-right">{formatCurrency(m.amount, currencySymbol)}</span>
                                 </div>
                             ))}
+                            {displayMerchants.length === 0 && (
+                                <p className="text-xs text-slate-500 italic text-center">No spend data or merchant matches found.</p>
+                            )}
                         </div>
                     </div>
 
@@ -1417,7 +1188,10 @@ const CategoryDetailModal = ({ isOpen, onClose, categoryName, currentPeriod, his
                     <div className="bg-indigo-500/20 border border-indigo-500/30 p-4 rounded-xl flex gap-3">
                         <Lightbulb size={20} className="text-indigo-400 shrink-0" />
                         <p className="text-xs text-indigo-100 leading-relaxed">
-                            <span className="font-bold text-white">Smart Tip:</span> You spend 15% more on {categoryName} on weekends. Try shifting some purchases to weekdays to avoid peak pricing or impulse buys.
+                            <span className="font-bold text-white">Smart Tip:</span> 
+                            {untracked > (spent * 0.5) 
+                                ? "A large portion of this category is manual/untracked. Try linking more shops to this category for better insights."
+                                : "You spend 15% more on this category on weekends. Try shifting some purchases to weekdays to avoid peak pricing or impulse buys."}
                         </p>
                     </div>
                 </div>

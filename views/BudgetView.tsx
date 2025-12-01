@@ -1,12 +1,13 @@
 
 
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { BudgetData, InvestmentGoal, GoalItem } from '../types';
+import { BudgetData, InvestmentGoal, GoalItem, ShoppingListData } from '../types';
 import { formatCurrency, generateId } from '../utils/calculations';
 import { 
   Plus, Trash2, ChevronDown, ChevronRight, Calendar, Bell, BellRing, 
   ArrowRight, Wallet, Target, Receipt, 
-  CreditCard, PiggyBank, Landmark, TrendingUp, ChevronLeft 
+  CreditCard, PiggyBank, Landmark, TrendingUp, ChevronLeft, ShoppingBag, ShoppingCart, Edit2 
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Checkbox } from '../components/ui/Checkbox';
@@ -53,6 +54,8 @@ interface BudgetViewProps {
   onCreateShoppingList?: (name: string, budget: number) => void;
   onAddInvestmentGoal?: (goal: InvestmentGoal) => void;
   onGoalUpdate?: (goal: GoalItem) => void;
+  shoppingLists?: ShoppingListData[];
+  onViewShoppingList?: (listId: string, shopId: string) => void;
 }
 
 export const BudgetView: React.FC<BudgetViewProps> = ({ 
@@ -69,13 +72,16 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
   onProfileClick,
   onCreateShoppingList,
   onAddInvestmentGoal,
-  onGoalUpdate
+  onGoalUpdate,
+  shoppingLists = [],
+  onViewShoppingList
 }) => {
   const { t } = useLanguage();
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [expandedInvestmentId, setExpandedInvestmentId] = useState<string | null>(null);
   const [goalToConfirm, setGoalToConfirm] = useState<number | null>(null);
   const [addingCollection, setAddingCollection] = useState<keyof BudgetData | null>(null);
+  const [editingItem, setEditingItem] = useState<{ collection: keyof BudgetData, index: number, data: any } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Scroll to top when changing sections
@@ -172,6 +178,19 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
     }
 
     setAddingCollection(null);
+  };
+
+  const handleModalConfirm = (itemData: any) => {
+    if (editingItem) {
+        const newData = { ...data };
+        const list = newData[editingItem.collection] as any[];
+        // Merge updates (keep ID and other existing fields)
+        list[editingItem.index] = { ...list[editingItem.index], ...itemData };
+        updateData(newData);
+        setEditingItem(null);
+    } else if (addingCollection) {
+        handleAddItem(itemData);
+    }
   };
 
   const handleGoalChange = (index: number, isChecked: boolean) => {
@@ -612,7 +631,16 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
 
                 {activeSection === 'expenses' && (
                     <div className="space-y-3">
-                        {data.expenses.map((item, idx) => (
+                        {data.expenses.map((item, idx) => {
+                            const linkedShops = shoppingLists.flatMap(l => l.shops.filter(s => s.budgetCategory === item.name).map(s => ({ ...s, listId: l.id })));
+                            
+                            // Calculate total from linked shops for visualization
+                            const shopTotal = linkedShops.reduce((sum, s) => {
+                                return sum + s.items.filter(i => i.checked).reduce((acc, i) => acc + (i.actualPrice ?? i.price ?? 0), 0);
+                            }, 0);
+                            const manualSpent = item.spent - shopTotal;
+
+                            return (
                             <div key={item.id} id={item.id} className="bg-white dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm transition-all duration-300">
                                 <input 
                                     className="bg-transparent font-bold text-lg text-slate-900 dark:text-white outline-none w-full mb-3" 
@@ -636,14 +664,45 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                                             <input type="number" className="bg-transparent w-full font-bold outline-none text-pink-600 dark:text-pink-400 min-w-0" 
                                                 value={item.spent || ''} onChange={(e) => updateItem('expenses', idx, 'spent', parseFloat(e.target.value) || 0)} />
                                         </div>
+                                        {linkedShops.length > 0 && (
+                                            <div className="mt-1 pt-1 border-t border-pink-200/50 dark:border-pink-500/30 flex flex-col gap-0.5">
+                                                <div className="flex justify-between items-center text-[9px] text-pink-600/80 dark:text-pink-300">
+                                                    <span className="flex items-center gap-1"><ShoppingCart size={8}/> Lists</span>
+                                                    <span>{formatCurrency(shopTotal, data.currencySymbol)}</span>
+                                                </div>
+                                                {Math.abs(manualSpent) > 0.01 && (
+                                                    <div className="flex justify-between items-center text-[9px] text-slate-500/80 dark:text-slate-400">
+                                                        <span className="flex items-center gap-1"><Wallet size={8}/> Manual</span>
+                                                        <span>{formatCurrency(manualSpent, data.currencySymbol)}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
-                                    <button onClick={() => deleteItem('expenses', idx)} className="text-slate-300 hover:text-red-500 p-2 transition-colors self-center"><Trash2 size={20} /></button>
+                                    <div className="flex gap-1 self-center">
+                                        <button onClick={() => setEditingItem({ collection: 'expenses', index: idx, data: item })} className="text-slate-300 hover:text-indigo-500 p-2 transition-colors"><Edit2 size={20} /></button>
+                                        <button onClick={() => deleteItem('expenses', idx)} className="text-slate-300 hover:text-red-500 p-2 transition-colors"><Trash2 size={20} /></button>
+                                    </div>
                                 </div>
                                 <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                                     <div className={`h-full ${item.spent > item.budgeted ? 'bg-red-500' : 'bg-pink-500'}`} style={{width: `${Math.min((item.spent/item.budgeted)*100, 100)}%`}}></div>
                                 </div>
+                                
+                                {linkedShops.length > 0 && (
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        {linkedShops.map(shop => (
+                                            <button 
+                                                key={shop.id}
+                                                onClick={() => onViewShoppingList && onViewShoppingList(shop.listId, shop.id)}
+                                                className="text-[10px] bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded-md font-bold flex items-center gap-1 hover:bg-indigo-100 transition-colors"
+                                            >
+                                                <ShoppingBag size={10} /> Linked: {shop.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
-                        ))}
+                        )})}
                     </div>
                 )}
 
@@ -745,7 +804,10 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                      <div className="space-y-4">
                         <div className="bg-violet-100 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-500/20 rounded-xl p-4 text-center">
                             <span className="text-xs font-bold text-violet-600 dark:text-violet-300 uppercase tracking-wider block mb-1">{t('budget.summary.value')}</span>
-                            <span className="text-3xl font-extrabold text-violet-900 dark:text-white">{formatCurrency(totals.investments, data.currencySymbol)}</span>
+                            {/* Calculate investment total here or accept from props, using local calc for now to match structure */}
+                            <span className="text-3xl font-extrabold text-violet-900 dark:text-white">
+                                {formatCurrency(data.investments.filter(i => i.type === 'personal' || !i.type).reduce((s, i) => s + i.amount, 0), data.currencySymbol)}
+                            </span>
                         </div>
 
                         {data.investments.map((item, idx) => {
@@ -878,10 +940,11 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
       />
 
       <AddItemModal 
-        isOpen={addingCollection !== null}
-        onClose={() => setAddingCollection(null)}
-        onConfirm={handleAddItem}
-        collection={addingCollection}
+        isOpen={addingCollection !== null || editingItem !== null}
+        onClose={() => { setAddingCollection(null); setEditingItem(null); }}
+        onConfirm={handleModalConfirm}
+        collection={addingCollection || (editingItem ? editingItem.collection : null)}
+        initialData={editingItem ? editingItem.data : null}
         currencySymbol={data.currencySymbol}
         onCreateShoppingList={onCreateShoppingList}
       />

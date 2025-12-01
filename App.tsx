@@ -286,12 +286,13 @@ const AppContent: React.FC = () => {
   };
 
   // New Handler for Granular Shopping Item Sync (Budget + Events + Groups)
-  const handleShoppingItemChange = (amount: number, categoryName?: string, eventId?: string, expenseId?: string, groupId?: string, groupExpenseId?: string) => {
+  const handleShoppingItemChange = (amount: number, total: number, categoryName?: string, eventId?: string, expenseId?: string, groupId?: string, groupExpenseId?: string) => {
       // 1. Budget Category Sync
       if (categoryName) {
           const categoryIndex = budgetData.expenses.findIndex(e => e.name === categoryName);
           if (categoryIndex >= 0) {
               const updatedExpenses = [...budgetData.expenses];
+              // It seems to be adding `amount` (diff) to `spent`.
               const newSpent = Math.max(0, updatedExpenses[categoryIndex].spent + amount);
               updatedExpenses[categoryIndex] = {
                   ...updatedExpenses[categoryIndex],
@@ -309,10 +310,10 @@ const AppContent: React.FC = () => {
               const expenseIndex = event.expenses.findIndex(e => e.id === expenseId);
               if (expenseIndex >= 0) {
                   const updatedExpenses = [...event.expenses];
-                  const newAmount = Math.max(0, updatedExpenses[expenseIndex].amount + amount);
+                  // Use total for absolute sync
                   updatedExpenses[expenseIndex] = {
                       ...updatedExpenses[expenseIndex],
-                      amount: newAmount
+                      amount: total
                   };
                   
                   const updatedEvents = [...events];
@@ -333,10 +334,10 @@ const AppContent: React.FC = () => {
               const expenseIndex = group.expenses.findIndex(e => e.id === groupExpenseId);
               if (expenseIndex >= 0) {
                   const updatedExpenses = [...group.expenses];
-                  const newAmount = Math.max(0, updatedExpenses[expenseIndex].amount + amount);
+                  // Use total for absolute sync
                   updatedExpenses[expenseIndex] = {
                       ...updatedExpenses[expenseIndex],
-                      amount: newAmount
+                      amount: total
                   };
 
                   const updatedGroups = [...groups];
@@ -351,24 +352,10 @@ const AppContent: React.FC = () => {
   };
 
   const handleCreateShoppingList = (name: string, budget: number, members: EventMember[] = [], redirect: boolean = true, linkedData?: {eventId?: string, expenseId?: string, expenseName: string, groupId?: string, groupExpenseId?: string}) => {
-      const shopName = linkedData ? linkedData.expenseName : 'General Items';
-      
-      const defaultShop: Shop = {
-          id: generateId(),
-          name: shopName,
-          items: [],
-          budget: budget,
-          budgetCategory: undefined,
-          eventId: linkedData?.eventId,
-          expenseId: linkedData?.expenseId,
-          groupId: linkedData?.groupId,
-          groupExpenseId: linkedData?.groupExpenseId
-      };
-
       const newList: ShoppingListData = {
           id: generateId(),
           name: name,
-          shops: [defaultShop],
+          shops: [], // Modified: Always create empty list
           members: [
               { id: 'me', name: 'You', role: 'owner', avatarColor: 'bg-indigo-500' },
               ...members.map(m => ({
@@ -382,13 +369,18 @@ const AppContent: React.FC = () => {
           currencySymbol: budgetData.currencySymbol,
           color: 'bg-emerald-500',
           budget: budget,
-          lastModified: Date.now()
+          lastModified: Date.now(),
+          // Store link data on list level for inheritance to future shops
+          eventId: linkedData?.eventId,
+          expenseId: linkedData?.expenseId,
+          groupId: linkedData?.groupId,
+          groupExpenseId: linkedData?.groupExpenseId
       };
       setShoppingLists([...shoppingLists, newList]);
       
       if (redirect) {
           navigate('shopping-list');
-          setShoppingFocus({ listId: newList.id, shopId: defaultShop.id });
+          setShoppingFocus({ listId: newList.id });
       } else {
           // Provide visual feedback if not redirecting
           setTimeout(() => alert(`Shopping List "${name}" created! Check the Shopping tab.`), 100);
@@ -500,6 +492,11 @@ const AppContent: React.FC = () => {
                           ...prev,
                           goals: prev.goals.map(g => g.id === goal.id ? goal : g)
                       }));
+                  }}
+                  shoppingLists={shoppingLists}
+                  onViewShoppingList={(listId, shopId) => {
+                      setShoppingFocus({ listId, shopId });
+                      navigate('shopping-list');
                   }}
               />;
           case 'add':
