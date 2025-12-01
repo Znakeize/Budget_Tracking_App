@@ -126,7 +126,7 @@ export const ExpenseBreakdown: React.FC<ChartProps> = ({ data }) => {
 
                             {/* The Crystal Bar */}
                             <div 
-                                className="relative w-full max-w-[36px] rounded-t-lg transition-all duration-[1200ms] cubic-bezier(0.34, 1.56, 0.64, 1) glass-bar"
+                                className="relative w-full max-w-[42px] rounded-t-xl transition-all duration-[1200ms] cubic-bezier(0.34, 1.56, 0.64, 1) glass-bar"
                                 style={{ 
                                     height: `${height}%`,
                                     border: `1px solid ${item.color}50`, // Border with color opacity
@@ -135,7 +135,7 @@ export const ExpenseBreakdown: React.FC<ChartProps> = ({ data }) => {
                             >
                                 {/* Core Color Gradient Fade */}
                                 <div 
-                                    className="absolute inset-0 opacity-100 rounded-t-lg"
+                                    className="absolute inset-0 opacity-100 rounded-t-xl"
                                     style={{ background: `linear-gradient(to top, ${item.color}, transparent)` }}
                                 ></div>
 
@@ -157,9 +157,6 @@ export const ExpenseBreakdown: React.FC<ChartProps> = ({ data }) => {
                                         animationDelay: `${idx * 0.2}s`
                                     }}
                                 ></div>
-                
-                                {/* Top Edge Highlight (Rim Light) */}
-                                <div className="absolute top-0 left-0 right-0 h-[1px] bg-white/60 shadow-[0_0_6px_white]"></div>
                             </div>
 
                             {/* Category Label */}
