@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, CreditCard, Smartphone, Globe, Wallet, Lock, ArrowRight, Loader2 } from 'lucide-react';
@@ -46,7 +45,7 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({ isOpen
 
     // Use Portal to render outside the main app container to avoid z-index stacking context issues
     return createPortal(
-        <div className="fixed inset-0 z-[5000] flex items-end sm:items-center justify-center p-4 pb-safe-bottom sm:pb-4">
+        <div className="fixed inset-0 z-[5000] flex items-end sm:items-center justify-center p-4 pb-safe sm:pb-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
             
             <div className="relative bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-10 sm:slide-in-from-bottom-2 duration-300 max-h-[80vh] overflow-y-auto custom-scrollbar mb-20 sm:mb-0">

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Home, Wallet, Plus, Crown, Menu } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -22,7 +21,7 @@ export const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange, 
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pointer-events-none">
+    <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pointer-events-none pb-safe">
       <div className="w-full max-w-md pointer-events-auto pb-0">
         <div className="relative h-[50px] w-full filter drop-shadow-[0_-5px_10px_rgba(0,0,0,0.05)] dark:drop-shadow-[0_-5px_10px_rgba(0,0,0,0.2)]">
             

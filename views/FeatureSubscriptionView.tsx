@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card } from '../components/ui/Card';
 import { ChevronLeft, Check, Shield, RefreshCcw, TrendingUp, PieChart, CalendarHeart, Users, CheckCircle, Briefcase } from 'lucide-react';
@@ -189,7 +188,7 @@ export const FeatureSubscriptionView: React.FC<FeatureSubscriptionViewProps> = (
         </div>
 
         {/* Fixed Bottom Button - Adjusted padding for when nav is hidden */}
-        <div className="fixed bottom-0 left-0 right-0 z-[60] p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 pb-8 safe-area-bottom max-w-md mx-auto">
+        <div className="fixed bottom-0 left-0 right-0 z-[60] p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 pb-safe pb-8 safe-area-bottom max-w-md mx-auto">
             <button 
                 onClick={() => setShowPayment(true)}
                 className={`w-full py-4 rounded-xl font-bold text-white shadow-lg active:scale-[0.98] transition-all bg-gradient-to-r ${feature.gradient}`}
