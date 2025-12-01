@@ -843,10 +843,30 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData,
                 setAmount(initialData.amount.toString());
                 setPaidBy(initialData.paidBy);
                 setCategory(initialData.category);
-                // For editing, we simplify to equal for now as reconstructing exact splits can be complex if not stored precisely
-                // In a real app, we'd analyze `initialData.split` to set splitMode
-                setSplitMode('equal');
-                setSelectedMembers(Object.keys(initialData.split));
+                
+                const memberIds = Object.keys(initialData.split);
+                setSelectedMembers(memberIds);
+
+                // Detect split type based on values
+                // If values are all roughly equal, it's 'equal'. Otherwise it was likely percentage or unequal.
+                // Defaulting unequal to percent ensures that subsequent total amount changes auto-update the splits proportionally.
+                const values = Object.values(initialData.split) as number[];
+                const allEqual = values.length > 0 && values.every(v => Math.abs(v - values[0]) < 0.02); // Tolerance for float math
+                
+                if (allEqual) {
+                    setSplitMode('equal');
+                } else {
+                    // Default to percent for auto-update capability on total change
+                    setSplitMode('percent');
+                    const total = initialData.amount;
+                    const newManuals: Record<string, string> = {};
+                    memberIds.forEach(id => {
+                        const val = (initialData.split[id] as number) || 0;
+                        const pct = total > 0 ? (val / total) * 100 : 0;
+                        newManuals[id] = pct.toFixed(2);
+                    });
+                    setManualSplits(newManuals);
+                }
             } else {
                 setTitle('');
                 setAmount('');
@@ -859,6 +879,20 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData,
             }
         }
     }, [isOpen, initialData, group]);
+
+    useEffect(() => {
+        if (splitMode === 'equal') {
+            const total = parseFloat(amount) || 0;
+            if (selectedMembers.length > 0) {
+                const share = total / selectedMembers.length;
+                const newSplits: Record<string, string> = {};
+                selectedMembers.forEach(id => {
+                    newSplits[id] = share.toFixed(2);
+                });
+                setManualSplits(newSplits);
+            }
+        }
+    }, [amount, selectedMembers, splitMode]);
 
     // Calculate dynamic amount per member based on mode
     const getMemberShare = (memberId: string) => {
@@ -887,6 +921,22 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData,
 
     const handleManualInputChange = (memberId: string, value: string) => {
         setManualSplits({ ...manualSplits, [memberId]: value });
+    };
+
+    const handleSetSplitMode = (mode: 'equal' | 'unequal' | 'percent') => {
+        setSplitMode(mode);
+        if (mode === 'percent') {
+            const pct = (100 / selectedMembers.length).toFixed(2);
+            const newSplits: Record<string, string> = {};
+            selectedMembers.forEach(id => newSplits[id] = pct);
+            setManualSplits(newSplits);
+        } else if (mode === 'unequal') {
+            const total = parseFloat(amount) || 0;
+            const share = (total / selectedMembers.length).toFixed(2);
+            const newSplits: Record<string, string> = {};
+            selectedMembers.forEach(id => newSplits[id] = share);
+            setManualSplits(newSplits);
+        }
     };
 
     if (!isOpen) return null;
@@ -1030,7 +1080,7 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData,
                             ].map((mode) => (
                                 <button
                                     key={mode.id}
-                                    onClick={() => setSplitMode(mode.id as any)}
+                                    onClick={() => handleSetSplitMode(mode.id as any)}
                                     className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
                                         splitMode === mode.id 
                                         ? 'bg-indigo-600 text-white shadow-sm' 
@@ -1064,22 +1114,29 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData,
                                     </div>
                                     
                                     {isSelected && (
-                                        <div className="w-20">
+                                        <div className="w-24">
                                             {splitMode === 'equal' ? (
                                                 <div className="text-right text-xs font-bold text-slate-300">
                                                     {group.currency} {amountVal.toFixed(2)}
                                                 </div>
                                             ) : (
-                                                <div className="relative">
-                                                    {splitMode === 'unequal' && <span className="absolute left-2 top-1.5 text-slate-500 text-[9px]">{group.currency}</span>}
-                                                    {splitMode === 'percent' && <span className="absolute right-2 top-1.5 text-slate-500 text-[9px]">%</span>}
-                                                    <input 
-                                                        type="number"
-                                                        className={`w-full bg-slate-900 border border-slate-700 rounded-lg py-1 text-[10px] font-bold text-white outline-none focus:border-indigo-500 text-right ${splitMode === 'unequal' ? 'pl-6 pr-2' : 'pr-5 pl-2'}`}
-                                                        placeholder="0"
-                                                        value={manualSplits[m.id] || ''}
-                                                        onChange={(e) => handleManualInputChange(m.id, e.target.value)}
-                                                    />
+                                                <div className="flex flex-col items-end">
+                                                    <div className="relative w-full">
+                                                        {splitMode === 'unequal' && <span className="absolute left-2 top-1.5 text-slate-500 text-[9px]">{group.currency}</span>}
+                                                        {splitMode === 'percent' && <span className="absolute right-2 top-1.5 text-slate-500 text-[9px]">%</span>}
+                                                        <input 
+                                                            type="number"
+                                                            className={`w-full bg-slate-900 border border-slate-700 rounded-lg py-1 text-[10px] font-bold text-white outline-none focus:border-indigo-500 text-right ${splitMode === 'unequal' ? 'pl-6 pr-2' : 'pr-5 pl-2'}`}
+                                                            placeholder="0"
+                                                            value={manualSplits[m.id] || ''}
+                                                            onChange={(e) => handleManualInputChange(m.id, e.target.value)}
+                                                        />
+                                                    </div>
+                                                    {splitMode === 'percent' && (
+                                                        <div className="text-[9px] text-slate-400 font-mono mt-0.5">
+                                                            {group.currency} {amountVal.toFixed(2)}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>

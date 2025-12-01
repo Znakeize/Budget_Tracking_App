@@ -60,7 +60,6 @@ export const ExpenseBreakdown: React.FC<ChartProps> = ({ data }) => {
         labels: ['Exp', 'Bills', 'Debt', 'Goals', 'Save', 'Inv'],
         datasets: [{
             label: 'Amount',
-            // Use ACTUALS here for the breakdown chart to show what has been spent/paid
             data: [
                 totals.totalExpenses, 
                 totals.actualBills, 
@@ -70,17 +69,24 @@ export const ExpenseBreakdown: React.FC<ChartProps> = ({ data }) => {
                 totals.actualInvestments
             ],
             backgroundColor: [
-                'rgba(236, 72, 153, 0.8)', // Pink
-                'rgba(139, 92, 246, 0.8)', // Violet
-                'rgba(249, 115, 22, 0.8)', // Orange
-                'rgba(59, 130, 246, 0.8)', // Blue
-                'rgba(16, 185, 129, 0.8)', // Emerald
-                'rgba(167, 139, 250, 0.8)'  // Light Purple
+                '#ec4899', // Pink
+                '#8b5cf6', // Violet
+                '#f97316', // Orange
+                '#3b82f6', // Blue
+                '#10b981', // Emerald
+                '#a855f7'  // Light Purple
             ],
-            borderRadius: 6,
+            borderRadius: 8,
             borderSkipped: false,
-            barThickness: 'flex' as const,
-            maxBarThickness: 32
+            barThickness: 28,
+            hoverBackgroundColor: [
+                '#f472b6', 
+                '#a78bfa', 
+                '#fb923c', 
+                '#60a5fa', 
+                '#34d399', 
+                '#c084fc'
+            ]
         }]
     }), [totals]);
 
@@ -90,12 +96,14 @@ export const ExpenseBreakdown: React.FC<ChartProps> = ({ data }) => {
         plugins: { 
             legend: { display: false },
             tooltip: {
-                backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                padding: 10,
-                cornerRadius: 8,
+                backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                padding: 12,
+                cornerRadius: 12,
+                titleFont: { size: 13, family: "'Inter', sans-serif" },
+                bodyFont: { size: 14, family: "'Inter', sans-serif", weight: 'bold' },
                 displayColors: false,
                 callbacks: {
-                    label: (context: any) => `${context.parsed.y}`
+                    label: (context: any) => `${data.currencySymbol}${context.parsed.y.toLocaleString()}`
                 }
             }
         },
@@ -103,32 +111,40 @@ export const ExpenseBreakdown: React.FC<ChartProps> = ({ data }) => {
             y: { 
                 beginAtZero: true, 
                 grid: { 
-                    color: 'rgba(148, 163, 184, 0.1)', // Visible in both light/dark
+                    color: 'rgba(148, 163, 184, 0.05)', 
                     drawBorder: false 
                 }, 
                 ticks: { 
                     color: '#94a3b8', 
-                    font: { size: 10, family: "'Inter', sans-serif" } 
+                    font: { size: 10, family: "'Inter', sans-serif" },
+                    callback: (value: any) => value >= 1000 ? `${value/1000}k` : value
                 },
                 border: { display: false }
             },
             x: { 
                 grid: { display: false }, 
                 ticks: { 
-                    color: '#94a3b8', 
-                    font: { size: 10, family: "'Inter', sans-serif", weight: 'bold' } 
+                    color: '#64748b', 
+                    font: { size: 11, family: "'Inter', sans-serif", weight: 'bold' } 
                 },
                 border: { display: false }
             }
         },
         animation: {
-            duration: 500
+            duration: 1200,
+            easing: 'easeOutQuart'
+        },
+        layout: {
+            padding: { top: 10 }
         }
-    }), []);
+    }), [data.currencySymbol]);
 
     return (
-        <div className="h-48 w-full">
-            <Bar data={chartData} options={options as any} />
+        <div className="h-56 w-full relative">
+            {/* Filter drop-shadow applies to non-transparent parts (the bars), creating a glow effect */}
+            <div style={{ width: '100%', height: '100%', filter: 'drop-shadow(0px 4px 8px rgba(0, 0, 0, 0.15))' }}>
+                 <Bar data={chartData} options={options as any} />
+            </div>
         </div>
     );
 }
