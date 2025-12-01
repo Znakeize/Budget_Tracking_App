@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { BudgetData, ShoppingListData } from '../types';
 import { Card } from '../components/ui/Card';
@@ -93,6 +92,18 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({
   // Detail Modal State
   const [selectedCategoryDetail, setSelectedCategoryDetail] = useState<string | null>(null);
 
+  // Filter State
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [filterConfig, setFilterConfig] = useState({
+      timeMode: 'preset', // 'preset', 'month', 'range'
+      timeframe: 'ALL', // 3M, 6M, 1Y, ALL
+      specificMonth: { month: new Date().getMonth(), year: new Date().getFullYear() },
+      dateRange: { start: '', end: '' },
+      categories: [] as string[],
+      minAmount: '',
+      maxAmount: ''
+  });
+
   // --- Tools State ---
   const [alertSettings, setAlertSettings] = useState({
       thresholds: true,
@@ -102,10 +113,72 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({
       subs: false
   });
 
-  // --- Data Processing ---
-  const sortedHistory = useMemo(() => [...history].sort((a, b) => a.created - b.created), [history]);
-  const currentPeriod = sortedHistory[sortedHistory.length - 1] || history[0];
-  const previousPeriod = sortedHistory.length > 1 ? sortedHistory[sortedHistory.length - 2] : null;
+  // --- Data Processing & Filtration ---
+  
+  // 1. Get all unique categories for filter dropdown
+  const allCategories = useMemo(() => {
+      const cats = new Set<string>();
+      history.forEach(h => h.expenses.forEach(e => cats.add(e.name)));
+      return Array.from(cats).sort();
+  }, [history]);
+
+  // 2. Filter History & Current Period
+  const { sortedHistory, currentPeriod, isFilterActive } = useMemo(() => {
+      let data = [...history].sort((a, b) => a.created - b.created);
+      
+      const isCatActive = filterConfig.categories.length > 0;
+      const isAmtActive = !!filterConfig.minAmount || !!filterConfig.maxAmount;
+      let isTimeActive = false;
+
+      // Timeframe Filter Logic
+      if (filterConfig.timeMode === 'preset') {
+          if (filterConfig.timeframe !== 'ALL') {
+              const months = filterConfig.timeframe === '3M' ? 3 : filterConfig.timeframe === '6M' ? 6 : 12;
+              data = data.slice(-months);
+              isTimeActive = true;
+          }
+      } else if (filterConfig.timeMode === 'month') {
+          data = data.filter(h => h.month === filterConfig.specificMonth.month && h.year === filterConfig.specificMonth.year);
+          isTimeActive = true;
+      } else if (filterConfig.timeMode === 'range') {
+          if (filterConfig.dateRange.start && filterConfig.dateRange.end) {
+              const start = new Date(filterConfig.dateRange.start).getTime();
+              const end = new Date(filterConfig.dateRange.end).getTime();
+              // Filter based on the period's "created" date or construct date from month/year
+              data = data.filter(h => {
+                  const periodDate = new Date(h.year, h.month, 1).getTime();
+                  return periodDate >= start && periodDate <= end;
+              });
+              isTimeActive = true;
+          }
+      }
+
+      // Content Filter
+      const processed = data.map(period => ({
+          ...period,
+          expenses: period.expenses.filter(e => {
+              const catMatch = !isCatActive || filterConfig.categories.includes(e.name);
+              const minMatch = !filterConfig.minAmount || e.spent >= parseFloat(filterConfig.minAmount);
+              const maxMatch = !filterConfig.maxAmount || e.spent <= parseFloat(filterConfig.maxAmount);
+              return catMatch && minMatch && maxMatch;
+          }),
+          income: period.income.filter(i => {
+              // Apply amount filter to income as well
+              const minMatch = !filterConfig.minAmount || i.actual >= parseFloat(filterConfig.minAmount);
+              const maxMatch = !filterConfig.maxAmount || i.actual <= parseFloat(filterConfig.maxAmount);
+              return minMatch && maxMatch;
+          })
+      }));
+
+      // Fallback if filtration removes everything, though structure remains
+      const current = processed.length > 0 ? processed[processed.length - 1] : { ...history[history.length - 1], expenses: [], income: [] };
+      
+      return { 
+          sortedHistory: processed, 
+          currentPeriod: current,
+          isFilterActive: isTimeActive || isCatActive || isAmtActive
+      };
+  }, [history, filterConfig]);
   
   const currentTotals = useMemo(() => currentPeriod ? calculateTotals(currentPeriod) : { totalExpenses: 0, totalIncome: 0, actualBills: 0, actualDebts: 0, totalSavings: 0, actualInvestments: 0, leftToSpend: 0, totalPortfolioValue: 0, totalOut: 0 }, [currentPeriod]);
 
@@ -906,6 +979,15 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({
                     </div>
                 </div>
                 <div className="pb-1 flex items-center gap-1">
+                    {!['reports', 'tools'].includes(activeTab) && (
+                        <button 
+                            onClick={() => setIsFilterOpen(true)}
+                            className={`relative p-1.5 focus:outline-none active:scale-95 transition-transform ${isFilterActive ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 rounded-full' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
+                        >
+                            <Filter size={20} />
+                            {isFilterActive && <span className="absolute top-1 right-1 w-2 h-2 bg-indigo-500 rounded-full border border-white dark:border-slate-900"></span>}
+                        </button>
+                    )}
                     <button 
                         onClick={onToggleNotifications}
                         className="relative p-1.5 focus:outline-none active:scale-95 transition-transform"
@@ -947,14 +1029,14 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({
        </div>
 
        <div className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-28">
-           {activeTab === 'overview' && <AnalysisOverview history={history} currentPeriod={currentPeriod} currencySymbol={currencySymbol} />}
-           {activeTab === 'income' && <IncomeAnalysisSection history={history} currentPeriod={currentPeriod} currencySymbol={currencySymbol} />}
+           {activeTab === 'overview' && <AnalysisOverview history={sortedHistory} currentPeriod={currentPeriod} currencySymbol={currencySymbol} />}
+           {activeTab === 'income' && <IncomeAnalysisSection history={sortedHistory} currentPeriod={currentPeriod} currencySymbol={currencySymbol} />}
            {activeTab === 'expenses' && renderExpenses()}
            {activeTab === 'bills' && renderBills()}
            {activeTab === 'debts' && renderDebts()}
            {activeTab === 'savings' && renderSavings()}
-           {activeTab === 'cashflow' && <CashFlowAnalysisSection history={history} currentPeriod={currentPeriod} currencySymbol={currencySymbol} />}
-           {activeTab === 'planner' && <AnalysisPlanner history={history} currentPeriod={currentPeriod} currencySymbol={currencySymbol} />}
+           {activeTab === 'cashflow' && <CashFlowAnalysisSection history={sortedHistory} currentPeriod={currentPeriod} currencySymbol={currencySymbol} />}
+           {activeTab === 'planner' && <AnalysisPlanner history={sortedHistory} currentPeriod={currentPeriod} currencySymbol={currencySymbol} />}
            {activeTab === 'reports' && (
                <AnalysisReportDashboard 
                    history={history} 
@@ -971,11 +1053,22 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({
                onClose={() => setSelectedCategoryDetail(null)}
                categoryName={selectedCategoryDetail}
                currentPeriod={currentPeriod}
-               history={history}
+               history={sortedHistory}
                currencySymbol={currencySymbol}
                shoppingLists={shoppingLists}
            />
        )}
+
+       {/* Filter Modal */}
+       <FilterModal 
+           isOpen={isFilterOpen}
+           onClose={() => setIsFilterOpen(false)}
+           config={filterConfig}
+           onUpdate={setFilterConfig}
+           allCategories={allCategories}
+           currencySymbol={currencySymbol}
+           years={Array.from(new Set(history.map(h => h.year))).sort((a: number, b: number) => b - a)}
+       />
     </div>
   );
 };
@@ -1193,6 +1286,193 @@ const CategoryDetailModal = ({ isOpen, onClose, categoryName, currentPeriod, his
                                 ? "A large portion of this category is manual/untracked. Try linking more shops to this category for better insights."
                                 : "You spend 15% more on this category on weekends. Try shifting some purchases to weekdays to avoid peak pricing or impulse buys."}
                         </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- Filter Modal ---
+const FilterModal = ({ isOpen, onClose, config, onUpdate, allCategories, currencySymbol, years }: any) => {
+    if (!isOpen) return null;
+
+    const handleReset = () => {
+        onUpdate({
+            timeMode: 'preset',
+            timeframe: 'ALL',
+            specificMonth: { month: new Date().getMonth(), year: new Date().getFullYear() },
+            dateRange: { start: '', end: '' },
+            categories: [],
+            minAmount: '',
+            maxAmount: ''
+        });
+        onClose();
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto custom-scrollbar">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <Filter size={18} /> Advanced Filters
+                    </h3>
+                    <button onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
+                </div>
+
+                <div className="space-y-6">
+                    {/* Time Mode Tabs */}
+                    <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                        {['preset', 'month', 'range'].map((mode) => (
+                            <button
+                                key={mode}
+                                onClick={() => onUpdate({...config, timeMode: mode})}
+                                className={`flex-1 py-1.5 text-xs font-bold rounded-lg capitalize transition-all ${config.timeMode === mode ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-slate-500'}`}
+                            >
+                                {mode === 'preset' ? 'Quick' : mode}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Time Filter Content */}
+                    {config.timeMode === 'preset' && (
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Quick Period</label>
+                            <div className="grid grid-cols-4 gap-2">
+                                {['3M', '6M', '1Y', 'ALL'].map(tf => (
+                                    <button
+                                        key={tf}
+                                        onClick={() => onUpdate({...config, timeframe: tf})}
+                                        className={`py-2 rounded-lg text-xs font-bold transition-all ${config.timeframe === tf ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                                    >
+                                        {tf}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {config.timeMode === 'month' && (
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Year</label>
+                                <select 
+                                    className="w-full bg-slate-100 dark:bg-slate-800 p-2 rounded-xl text-sm font-bold outline-none"
+                                    value={config.specificMonth.year}
+                                    onChange={(e) => onUpdate({...config, specificMonth: { ...config.specificMonth, year: parseInt(e.target.value) }})}
+                                >
+                                    {(years && years.length > 0 ? years : [new Date().getFullYear()]).map((y: number) => (
+                                        <option key={y} value={y}>{y}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Month</label>
+                                <select 
+                                    className="w-full bg-slate-100 dark:bg-slate-800 p-2 rounded-xl text-sm font-bold outline-none"
+                                    value={config.specificMonth.month}
+                                    onChange={(e) => onUpdate({...config, specificMonth: { ...config.specificMonth, month: parseInt(e.target.value) }})}
+                                >
+                                    {MONTH_NAMES.map((m, i) => (
+                                        <option key={i} value={i}>{m}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    )}
+
+                    {config.timeMode === 'range' && (
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Start Date</label>
+                                <input 
+                                    type="date" 
+                                    className="w-full bg-slate-100 dark:bg-slate-800 p-2 rounded-xl text-xs font-bold outline-none"
+                                    value={config.dateRange.start}
+                                    onChange={(e) => onUpdate({...config, dateRange: { ...config.dateRange, start: e.target.value }})}
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">End Date</label>
+                                <input 
+                                    type="date" 
+                                    className="w-full bg-slate-100 dark:bg-slate-800 p-2 rounded-xl text-xs font-bold outline-none"
+                                    value={config.dateRange.end}
+                                    onChange={(e) => onUpdate({...config, dateRange: { ...config.dateRange, end: e.target.value }})}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Amount Range */}
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Amount Range</label>
+                        <div className="flex gap-3 items-center">
+                            <div className="relative flex-1">
+                                <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">{currencySymbol}</span>
+                                <input 
+                                    type="number" 
+                                    className="w-full bg-slate-100 dark:bg-slate-800 rounded-xl py-2 pl-7 pr-3 text-sm font-bold outline-none"
+                                    placeholder="Min"
+                                    value={config.minAmount}
+                                    onChange={e => onUpdate({...config, minAmount: e.target.value})}
+                                />
+                            </div>
+                            <span className="text-slate-400 font-bold">-</span>
+                            <div className="relative flex-1">
+                                <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">{currencySymbol}</span>
+                                <input 
+                                    type="number" 
+                                    className="w-full bg-slate-100 dark:bg-slate-800 rounded-xl py-2 pl-7 pr-3 text-sm font-bold outline-none"
+                                    placeholder="Max"
+                                    value={config.maxAmount}
+                                    onChange={e => onUpdate({...config, maxAmount: e.target.value})}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Categories */}
+                    <div>
+                        <div className="flex justify-between items-center mb-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">Categories</label>
+                            {config.categories.length > 0 && (
+                                <button onClick={() => onUpdate({...config, categories: []})} className="text-[10px] text-indigo-500 font-bold">Clear All</button>
+                            )}
+                        </div>
+                        <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
+                            {allCategories.map((cat: string) => {
+                                const isSelected = config.categories.includes(cat);
+                                return (
+                                    <button
+                                        key={cat}
+                                        onClick={() => {
+                                            const newCats = isSelected 
+                                                ? config.categories.filter((c: string) => c !== cat)
+                                                : [...config.categories, cat];
+                                            onUpdate({...config, categories: newCats});
+                                        }}
+                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
+                                            isSelected 
+                                            ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400' 
+                                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'
+                                        }`}
+                                    >
+                                        {cat}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                        <button onClick={handleReset} className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold rounded-xl text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                            Reset
+                        </button>
+                        <button onClick={onClose} className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm hover:bg-indigo-700 transition-colors shadow-lg active:scale-95">
+                            Apply Filters
+                        </button>
                     </div>
                 </div>
             </div>

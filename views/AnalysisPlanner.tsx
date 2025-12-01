@@ -42,7 +42,6 @@ export const AnalysisPlanner: React.FC<AnalysisPlannerProps> = ({ history, curre
       if (projected.netSavings <= 0) return [];
 
       // Distribute net savings across goals equally for simplified projection
-      // Or prioritize by order. Let's do equal distribution for active goals.
       const monthlyPerGoal = activeGoals.length > 0 ? projected.netSavings / activeGoals.length : 0;
       
       return activeGoals.map(g => {
@@ -60,24 +59,104 @@ export const AnalysisPlanner: React.FC<AnalysisPlannerProps> = ({ history, curre
       });
   }, [activeGoals, projected.netSavings]);
 
-  // --- Chart Data ---
-  const savingsChartData = {
-      labels: ['Current Scenario', 'Adjusted Scenario'],
-      datasets: [{
-          label: 'Monthly Savings Potential',
-          data: [projected.currentSavings, projected.netSavings],
-          backgroundColor: [
-              'rgba(148, 163, 184, 0.5)', // Slate
-              projected.netSavings >= projected.currentSavings ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)' // Green or Red
-          ],
-          borderRadius: 8,
-          barThickness: 40
-      }]
-  };
+  // --- Goal Progress Rings Data ---
+  const ringsData = useMemo(() => {
+      // Take top 3 active goals for the rings to keep it readable
+      const topGoals = activeGoals.slice(0, 3);
+      const colors = ['#6366f1', '#10b981', '#f59e0b']; // Indigo, Emerald, Amber
+
+      return {
+          labels: topGoals.map(g => g.name),
+          datasets: topGoals.map((g, i) => {
+              const progress = g.target > 0 ? Math.min((g.current / g.target) * 100, 100) : 0;
+              const remaining = 100 - progress;
+              
+              return {
+                  label: g.name,
+                  data: [progress, remaining],
+                  backgroundColor: [colors[i], 'rgba(255, 255, 255, 0.1)'], // Color vs Track
+                  borderWidth: 0,
+                  borderRadius: 20,
+                  cutout: `${40 + (i * 12)}%`, // Creates the concentric effect by varying cutout if we weren't relying on stacking. 
+                  // ChartJS Stacking: Dataset 0 is outermost.
+                  // To make them concentric rings, we simply provide multiple datasets.
+                  weight: 1
+              };
+          }).reverse() // Reverse so first goal is outer ring
+      };
+  }, [activeGoals]);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 pb-6">
         
+        {/* Goal Progress Rings Card */}
+        <Card className="p-6 bg-slate-900 text-white border-none shadow-xl relative overflow-hidden">
+            {/* Ambient Background */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
+            
+            <div className="flex items-center gap-3 mb-6 relative z-10">
+                <div className="p-2 bg-white/10 rounded-full backdrop-blur-sm">
+                    <Target size={20} className="text-indigo-400" />
+                </div>
+                <h3 className="text-lg font-bold">Goal Progress Rings</h3>
+            </div>
+
+            <div className="flex flex-col md:flex-row items-center gap-8 relative z-10">
+                {/* Rings Chart */}
+                <div className="relative w-48 h-48 flex-shrink-0">
+                    {activeGoals.length > 0 ? (
+                        <Doughnut 
+                            data={ringsData}
+                            options={{
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { 
+                                    legend: { display: false },
+                                    tooltip: { enabled: false } 
+                                },
+                                animation: { animateScale: true, animateRotate: true },
+                                cutout: '40%'
+                            }}
+                        />
+                    ) : (
+                         <div className="w-full h-full rounded-full border-4 border-slate-800 border-dashed flex items-center justify-center text-slate-600 text-xs">No Goals</div>
+                    )}
+                    {/* Center Text */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <span className="text-3xl font-black text-white">{activeGoals.length}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active</span>
+                    </div>
+                </div>
+
+                {/* Legend / List */}
+                <div className="flex-1 w-full space-y-4">
+                    {activeGoals.slice(0, 3).map((goal, i) => {
+                         const progress = goal.target > 0 ? (goal.current / goal.target) * 100 : 0;
+                         const colors = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-500'];
+                         const textColors = ['text-indigo-400', 'text-emerald-400', 'text-amber-400'];
+
+                         return (
+                             <div key={goal.id} className="flex justify-between items-center group cursor-default">
+                                 <div className="flex items-center gap-3">
+                                     <div className={`w-3 h-3 rounded-full ${colors[i]} shadow-[0_0_10px_rgba(0,0,0,0.5)] group-hover:scale-125 transition-transform`}></div>
+                                     <div>
+                                         <div className="text-sm font-bold text-slate-200">{goal.name}</div>
+                                         <div className="text-[10px] text-slate-500">
+                                             {formatCurrency(goal.current, currencySymbol)} / {formatCurrency(goal.target, currencySymbol)}
+                                         </div>
+                                     </div>
+                                 </div>
+                                 <div className="text-right">
+                                     <div className={`text-sm font-bold ${textColors[i]}`}>{Math.round(progress)}%</div>
+                                 </div>
+                             </div>
+                         );
+                    })}
+                    {activeGoals.length === 0 && <p className="text-sm text-slate-500 italic">Set goals in the Budget tab to see them here.</p>}
+                </div>
+            </div>
+        </Card>
+
         {/* Interactive Control Panel */}
         <Card className="p-5 bg-white dark:bg-slate-800 border-l-4 border-l-indigo-500">
             <div className="flex items-center gap-2 mb-6">

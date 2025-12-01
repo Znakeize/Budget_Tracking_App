@@ -4,7 +4,7 @@ import {
   Filter, Calendar, DollarSign, TrendingUp, TrendingDown, 
   ArrowUpRight, ArrowDownRight, Search, ChevronDown, ChevronUp,
   BarChart2, PieChart, Download, Sliders, ArrowUpDown, FileText, Check,
-  Layers, Activity, Printer, Share2, Grid, Sparkles
+  Layers, Activity, Printer, Share2, Grid, Sparkles, X, Loader2
 } from 'lucide-react';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import { 
@@ -17,6 +17,7 @@ import { MONTH_NAMES } from '../constants';
 import { Card } from '../components/ui/Card';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 ChartJS.register(
   CategoryScale, LinearScale, PointElement, LineElement, 
@@ -29,7 +30,7 @@ interface AnalysisReportDashboardProps {
 }
 
 type ReportType = 'spending' | 'income_vs_expense' | 'trend' | 'heatmap';
-type Timeframe = '3M' | '6M' | 'YTD' | '1Y' | 'ALL';
+type Timeframe = '3M' | '6M' | 'YTD' | '1Y' | 'ALL' | 'Month' | 'Range';
 
 interface ProcessedTx {
   id: string;
@@ -51,6 +52,19 @@ export const AnalysisReportDashboard: React.FC<AnalysisReportDashboardProps> = (
   const [sortConfig, setSortConfig] = useState<{ key: keyof ProcessedTx, direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  
+  // Custom Date Filters
+  const [specificMonth, setSpecificMonth] = useState({ month: new Date().getMonth(), year: new Date().getFullYear() });
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+
+  // --- Helpers ---
+  const availableYears = useMemo(() => {
+      const years = new Set<number>();
+      history.forEach(h => years.add(h.year));
+      years.add(new Date().getFullYear());
+      return Array.from(years).sort((a, b) => b - a);
+  }, [history]);
 
   // --- Data Processing ---
   const allTransactions = useMemo(() => {
@@ -132,7 +146,20 @@ export const AnalysisReportDashboard: React.FC<AnalysisReportDashboardProps> = (
     const now = new Date();
 
     // 1. Timeframe
-    if (timeframe === '3M') {
+    if (timeframe === 'Month') {
+        data = data.filter(t => {
+            const d = new Date(t.date);
+            return d.getMonth() === specificMonth.month && d.getFullYear() === specificMonth.year;
+        });
+    } else if (timeframe === 'Range') {
+        if (dateRange.start && dateRange.end) {
+            const start = new Date(dateRange.start).getTime();
+            const endOfDay = new Date(dateRange.end);
+            endOfDay.setHours(23, 59, 59, 999);
+            const end = endOfDay.getTime();
+            data = data.filter(t => t.date >= start && t.date <= end);
+        }
+    } else if (timeframe === '3M') {
       const cutOff = new Date(now.setMonth(now.getMonth() - 3));
       data = data.filter(t => t.date >= cutOff.getTime());
     } else if (timeframe === '6M') {
@@ -169,7 +196,7 @@ export const AnalysisReportDashboard: React.FC<AnalysisReportDashboardProps> = (
     });
 
     return data;
-  }, [allTransactions, timeframe, searchTerm, sortConfig, selectedCategories]);
+  }, [allTransactions, timeframe, searchTerm, sortConfig, selectedCategories, specificMonth, dateRange]);
 
   // --- Report Specific Aggregations ---
   const reportData = useMemo(() => {
@@ -351,76 +378,93 @@ export const AnalysisReportDashboard: React.FC<AnalysisReportDashboardProps> = (
   }, [filteredData, reportType, currencySymbol]);
 
   // --- Handlers ---
-  const handleExportPDF = () => {
-      const doc = new jsPDF();
-      doc.setFontSize(22);
-      doc.text("Financial Analysis Report", 20, 20);
+  const handleExportPDF = async () => {
+      const element = document.getElementById('printable-report-area');
+      if (!element) return;
       
-      doc.setFontSize(10);
-      doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 30);
-      doc.text(`Timeframe: ${timeframe}`, 20, 35);
-      
-      // Summary Box
-      doc.setDrawColor(200);
-      doc.setFillColor(245, 247, 250);
-      doc.roundedRect(20, 45, 170, 30, 3, 3, 'FD');
-      
-      doc.setFontSize(12);
-      doc.text("Total Income", 30, 55);
-      doc.setFontSize(14); doc.setFont("helvetica", "bold");
-      doc.text(formatCurrency(reportData.totalIncome, currencySymbol), 30, 65);
-      
-      doc.setFont("helvetica", "normal"); doc.setFontSize(12);
-      doc.text("Total Outflow", 90, 55);
-      doc.setFontSize(14); doc.setFont("helvetica", "bold");
-      doc.text(formatCurrency(reportData.totalExpense + reportData.totalInvested, currencySymbol), 90, 65);
-      
-      doc.setFont("helvetica", "normal"); doc.setFontSize(12);
-      doc.text("Net Cash Flow", 150, 55);
-      doc.setFontSize(14); doc.setFont("helvetica", "bold");
-      doc.setTextColor(reportData.netCashFlow >= 0 ? 0 : 200, reportData.netCashFlow >= 0 ? 150 : 0, 0);
-      doc.text(formatCurrency(reportData.netCashFlow, currencySymbol), 150, 65);
-      
-      doc.setTextColor(0);
-      
-      // Insights
-      let y = 90;
-      doc.setFontSize(14); doc.setFont("helvetica", "bold");
-      doc.text("Key Insights", 20, y);
-      y += 10;
-      doc.setFontSize(10); doc.setFont("helvetica", "normal");
-      reportData.insights.forEach(ins => {
-          const cleanText = ins.replace(/\*\*/g, '');
-          doc.text(`• ${cleanText}`, 25, y);
-          y += 7;
-      });
-      
-      // Table
-      y += 10;
-      doc.setFontSize(14); doc.setFont("helvetica", "bold");
-      doc.text("Detailed Ledger", 20, y);
-      y += 10;
-      
-      // Table Header
-      doc.setFillColor(220, 220, 220);
-      doc.rect(20, y-5, 170, 8, 'F');
-      doc.setFontSize(9);
-      doc.text("Date", 25, y);
-      doc.text("Category", 60, y);
-      doc.text("Type", 100, y);
-      doc.text("Amount", 170, y, { align: 'right' });
-      y += 8;
-      
-      filteredData.slice(0, 30).forEach(t => {
-          if (y > 270) { doc.addPage(); y = 20; }
-          doc.text(t.dateStr, 25, y);
-          doc.text(t.category, 60, y);
-          doc.text(t.type.toUpperCase(), 100, y);
-          doc.text(formatCurrency(t.amount, currencySymbol), 170, y, { align: 'right' });
-          y += 7;
-      });
-      
-      doc.save(`Financial_Report_${timeframe}.pdf`);
+      setIsExporting(true);
+
+      try {
+          // 1. Create a deep clone for print prep
+          const clone = element.cloneNode(true) as HTMLElement;
+          
+          // 2. Fix Canvas Elements (ChartJS)
+          // Cloning DOM nodes does not clone canvas pixel data. We must manually copy it.
+          const originalCanvases = element.querySelectorAll('canvas');
+          const clonedCanvases = clone.querySelectorAll('canvas');
+          
+          Array.from(originalCanvases).forEach((canvas, index) => {
+              const destCanvas = clonedCanvases[index];
+              const destCtx = destCanvas.getContext('2d');
+              if (destCtx) {
+                  // Set dimension strictly to match to prevent scaling issues during copy
+                  destCanvas.width = canvas.width;
+                  destCanvas.height = canvas.height;
+                  destCtx.drawImage(canvas, 0, 0);
+              }
+          });
+
+          // 3. Style the clone for A4 Print
+          // Force a fixed width (approx A4 at 96DPI is 794px, but we use higher for quality)
+          // 1123px width ensures roughly 150 DPI quality on A4 landscape width, or high quality portrait scaled down.
+          // Setting a fixed large width prevents mobile layout stacking.
+          clone.style.width = '1123px'; 
+          clone.style.minHeight = '1000px';
+          clone.style.height = 'auto';
+          clone.style.position = 'absolute';
+          clone.style.top = '-9999px';
+          clone.style.left = '0';
+          clone.style.zIndex = '-1';
+          clone.style.backgroundColor = '#ffffff';
+          clone.style.color = '#000000';
+          clone.classList.remove('dark'); // Force light mode
+          clone.classList.remove('shadow-xl'); // Remove screen shadows
+          
+          // Append to body to allow rendering
+          document.body.appendChild(clone);
+
+          // 4. Capture with html2canvas
+          const canvas = await html2canvas(clone, {
+              scale: 3, // High resolution (300%)
+              useCORS: true,
+              logging: false,
+              backgroundColor: '#ffffff',
+              windowWidth: 1123
+          });
+
+          // 5. Cleanup
+          document.body.removeChild(clone);
+
+          // 6. Generate PDF
+          const imgData = canvas.toDataURL('image/png');
+          const pdf = new jsPDF('p', 'mm', 'a4');
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = pdf.internal.pageSize.getHeight();
+          const imgWidth = pdfWidth;
+          const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+          let heightLeft = imgHeight;
+          let position = 0;
+
+          // First page
+          pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+          heightLeft -= pdfHeight;
+
+          // Additional pages if content overflows A4 height
+          while (heightLeft > 0) {
+              position = heightLeft - imgHeight;
+              pdf.addPage();
+              pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+              heightLeft -= pdfHeight;
+          }
+
+          pdf.save(`Financial_Report_${timeframe}.pdf`);
+      } catch (error) {
+          console.error("PDF Export failed", error);
+          alert("Failed to generate PDF. Please try again.");
+      } finally {
+          setIsExporting(false);
+      }
   };
 
   const handleExportExcel = () => {
@@ -441,8 +485,8 @@ export const AnalysisReportDashboard: React.FC<AnalysisReportDashboardProps> = (
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 pb-20">
       
-      {/* 1. Configuration Panel */}
-      <Card className="p-4 bg-white dark:bg-slate-800 border-none shadow-lg sticky top-0 z-20 backdrop-blur-md bg-opacity-95 dark:bg-opacity-95">
+      {/* 1. Configuration Panel - Removed sticky to allow scrolling */}
+      <Card className="p-4 bg-white dark:bg-slate-800 border-none shadow-lg z-20 backdrop-blur-md bg-opacity-95 dark:bg-opacity-95">
         <div className="flex flex-col gap-4">
           
           <div className="flex justify-between items-center">
@@ -459,8 +503,8 @@ export const AnalysisReportDashboard: React.FC<AnalysisReportDashboardProps> = (
                  <button onClick={handleExportExcel} className="p-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors" title="Export Excel">
                      <Grid size={16} />
                  </button>
-                 <button onClick={handleExportPDF} className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg hover:bg-red-100 transition-colors" title="Export PDF">
-                     <Printer size={16} />
+                 <button onClick={handleExportPDF} disabled={isExporting} className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50" title="Export PDF">
+                     {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
                  </button>
              </div>
           </div>
@@ -487,7 +531,7 @@ export const AnalysisReportDashboard: React.FC<AnalysisReportDashboardProps> = (
 
           <div className="flex gap-2 overflow-x-auto hide-scrollbar">
              <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-lg shrink-0">
-                {['3M', '6M', 'YTD', '1Y', 'ALL'].map((tf) => (
+                {['3M', '6M', 'YTD', '1Y', 'ALL', 'Month', 'Range'].map((tf) => (
                   <button
                     key={tf}
                     onClick={() => setTimeframe(tf as Timeframe)}
@@ -534,11 +578,61 @@ export const AnalysisReportDashboard: React.FC<AnalysisReportDashboardProps> = (
                   )}
               </div>
           </div>
+
+          {/* Conditional Date Inputs */}
+          {timeframe === 'Month' && (
+              <div className="flex gap-3 bg-slate-50 dark:bg-slate-900 p-2 rounded-xl border border-slate-100 dark:border-slate-700 animate-in slide-in-from-top-1">
+                  <div className="flex-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase ml-1 block mb-1">Year</label>
+                      <select 
+                          className="w-full bg-white dark:bg-slate-800 p-1.5 rounded-lg text-xs font-bold outline-none"
+                          value={specificMonth.year}
+                          onChange={(e) => setSpecificMonth({ ...specificMonth, year: parseInt(e.target.value) })}
+                      >
+                          {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                      </select>
+                  </div>
+                  <div className="flex-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase ml-1 block mb-1">Month</label>
+                      <select 
+                          className="w-full bg-white dark:bg-slate-800 p-1.5 rounded-lg text-xs font-bold outline-none"
+                          value={specificMonth.month}
+                          onChange={(e) => setSpecificMonth({ ...specificMonth, month: parseInt(e.target.value) })}
+                      >
+                          {MONTH_NAMES.map((m, i) => <option key={i} value={i}>{m}</option>)}
+                      </select>
+                  </div>
+              </div>
+          )}
+
+          {timeframe === 'Range' && (
+              <div className="flex gap-3 bg-slate-50 dark:bg-slate-900 p-2 rounded-xl border border-slate-100 dark:border-slate-700 animate-in slide-in-from-top-1">
+                  <div className="flex-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase ml-1 block mb-1">Start Date</label>
+                      <input 
+                          type="date" 
+                          className="w-full bg-white dark:bg-slate-800 p-1.5 rounded-lg text-xs font-bold outline-none"
+                          value={dateRange.start}
+                          onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                      />
+                  </div>
+                  <div className="flex-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase ml-1 block mb-1">End Date</label>
+                      <input 
+                          type="date" 
+                          className="w-full bg-white dark:bg-slate-800 p-1.5 rounded-lg text-xs font-bold outline-none"
+                          value={dateRange.end}
+                          onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                      />
+                  </div>
+              </div>
+          )}
+
         </div>
       </Card>
 
-      {/* 2. REPORT PREVIEW (Paper Style) */}
-      <div className="mx-1 bg-white text-slate-900 rounded-sm shadow-xl overflow-hidden min-h-[600px] flex flex-col relative border-t-8 border-indigo-600 print:shadow-none print:m-0">
+      {/* 2. REPORT PREVIEW (Paper Style) - Added ID for HTML2Canvas */}
+      <div id="printable-report-area" className="mx-1 bg-white text-slate-900 rounded-sm shadow-xl overflow-hidden min-h-[600px] flex flex-col relative border-t-8 border-indigo-600 print:shadow-none print:m-0">
           
           {/* Paper Header */}
           <div className="p-6 border-b border-slate-100">
@@ -550,7 +644,9 @@ export const AnalysisReportDashboard: React.FC<AnalysisReportDashboardProps> = (
                       <p className="text-xs text-slate-500 mt-1 font-medium">Generated for {new Date().toLocaleDateString()}</p>
                   </div>
                   <div className="text-right">
-                      <div className="text-sm font-bold bg-slate-100 px-3 py-1 rounded text-slate-600">{timeframe} PERIOD</div>
+                      <div className="text-sm font-bold bg-slate-100 px-3 py-1 rounded text-slate-600">
+                          {timeframe === 'Month' ? `${MONTH_NAMES[specificMonth.month]} ${specificMonth.year}` : timeframe === 'Range' ? 'Custom Range' : `${timeframe} PERIOD`}
+                      </div>
                   </div>
               </div>
           </div>
@@ -615,7 +711,7 @@ export const AnalysisReportDashboard: React.FC<AnalysisReportDashboardProps> = (
                           </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                          {filteredData.slice(0, 5).map(t => (
+                          {filteredData.slice(0, 15).map(t => (
                               <tr key={t.id}>
                                   <td className="p-3 text-slate-500">{t.dateStr}</td>
                                   <td className="p-3 font-medium text-slate-700">
@@ -639,7 +735,7 @@ export const AnalysisReportDashboard: React.FC<AnalysisReportDashboardProps> = (
                       </tbody>
                   </table>
                   <div className="p-2 text-center text-[10px] text-slate-400 border-t border-slate-100 bg-slate-50">
-                      {filteredData.length > 5 ? `+ ${filteredData.length - 5} more records available in export` : 'End of report'}
+                      {filteredData.length > 15 ? `+ ${filteredData.length - 15} more records available in export` : 'End of report'}
                   </div>
               </div>
           </div>
