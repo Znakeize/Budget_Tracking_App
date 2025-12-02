@@ -3,7 +3,7 @@ export const en = {
     // Navigation
     'nav.home': 'Home',
     'nav.budget': 'Budget',
-    'nav.ai': 'AI',
+    'nav.ai': 'PRO',
     'nav.menu': 'Menu',
     
     // Dashboard

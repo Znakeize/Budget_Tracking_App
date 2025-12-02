@@ -247,6 +247,7 @@ export interface ShoppingListData {
   expenseId?: string;
   groupId?: string;
   groupExpenseId?: string;
+  budgetCategory?: string;
 }
 
 // --- Collaborative / Shared Budget Interfaces ---
@@ -272,6 +273,7 @@ export interface SharedExpense {
   receipt?: string;
   split: Record<string, number>; // userId -> amount owed
   type: 'expense' | 'settlement' | 'reminder';
+  splitMethod?: 'equal' | 'unequal' | 'percent'; // Persist split logic
 }
 
 export interface GroupActivity {

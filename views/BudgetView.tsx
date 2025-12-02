@@ -1,6 +1,8 @@
 
 
 
+
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { BudgetData, InvestmentGoal, GoalItem, ShoppingListData } from '../types';
 import { formatCurrency, generateId } from '../utils/calculations';
@@ -56,6 +58,7 @@ interface BudgetViewProps {
   onGoalUpdate?: (goal: GoalItem) => void;
   shoppingLists?: ShoppingListData[];
   onViewShoppingList?: (listId: string, shopId: string) => void;
+  onExpenseCategoryChange?: (oldName: string, newName: string, newBudget: number) => void;
 }
 
 export const BudgetView: React.FC<BudgetViewProps> = ({ 
@@ -74,7 +77,8 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
   onAddInvestmentGoal,
   onGoalUpdate,
   shoppingLists = [],
-  onViewShoppingList
+  onViewShoppingList,
+  onExpenseCategoryChange
 }) => {
   const { t } = useLanguage();
   const [activeSection, setActiveSection] = useState<string | null>(null);
@@ -114,7 +118,24 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
   const updateItem = (collection: keyof BudgetData, index: number, field: string, value: any) => {
     const newData = { ...data };
     const list = newData[collection] as any[];
-    list[index] = { ...list[index], [field]: value };
+    
+    // Capture state before update for comparison/params
+    const currentItem = { ...list[index] };
+
+    if (collection === 'expenses' && onExpenseCategoryChange) {
+        if (field === 'name') {
+             if (currentItem.name !== value) {
+                 onExpenseCategoryChange(currentItem.name, value, currentItem.budgeted);
+             }
+        } else if (field === 'budgeted') {
+             if (currentItem.budgeted !== value) {
+                 // Use current name since only budget changed
+                 onExpenseCategoryChange(currentItem.name, currentItem.name, value);
+             }
+        }
+    }
+
+    list[index] = { ...currentItem, [field]: value };
     updateData(newData);
     
     // If updating a goal current amount, trigger sync
@@ -184,6 +205,15 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
     if (editingItem) {
         const newData = { ...data };
         const list = newData[editingItem.collection] as any[];
+        
+        // Handle expense update sync within modal confirm
+        if (editingItem.collection === 'expenses' && onExpenseCategoryChange) {
+            const oldItem = list[editingItem.index];
+            if (oldItem.name !== itemData.name || oldItem.budgeted !== itemData.budgeted) {
+                 onExpenseCategoryChange(oldItem.name, itemData.name, itemData.budgeted);
+            }
+        }
+
         // Merge updates (keep ID and other existing fields)
         list[editingItem.index] = { ...list[editingItem.index], ...itemData };
         updateData(newData);

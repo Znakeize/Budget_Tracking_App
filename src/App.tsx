@@ -4,10 +4,10 @@ import { Layout } from './components/ui/Layout';
 import { Navigation } from './components/Navigation';
 import { DashboardView } from './views/DashboardView';
 import { BudgetView } from './views/BudgetView';
-import { AIView } from './views/AIView';
+import { ProFeaturesView } from './views/ProFeaturesView';
 import { ToolsView } from './views/ToolsView';
 import { HistoryView } from './views/HistoryView';
-import { EventsView } from './views/EventsView';
+import { EventsView, getEventNotifications } from './views/EventsView';
 import { ProfileView } from './views/ProfileView';
 import { AuthView } from './views/AuthView';
 import { ShoppingListView } from './views/ShoppingListView';
@@ -33,9 +33,9 @@ import { NotificationPopup } from './components/ui/NotificationPopup';
 import { NewPeriodModal } from './components/ui/NewPeriodModal';
 import { RolloverModal } from './components/ui/RolloverModal';
 
-import { BudgetData, ShoppingListData, EventData, SharedGroup, InvestmentGoal, InvestmentAlert, EventMember } from './types';
+import { BudgetData, ShoppingListData, EventData, SharedGroup, InvestmentGoal, InvestmentAlert, EventMember, Shop } from './types';
 import { INITIAL_DATA, SAMPLE_EVENTS, SAMPLE_SHOPPING_LISTS, MOCK_GROUPS, SAMPLE_INVESTMENT_GOALS } from './constants';
-import { getNotifications, calculateTotals, generateId } from './utils/calculations';
+import { getNotifications, calculateTotals, generateId, getCollaborativeNotifications, getInvestmentNotifications } from './utils/calculations';
 import { LanguageProvider } from './contexts/LanguageContext';
 
 // Tabs that show the bottom navigation bar
@@ -62,13 +62,41 @@ const AppContent: React.FC = () => {
   const [navHistory, setNavHistory] = useState<string[]>([]); // Stack-based navigation history
   const [appDemoTab, setAppDemoTab] = useState('calculators'); // Persist App Demo Tab state
 
-  const [budgetData, setBudgetData] = useState<BudgetData>(INITIAL_DATA);
-  const [history, setHistory] = useState<BudgetData[]>([]);
-  const [shoppingLists, setShoppingLists] = useState<ShoppingListData[]>(SAMPLE_SHOPPING_LISTS);
-  const [events, setEvents] = useState<EventData[]>(SAMPLE_EVENTS);
-  const [groups, setGroups] = useState<SharedGroup[]>(MOCK_GROUPS);
-  const [investmentGoals, setInvestmentGoals] = useState<InvestmentGoal[]>(SAMPLE_INVESTMENT_GOALS);
-  const [investmentAlerts, setInvestmentAlerts] = useState<InvestmentAlert[]>([]);
+  // Initialize state from Local Storage or fallback to defaults
+  const [budgetData, setBudgetData] = useState<BudgetData>(() => {
+    const saved = localStorage.getItem('budget_current');
+    return saved ? JSON.parse(saved) : INITIAL_DATA;
+  });
+  
+  const [history, setHistory] = useState<BudgetData[]>(() => {
+    const saved = localStorage.getItem('budget_history');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [shoppingLists, setShoppingLists] = useState<ShoppingListData[]>(() => {
+    const saved = localStorage.getItem('budget_shopping');
+    return saved ? JSON.parse(saved) : SAMPLE_SHOPPING_LISTS;
+  });
+
+  const [events, setEvents] = useState<EventData[]>(() => {
+    const saved = localStorage.getItem('budget_events');
+    return saved ? JSON.parse(saved) : SAMPLE_EVENTS;
+  });
+
+  const [groups, setGroups] = useState<SharedGroup[]>(() => {
+    const saved = localStorage.getItem('budget_groups');
+    return saved ? JSON.parse(saved) : MOCK_GROUPS;
+  });
+
+  const [investmentGoals, setInvestmentGoals] = useState<InvestmentGoal[]>(() => {
+    const saved = localStorage.getItem('budget_invest_goals');
+    return saved ? JSON.parse(saved) : SAMPLE_INVESTMENT_GOALS;
+  });
+
+  const [investmentAlerts, setInvestmentAlerts] = useState<InvestmentAlert[]>(() => {
+    const saved = localStorage.getItem('budget_invest_alerts');
+    return saved ? JSON.parse(saved) : [];
+  });
   
   const [user, setUser] = useState<any>(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -106,6 +134,35 @@ const AppContent: React.FC = () => {
       if (isDarkMode) document.documentElement.classList.add('dark');
       else document.documentElement.classList.remove('dark');
   }, [isDarkMode]);
+
+  // --- Persistence Effects ---
+  useEffect(() => {
+    localStorage.setItem('budget_current', JSON.stringify(budgetData));
+  }, [budgetData]);
+
+  useEffect(() => {
+    localStorage.setItem('budget_history', JSON.stringify(history));
+  }, [history]);
+
+  useEffect(() => {
+    localStorage.setItem('budget_shopping', JSON.stringify(shoppingLists));
+  }, [shoppingLists]);
+
+  useEffect(() => {
+    localStorage.setItem('budget_events', JSON.stringify(events));
+  }, [events]);
+
+  useEffect(() => {
+    localStorage.setItem('budget_groups', JSON.stringify(groups));
+  }, [groups]);
+
+  useEffect(() => {
+    localStorage.setItem('budget_invest_goals', JSON.stringify(investmentGoals));
+  }, [investmentGoals]);
+
+  useEffect(() => {
+    localStorage.setItem('budget_invest_alerts', JSON.stringify(investmentAlerts));
+  }, [investmentAlerts]);
 
   // --- Navigation Logic ---
 
@@ -149,6 +206,101 @@ const AppContent: React.FC = () => {
       setBudgetData(newData);
   };
 
+  // Sync expense category updates (name or budget) to linked shopping lists
+  const handleExpenseCategoryChange = (oldName: string, newName: string, newBudget: number) => {
+      setShoppingLists(prevLists => prevLists.map(list => {
+          let changed = false;
+          let updatedList = { ...list };
+
+          // Update List-level link
+          if (updatedList.budgetCategory === oldName) {
+              updatedList.budgetCategory = newName;
+              updatedList.budget = newBudget;
+              changed = true;
+          }
+
+          // Update Shop-level links
+          const updatedShops = updatedList.shops.map(shop => {
+              if (shop.budgetCategory === oldName) {
+                  changed = true;
+                  return { ...shop, budgetCategory: newName, budget: newBudget };
+              }
+              return shop;
+          });
+
+          if (changed) {
+              return { ...updatedList, shops: updatedShops, lastModified: Date.now() };
+          }
+          return list;
+      }));
+  };
+
+  const handleUpdateGroups = (newGroups: SharedGroup[]) => {
+      setGroups(newGroups);
+
+      // Auto-update linked Shopping Lists
+      setShoppingLists(prevLists => {
+          let changed = false;
+          const updatedLists = prevLists.map(list => {
+              if (list.groupId && list.groupExpenseId) {
+                  const group = newGroups.find(g => g.id === list.groupId);
+                  if (group) {
+                      const expense = group.expenses.find(e => e.id === list.groupExpenseId);
+                      if (expense) {
+                          const expectedName = `${group.name} - ${expense.title}`;
+                          if (list.budget !== expense.amount || list.name !== expectedName) {
+                              changed = true;
+                              return { 
+                                  ...list, 
+                                  budget: expense.amount, 
+                                  name: expectedName,
+                                  lastModified: Date.now()
+                              };
+                          }
+                      }
+                  }
+              }
+              return list;
+          });
+          return changed ? updatedLists : prevLists;
+      });
+  };
+
+  const handleUpdateEvents = (newEvents: EventData[]) => {
+      setEvents(newEvents);
+
+      // Auto-update linked Shopping Lists
+      setShoppingLists(prevLists => {
+          let changed = false;
+          const updatedLists = prevLists.map(list => {
+              // Check if list is linked to an event expense
+              if (list.eventId && list.expenseId) {
+                  const event = newEvents.find(e => e.id === list.eventId);
+                  if (event) {
+                      const expense = event.expenses.find(e => e.id === list.expenseId);
+                      if (expense) {
+                          // Construct expected name based on convention
+                          const expectedName = `${event.name} - ${expense.name}`;
+                          
+                          // Check if budget or name is out of sync
+                          if (list.budget !== expense.amount || list.name !== expectedName) {
+                              changed = true;
+                              return { 
+                                  ...list, 
+                                  budget: expense.amount, 
+                                  name: expectedName,
+                                  lastModified: Date.now()
+                              };
+                          }
+                      }
+                  }
+              }
+              return list;
+          });
+          return changed ? updatedLists : prevLists;
+      });
+  };
+
   const handleUndo = () => {
       if (undoStack.length === 0) return;
       const previous = undoStack[undoStack.length - 1];
@@ -184,9 +336,14 @@ const AppContent: React.FC = () => {
   };
 
   const notifications = useMemo(() => {
-      const all = getNotifications(budgetData, history);
+      const core = getNotifications(budgetData, history);
+      const eventsNotif = getEventNotifications(events, budgetData.currencySymbol);
+      const socialNotif = getCollaborativeNotifications(groups);
+      const investmentsNotif = getInvestmentNotifications(budgetData.investments, investmentAlerts, budgetData.currencySymbol);
+      
+      const all = [...core, ...eventsNotif, ...socialNotif, ...investmentsNotif];
       return all.filter(n => !dismissedNotifIds.includes(n.id));
-  }, [budgetData, history, dismissedNotifIds]);
+  }, [budgetData, history, events, groups, investmentAlerts, dismissedNotifIds]);
 
   const handleDismissNotification = (id: string) => {
       setDismissedNotifIds(prev => [...prev, id]);
@@ -228,11 +385,77 @@ const AppContent: React.FC = () => {
       alert(`Synced ${budgetData.currencySymbol}${amount} to Budget as "${shopName}"`);
   };
 
-  const handleCreateShoppingList = (name: string, budget: number, members: EventMember[] = [], redirect: boolean = true) => {
+  // New Handler for Granular Shopping Item Sync (Budget + Events + Groups)
+  const handleShoppingItemChange = (amount: number, total: number, categoryName?: string, eventId?: string, expenseId?: string, groupId?: string, groupExpenseId?: string) => {
+      // 1. Budget Category Sync
+      if (categoryName) {
+          const categoryIndex = budgetData.expenses.findIndex(e => e.name === categoryName);
+          if (categoryIndex >= 0) {
+              const updatedExpenses = [...budgetData.expenses];
+              // It seems to be adding `amount` (diff) to `spent`.
+              const newSpent = Math.max(0, updatedExpenses[categoryIndex].spent + amount);
+              updatedExpenses[categoryIndex] = {
+                  ...updatedExpenses[categoryIndex],
+                  spent: newSpent
+              };
+              handleUpdateData({ ...budgetData, expenses: updatedExpenses }, false); // False to avoid heavy history stack for rapid toggles
+          }
+      }
+
+      // 2. Event Expense Sync
+      if (eventId && expenseId) {
+          const eventIndex = events.findIndex(e => e.id === eventId);
+          if (eventIndex >= 0) {
+              const event = events[eventIndex];
+              const expenseIndex = event.expenses.findIndex(e => e.id === expenseId);
+              if (expenseIndex >= 0) {
+                  const updatedExpenses = [...event.expenses];
+                  // Use total for absolute sync
+                  updatedExpenses[expenseIndex] = {
+                      ...updatedExpenses[expenseIndex],
+                      amount: total
+                  };
+                  
+                  const updatedEvents = [...events];
+                  updatedEvents[eventIndex] = {
+                      ...event,
+                      expenses: updatedExpenses
+                  };
+                  setEvents(updatedEvents);
+              }
+          }
+      }
+
+      // 3. Collaboration Group Expense Sync
+      if (groupId && groupExpenseId) {
+          const groupIndex = groups.findIndex(g => g.id === groupId);
+          if (groupIndex >= 0) {
+              const group = groups[groupIndex];
+              const expenseIndex = group.expenses.findIndex(e => e.id === groupExpenseId);
+              if (expenseIndex >= 0) {
+                  const updatedExpenses = [...group.expenses];
+                  // Use total for absolute sync
+                  updatedExpenses[expenseIndex] = {
+                      ...updatedExpenses[expenseIndex],
+                      amount: total
+                  };
+
+                  const updatedGroups = [...groups];
+                  updatedGroups[groupIndex] = {
+                      ...group,
+                      expenses: updatedExpenses
+                  };
+                  setGroups(updatedGroups);
+              }
+          }
+      }
+  };
+
+  const handleCreateShoppingList = (name: string, budget: number, members: EventMember[] = [], redirect: boolean = true, linkedData?: {eventId?: string, expenseId?: string, expenseName: string, groupId?: string, groupExpenseId?: string, budgetCategory?: string}) => {
       const newList: ShoppingListData = {
           id: generateId(),
           name: name,
-          shops: [],
+          shops: [], // Modified: Always create empty list
           members: [
               { id: 'me', name: 'You', role: 'owner', avatarColor: 'bg-indigo-500' },
               ...members.map(m => ({
@@ -246,15 +469,22 @@ const AppContent: React.FC = () => {
           currencySymbol: budgetData.currencySymbol,
           color: 'bg-emerald-500',
           budget: budget,
-          lastModified: Date.now()
+          lastModified: Date.now(),
+          // Store link data on list level for inheritance to future shops
+          eventId: linkedData?.eventId,
+          expenseId: linkedData?.expenseId,
+          groupId: linkedData?.groupId,
+          groupExpenseId: linkedData?.groupExpenseId,
+          budgetCategory: linkedData?.budgetCategory
       };
       setShoppingLists([...shoppingLists, newList]);
       
       if (redirect) {
           navigate('shopping-list');
+          setShoppingFocus({ listId: newList.id });
       } else {
           // Provide visual feedback if not redirecting
-          setTimeout(() => alert(`Shopping List "${name}" created successfully!`), 100);
+          setTimeout(() => alert(`Shopping List "${name}" created! Check the Shopping tab.`), 100);
       }
   };
 
@@ -356,7 +586,7 @@ const AppContent: React.FC = () => {
                   focusTarget={budgetFocus}
                   clearFocusTarget={() => setBudgetFocus(null)}
                   onProfileClick={handleProfileClick}
-                  onCreateShoppingList={(name, budget) => handleCreateShoppingList(name, budget, [], false)}
+                  onCreateShoppingList={(name, budget) => handleCreateShoppingList(name, budget, [], false, { expenseName: name, budgetCategory: name })}
                   onAddInvestmentGoal={(goal) => setInvestmentGoals([...investmentGoals, goal])}
                   onGoalUpdate={(goal) => {
                       setBudgetData(prev => ({
@@ -364,12 +594,18 @@ const AppContent: React.FC = () => {
                           goals: prev.goals.map(g => g.id === goal.id ? goal : g)
                       }));
                   }}
+                  shoppingLists={shoppingLists}
+                  onViewShoppingList={(listId, shopId) => {
+                      setShoppingFocus({ listId, shopId });
+                      navigate('shopping-list');
+                  }}
+                  onExpenseCategoryChange={handleExpenseCategoryChange}
               />;
           case 'add':
               // Handled by useEffect redirect
               return null;
           case 'ai':
-              return <AIView 
+              return <ProFeaturesView 
                   history={[...history, budgetData]} 
                   currencySymbol={budgetData.currencySymbol}
                   notificationCount={notifications.length}
@@ -383,6 +619,9 @@ const AppContent: React.FC = () => {
                   user={user}
                   onNavigate={navigate}
                   onViewFeature={setFeatureViewId}
+                  eventNotificationCount={notifications.filter(n => n.category === 'Event').length}
+                  socialNotificationCount={notifications.filter(n => n.category === 'Collaboration').length}
+                  investmentNotificationCount={notifications.filter(n => n.category === 'Investment').length}
               />;
           case 'menu':
               return <MenuView 
@@ -443,12 +682,12 @@ const AppContent: React.FC = () => {
           case 'events':
               return <EventsView 
                   events={events}
-                  onUpdateEvents={setEvents}
+                  onUpdateEvents={handleUpdateEvents} // Updated to use the new handler
                   currencySymbol={budgetData.currencySymbol}
                   onBack={() => goBack('menu')}
                   onProfileClick={handleProfileClick}
                   focusEventId={eventFocus}
-                  onCreateShoppingList={(name, budget, members) => handleCreateShoppingList(name, budget, members, false)}
+                  onCreateShoppingList={(name, budget, members, linkedData) => handleCreateShoppingList(name, budget, members, false, linkedData)}
               />;
           case 'profile':
               return <ProfileView 
@@ -471,21 +710,23 @@ const AppContent: React.FC = () => {
                   focusListId={shoppingFocus?.listId} 
                   focusShopId={shoppingFocus?.shopId} 
                   clearFocus={() => setShoppingFocus(null)} 
+                  expenseCategories={budgetData.expenses.map(e => e.name)}
+                  onItemChange={handleShoppingItemChange}
               />;
           case 'social':
               return <CollaborativeView 
                   onBack={() => goBack('menu')}
                   onProfileClick={handleProfileClick}
                   groups={groups}
-                  onUpdateGroups={setGroups}
-                  onCreateShoppingList={(gName, eName, amt, members) => {
+                  onUpdateGroups={handleUpdateGroups} // Changed from setGroups
+                  onCreateShoppingList={(gName, eName, amt, members, linkedData) => {
                       const eventMembers: EventMember[] = members.map(m => ({
                           id: m.id,
                           name: m.name,
                           role: m.role === 'Owner' ? 'admin' : m.role === 'Editor' ? 'editor' : 'viewer',
                           avatar: m.avatarColor
                       }));
-                      handleCreateShoppingList(`${gName} - ${eName}`, amt, eventMembers, false);
+                      handleCreateShoppingList(`${gName} - ${eName}`, amt, eventMembers, false, linkedData);
                   }}
               />;
           case 'investments':

@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card } from '../components/ui/Card';
 import { 
@@ -8,7 +7,7 @@ import {
   Wallet, ArrowLeft, Edit2, List, Bell, Download, Users, Pencil,
   User, ShoppingBag, Tag, DollarSign, Copy, Calendar, Zap, Settings, BrainCircuit,
   ArrowRight as ArrowRightIcon, AlertTriangle, Sparkles, Clock, UserPlus, Package,
-  AlertCircle, ChevronDown, Lock
+  AlertCircle, ChevronDown, Lock, Link
 } from 'lucide-react';
 import { ShoppingListData, Shop, ShopItem, ShopMember } from '../types';
 import { generateId, formatCurrency, getShoppingNotifications, NotificationItem } from '../utils/calculations';
@@ -372,8 +371,13 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
                                         <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                                             <Store size={12} /> {list.shops.length} Shops • {totalItems} Items
                                         </p>
-                                        {(list.eventId || list.groupId) && (
+                                        {(list.eventId || list.groupId || list.budgetCategory) && (
                                             <div className="flex gap-1 mt-1.5 flex-wrap">
+                                                {list.budgetCategory && (
+                                                    <span className="text-[9px] font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                                        <Link size={10} /> Linked: {list.budgetCategory}
+                                                    </span>
+                                                )}
                                                 {list.eventId && (
                                                     <span className="text-[9px] font-bold text-pink-500 bg-pink-50 dark:bg-pink-900/20 px-1.5 py-0.5 rounded flex items-center gap-1">
                                                         Event Linked
@@ -550,7 +554,8 @@ const ListDetailView: React.FC<{
             eventId: list.eventId || shop.eventId,
             expenseId: list.expenseId || shop.expenseId,
             groupId: list.groupId || shop.groupId,
-            groupExpenseId: list.groupExpenseId || shop.groupExpenseId
+            groupExpenseId: list.groupExpenseId || shop.groupExpenseId,
+            budgetCategory: list.budgetCategory || shop.budgetCategory
         };
         const updatedList = { ...list, shops: [...list.shops, newShop] };
         onUpdateList(updatedList);
@@ -620,6 +625,7 @@ const ListDetailView: React.FC<{
                             <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
                                 <span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{list.shops.length} Shops</span>
                                 {list.budget && <span className="font-bold text-emerald-600 dark:text-emerald-400">Budget: {list.currencySymbol}{list.budget}</span>}
+                                {list.budgetCategory && <span className="font-bold text-indigo-500">{list.budgetCategory}</span>}
                             </div>
                         </div>
                     </div>
@@ -737,7 +743,8 @@ const ListDetailView: React.FC<{
                 initialData={editingShop}
                 currencySymbol={list.currencySymbol}
                 categories={expenseCategories}
-                isListLinked={!!list.eventId || !!list.groupId}
+                isListLinked={!!list.eventId || !!list.groupId || !!list.budgetCategory}
+                fixedCategory={list.budgetCategory}
             />
 
             <ShareListModal 
@@ -1269,7 +1276,7 @@ const EditListModal = ({ isOpen, onClose, onConfirm, initialData }: any) => {
     );
 };
 
-const AddShopModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol, categories, isListLinked }: any) => {
+const AddShopModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol, categories, isListLinked, fixedCategory }: any) => {
     const [name, setName] = useState('');
     const [budget, setBudget] = useState('');
     const [budgetCategory, setBudgetCategory] = useState('');
@@ -1283,10 +1290,10 @@ const AddShopModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol,
             } else {
                 setName('');
                 setBudget('');
-                setBudgetCategory('');
+                setBudgetCategory(fixedCategory || '');
             }
         }
-    }, [isOpen, initialData]);
+    }, [isOpen, initialData, fixedCategory]);
 
     if (!isOpen) return null;
 
@@ -1332,7 +1339,7 @@ const AddShopModal = ({ isOpen, onClose, onConfirm, initialData, currencySymbol,
                         </select>
                         {isListLinked ? (
                             <p className="text-[10px] text-amber-500 mt-1 ml-1 flex items-center gap-1">
-                                <Lock size={10} /> List linked to external budget (Event/Group)
+                                <Lock size={10} /> List linked to external budget (Event/Group/Category)
                             </p>
                         ) : (
                             <p className="text-[10px] text-slate-400 mt-1 ml-1">Purchases will automatically update this budget category.</p>

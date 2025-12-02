@@ -1,5 +1,6 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Card } from '../components/ui/Card';
 import { 
   Users, Plus, ChevronLeft, Wallet, PieChart, TrendingUp, 
@@ -10,7 +11,7 @@ import {
   Smartphone, Bell, Camera, FileText, Shield, Mail, Percent,
   Calculator, RefreshCw, Award, Map, TrendingDown, Flame,
   Pencil, Trash2, Receipt, ScanLine, Image as ImageIcon, Keyboard,
-  BellRing, ShoppingBag, Check, User, Layers
+  BellRing, ShoppingBag, Check, User, Layers, Search
 } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement } from 'chart.js';
 import { Doughnut, Bar, Line } from 'react-chartjs-2';
@@ -35,7 +36,7 @@ interface CollaborativeViewProps {
 // --- Main View Component ---
 
 export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, onProfileClick, groups, onUpdateGroups, onCreateShoppingList }) => {
-  const [activeTab, setActiveTab] = useState<'groups' | 'settle' | 'community'>('groups');
+  const [activeTab, setActiveTab] = useState<'groups' | 'settle' | 'history'>('groups');
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
@@ -143,7 +144,7 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, on
             {[
               { id: 'groups', label: 'Groups', icon: Users },
               { id: 'settle', label: 'Settlements', icon: CheckCircle },
-              { id: 'community', label: 'Community', icon: Trophy },
+              { id: 'history', label: 'History', icon: History },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -255,7 +256,7 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, on
 
             {activeTab === 'settle' && <SettlementsView groups={groups} onUpdateGroup={(g) => handleUpdateGroup(g)} />}
             
-            {activeTab === 'community' && <CommunityInsightsView />}
+            {activeTab === 'history' && <CollaborativeHistoryView groups={groups} />}
           </div>
         )}
       </div>
@@ -275,7 +276,164 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, on
   );
 };
 
-// ... GroupDetailView, SettlementsView, CommunityInsightsView, GroupAIView ...
+const CollaborativeHistoryView = ({ groups }: { groups: SharedGroup[] }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'expense' | 'settlement' | 'member'>('all');
+
+  // Aggregate and Filter
+  const filteredHistory = useMemo(() => {
+      let list: any[] = [];
+      groups.forEach(group => {
+          group.activityLog.forEach(log => {
+              list.push({ ...log, groupName: group.name, currency: group.currency, groupId: group.id });
+          });
+      });
+      
+      // Filter by Type
+      if (filterType !== 'all') {
+          list = list.filter(item => item.type === filterType);
+      }
+
+      // Filter by Search
+      if (searchQuery) {
+          const q = searchQuery.toLowerCase();
+          list = list.filter(item => 
+              item.text.toLowerCase().includes(q) || 
+              item.user.toLowerCase().includes(q) ||
+              item.groupName.toLowerCase().includes(q)
+          );
+      }
+
+      return list;
+  }, [groups, filterType, searchQuery]);
+
+  return (
+      <div className="space-y-4 animate-in fade-in slide-in-from-right-2">
+          {/* Header Card */}
+          <Card className="p-5 bg-gradient-to-br from-slate-800 to-black text-white border-none relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-3xl -translate-y-10 translate-x-10"></div>
+              <div className="relative z-10">
+                  <h3 className="font-bold text-xl mb-1 flex items-center gap-2">
+                      <History size={22} className="text-slate-300" /> History Log
+                  </h3>
+                  <p className="text-xs text-slate-400 opacity-80">Track every shared expense and settlement.</p>
+              </div>
+          </Card>
+
+          {/* Controls */}
+          <div className="flex flex-col gap-3">
+              {/* Search */}
+              <div className="relative">
+                  <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+                  <input 
+                      type="text" 
+                      placeholder="Search history..." 
+                      className="w-full bg-white dark:bg-slate-800 pl-9 pr-4 py-2.5 rounded-xl text-sm outline-none border border-slate-200 dark:border-slate-700 focus:border-indigo-500 transition-colors"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && (
+                      <button 
+                          onClick={() => setSearchQuery('')}
+                          className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
+                      >
+                          <X size={16} />
+                      </button>
+                  )}
+              </div>
+
+              {/* Filter Tabs */}
+              <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+                  {[
+                      { id: 'all', label: 'All' },
+                      { id: 'expense', label: 'Expenses' },
+                      { id: 'settlement', label: 'Settlements' },
+                      { id: 'member', label: 'Updates' }
+                  ].map(tab => (
+                      <button
+                          key={tab.id}
+                          onClick={() => setFilterType(tab.id as any)}
+                          className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${
+                              filterType === tab.id 
+                              ? 'bg-slate-800 dark:bg-white text-white dark:text-slate-900 border-transparent' 
+                              : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
+                          }`}
+                      >
+                          {tab.label}
+                      </button>
+                  ))}
+              </div>
+          </div>
+
+          {/* Timeline List */}
+          <div className="space-y-0 pl-2">
+              {filteredHistory.length === 0 ? (
+                   <div className="text-center py-12 text-slate-400">
+                      <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                          <History size={32} className="opacity-50" />
+                      </div>
+                      <p className="text-sm font-bold">No records found</p>
+                      <p className="text-xs opacity-70 mt-1">Try adjusting filters</p>
+                  </div>
+              ) : (
+                  filteredHistory.map((activity, idx) => {
+                      const isLast = idx === filteredHistory.length - 1;
+                      return (
+                          <div key={`${activity.id}-${idx}`} className="flex gap-3 relative">
+                              {/* Timeline Line */}
+                              {!isLast && (
+                                  <div className="absolute left-[15px] top-8 bottom-[-16px] w-[2px] bg-slate-100 dark:bg-slate-800"></div>
+                              )}
+                              
+                              {/* Icon Node */}
+                              <div className={`relative z-10 w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2 border-white dark:border-slate-900 ${
+                                  activity.type === 'expense' ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-300' :
+                                  activity.type === 'settlement' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900 dark:text-emerald-300' :
+                                  activity.type === 'member' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300' :
+                                  'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                              }`}>
+                                  {activity.type === 'expense' ? <Wallet size={14} /> :
+                                   activity.type === 'settlement' ? <CheckCircle size={14} /> :
+                                   activity.type === 'member' ? <User size={14} /> :
+                                   <Activity size={14} />}
+                              </div>
+
+                              {/* Card Content */}
+                              <div className="flex-1 pb-4">
+                                  <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-100 dark:border-slate-700 hover:shadow-sm transition-shadow">
+                                      <div className="flex justify-between items-start mb-1">
+                                          <div className="text-xs font-bold text-slate-900 dark:text-white">
+                                              {activity.user === 'You' ? 'You' : activity.user}
+                                          </div>
+                                          <span className="text-[10px] text-slate-400 whitespace-nowrap">{activity.date}</span>
+                                      </div>
+                                      
+                                      <p className="text-sm text-slate-600 dark:text-slate-300 leading-snug mb-2">
+                                          {activity.text}
+                                      </p>
+
+                                      <div className="flex items-center justify-between pt-2 border-t border-slate-50 dark:border-slate-700/50">
+                                          <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-md">
+                                              {activity.groupName}
+                                          </span>
+                                          {activity.amount && (
+                                              <span className={`text-xs font-bold ${
+                                                  activity.type === 'settlement' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'
+                                              }`}>
+                                                  {activity.currency} {activity.amount.toLocaleString()}
+                                              </span>
+                                          )}
+                                      </div>
+                                  </div>
+                              </div>
+                          </div>
+                      );
+                  })
+              )}
+          </div>
+      </div>
+  );
+};
 
 const GroupDetailView: React.FC<{ group: SharedGroup, onUpdate: (g: SharedGroup) => void, onCreateShoppingList?: (groupName: string, expenseName: string, amount: number, members: SharedMember[], linkedData?: {eventId?: string, expenseId?: string, expenseName: string, groupId?: string, groupExpenseId?: string}) => void }> = ({ group, onUpdate, onCreateShoppingList }) => {
   const [tab, setTab] = useState<'overview' | 'expenses' | 'members' | 'reports'>('overview');
@@ -835,6 +993,9 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData,
     const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
     const [manualSplits, setManualSplits] = useState<Record<string, string>>({}); // Stores input strings for unequal/percent
     const [createList, setCreateList] = useState(false);
+    
+    // Ref to track previous amount to enable auto-scaling in 'unequal' mode
+    const prevAmountRef = useRef(0);
 
     useEffect(() => {
         if (isOpen) {
@@ -846,28 +1007,46 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData,
                 
                 const memberIds = Object.keys(initialData.split);
                 setSelectedMembers(memberIds);
+                prevAmountRef.current = initialData.amount;
 
-                // Detect split type based on values
-                // If values are all roughly equal, it's 'equal'. Otherwise it was likely percentage or unequal.
-                // Defaulting unequal to percent ensures that subsequent total amount changes auto-update the splits proportionally.
-                const values = Object.values(initialData.split) as number[];
-                const allEqual = values.length > 0 && values.every(v => Math.abs(v - values[0]) < 0.02); // Tolerance for float math
-                
-                if (allEqual) {
-                    setSplitMode('equal');
+                // Initialize split mode based on saved data
+                if (initialData.splitMethod) {
+                    setSplitMode(initialData.splitMethod);
+                    if (initialData.splitMethod === 'percent') {
+                        const total = initialData.amount;
+                        const newManuals: Record<string, string> = {};
+                        memberIds.forEach(id => {
+                            const val = (initialData.split[id] as number) || 0;
+                            const pct = total > 0 ? (val / total) * 100 : 0;
+                            newManuals[id] = pct.toFixed(2);
+                        });
+                        setManualSplits(newManuals);
+                    } else if (initialData.splitMethod === 'unequal') {
+                        const newManuals: Record<string, string> = {};
+                        memberIds.forEach(id => {
+                            newManuals[id] = ((initialData.split[id] as number) || 0).toFixed(2);
+                        });
+                        setManualSplits(newManuals);
+                    }
                 } else {
-                    // Default to percent for auto-update capability on total change
-                    setSplitMode('percent');
-                    const total = initialData.amount;
-                    const newManuals: Record<string, string> = {};
-                    memberIds.forEach(id => {
-                        const val = (initialData.split[id] as number) || 0;
-                        const pct = total > 0 ? (val / total) * 100 : 0;
-                        newManuals[id] = pct.toFixed(2);
-                    });
-                    setManualSplits(newManuals);
+                    // Fallback logic: Check if splits are roughly equal
+                    const values = Object.values(initialData.split) as number[];
+                    const avg = initialData.amount / values.length;
+                    const allEqual = values.length > 0 && values.every(v => Math.abs(v - avg) < 0.1);
+                    
+                    if (allEqual) {
+                        setSplitMode('equal');
+                    } else {
+                        setSplitMode('unequal');
+                        const newManuals: Record<string, string> = {};
+                        memberIds.forEach(id => {
+                           newManuals[id] = ((initialData.split[id] as number) || 0).toFixed(2);
+                        });
+                        setManualSplits(newManuals);
+                    }
                 }
             } else {
+                // Default New Expense State
                 setTitle('');
                 setAmount('');
                 setPaidBy('me');
@@ -876,25 +1055,62 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData,
                 setSplitMode('equal');
                 setSelectedMembers(group.members.map((m: any) => m.id)); // Default all members
                 setManualSplits({});
+                prevAmountRef.current = 0;
             }
         }
     }, [isOpen, initialData, group]);
 
+    // Effect to handle amount updates and auto-recalculation
     useEffect(() => {
-        if (splitMode === 'equal') {
-            const total = parseFloat(amount) || 0;
-            if (selectedMembers.length > 0) {
-                const share = total / selectedMembers.length;
-                const newSplits: Record<string, string> = {};
-                selectedMembers.forEach(id => {
-                    newSplits[id] = share.toFixed(2);
-                });
-                setManualSplits(newSplits);
+        const total = parseFloat(amount) || 0;
+        const oldTotal = prevAmountRef.current;
+        
+        // Only trigger if amount has substantively changed to avoid unnecessary updates
+        if (Math.abs(total - oldTotal) > 0.001) {
+            if (splitMode === 'equal') {
+                if (selectedMembers.length > 0) {
+                    const share = total / selectedMembers.length;
+                    const newSplits: Record<string, string> = {};
+                    selectedMembers.forEach(id => {
+                        newSplits[id] = share.toFixed(2);
+                    });
+                    setManualSplits(newSplits);
+                }
+            } else if (splitMode === 'unequal') {
+                // Auto-scale proportional splits if in unequal mode
+                const currentSum = selectedMembers.reduce((sum, id) => sum + (parseFloat(manualSplits[id]) || 0), 0);
+                
+                if (currentSum > 0) {
+                    const ratio = total / currentSum;
+                    const newSplits: Record<string, string> = {};
+                    selectedMembers.forEach(id => {
+                        const val = parseFloat(manualSplits[id]) || 0;
+                        newSplits[id] = (val * ratio).toFixed(2);
+                    });
+                    setManualSplits(newSplits);
+                } else if (currentSum === 0 && total > 0 && selectedMembers.length > 0) {
+                    // Initialize from 0 -> Distribute equally as starting point
+                    const share = total / selectedMembers.length;
+                    const newSplits: Record<string, string> = {};
+                    selectedMembers.forEach(id => newSplits[id] = share.toFixed(2));
+                    setManualSplits(newSplits);
+                }
+            }
+            prevAmountRef.current = total;
+        } else {
+            // Handle case where amount is unchanged but members/mode changed
+             if (splitMode === 'equal') {
+                const share = total / (selectedMembers.length || 1);
+                 // We only update if state actually differs to avoid loops, though direct set is safe
+                 const newSplits: Record<string, string> = {};
+                 selectedMembers.forEach(id => newSplits[id] = share.toFixed(2));
+                 // Check diff before set? React handles it.
+                 setManualSplits(newSplits);
             }
         }
-    }, [amount, selectedMembers, splitMode]);
+    }, [amount, selectedMembers, splitMode]); // Intentionally omitting manualSplits to avoid loops
 
-    // Calculate dynamic amount per member based on mode
+    // Calculate dynamic amount per member based on mode for DISPLAY and SAVE
     const getMemberShare = (memberId: string) => {
         if (!selectedMembers.includes(memberId)) return 0;
         
@@ -911,6 +1127,11 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData,
         return 0;
     };
 
+    // Calculate Sum of Splits
+    const getCurrentTotalSplit = () => {
+         return selectedMembers.reduce((sum, id) => sum + getMemberShare(id), 0);
+    };
+
     const toggleMemberSelection = (memberId: string) => {
         if (selectedMembers.includes(memberId)) {
             setSelectedMembers(selectedMembers.filter(id => id !== memberId));
@@ -923,18 +1144,54 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData,
         setManualSplits({ ...manualSplits, [memberId]: value });
     };
 
-    const handleSetSplitMode = (mode: 'equal' | 'unequal' | 'percent') => {
-        setSplitMode(mode);
-        if (mode === 'percent') {
-            const pct = (100 / selectedMembers.length).toFixed(2);
+    const handleSetSplitMode = (newMode: 'equal' | 'unequal' | 'percent') => {
+        const total = parseFloat(amount) || 0;
+        const newSplits: Record<string, string> = {};
+
+        if (newMode === 'equal') {
+            // logic handled by useEffect
+        } else if (newMode === 'percent') {
+             if (splitMode === 'unequal') {
+                // Convert current amounts to %
+                selectedMembers.forEach(id => {
+                    const val = parseFloat(manualSplits[id]) || 0;
+                    newSplits[id] = total > 0 ? ((val / total) * 100).toFixed(2) : '0';
+                });
+             } else {
+                // From Equal
+                const pct = (100 / selectedMembers.length).toFixed(2);
+                selectedMembers.forEach(id => newSplits[id] = pct);
+             }
+        } else if (newMode === 'unequal') {
+             if (splitMode === 'percent') {
+                 // Convert % to amounts
+                 selectedMembers.forEach(id => {
+                     const pct = parseFloat(manualSplits[id]) || 0;
+                     newSplits[id] = (total * (pct / 100)).toFixed(2);
+                 });
+             } else {
+                 // From Equal
+                 const share = (total / selectedMembers.length).toFixed(2);
+                 selectedMembers.forEach(id => newSplits[id] = share);
+             }
+        }
+        
+        setManualSplits(newSplits);
+        setSplitMode(newMode);
+    };
+
+    const redistributeUnequal = () => {
+        // Helper to redistribute difference proportionally in Unequal mode manually
+        const currentTotal = parseFloat(amount) || 0;
+        const currentSplitSum = selectedMembers.reduce((sum, id) => sum + (parseFloat(manualSplits[id]) || 0), 0);
+        
+        if (currentSplitSum > 0 && currentTotal > 0) {
+            const ratio = currentTotal / currentSplitSum;
             const newSplits: Record<string, string> = {};
-            selectedMembers.forEach(id => newSplits[id] = pct);
-            setManualSplits(newSplits);
-        } else if (mode === 'unequal') {
-            const total = parseFloat(amount) || 0;
-            const share = (total / selectedMembers.length).toFixed(2);
-            const newSplits: Record<string, string> = {};
-            selectedMembers.forEach(id => newSplits[id] = share);
+            selectedMembers.forEach(id => {
+                const oldVal = parseFloat(manualSplits[id]) || 0;
+                newSplits[id] = (oldVal * ratio).toFixed(2);
+            });
             setManualSplits(newSplits);
         }
     };
@@ -954,8 +1211,8 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData,
         });
 
         // Basic validation tolerance for float math
-        if (Math.abs(computedTotal - amt) > 1 && splitMode !== 'equal') {
-            alert(`Split amounts (${computedTotal.toFixed(2)}) do not match total amount (${amt.toFixed(2)})`);
+        if (Math.abs(computedTotal - amt) > 1) {
+            alert(`Split amounts (${computedTotal.toFixed(2)}) do not match total amount (${amt.toFixed(2)}). Please check your splits.`);
             return;
         }
 
@@ -978,9 +1235,14 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData,
             category,
             date: new Date().toISOString().split('T')[0],
             split,
-            type: 'expense'
+            type: 'expense',
+            splitMethod: splitMode // Persist split method
         });
     };
+
+    const currentSplitSum = getCurrentTotalSplit();
+    const amtFloat = parseFloat(amount) || 0;
+    const isSplitMismatch = Math.abs(currentSplitSum - amtFloat) > 1;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -1146,6 +1408,16 @@ const AddSharedExpenseModal = ({ isOpen, onClose, onConfirm, group, initialData,
                         })}
                     </div>
 
+                    {/* Validation & Action */}
+                    {isSplitMismatch && splitMode === 'unequal' && (
+                        <div className="p-2 bg-red-500/10 border border-red-500/30 rounded-lg flex justify-between items-center">
+                             <span className="text-[10px] text-red-400 font-bold">Total Mismatch: {group.currency} {(amtFloat - currentSplitSum).toFixed(2)} left</span>
+                             <button onClick={redistributeUnequal} className="text-[9px] font-bold bg-red-500/20 text-red-300 px-2 py-1 rounded hover:bg-red-500/30 transition-colors">
+                                 Distribute
+                             </button>
+                        </div>
+                    )}
+
                     <div className="flex gap-2 mt-2">
                         {initialData && onDelete && (
                             <button onClick={() => onDelete(initialData.id)} className="p-3 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500/20"><Trash2 size={20} /></button>
@@ -1214,7 +1486,7 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
         toName: string,
         amount: number, 
         group: string, 
-        groupId: string,
+        groupId: string, 
         currency: string
     }[] = [];
     
@@ -1424,6 +1696,17 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
             balances.map((b) => {
                 const isExpanded = expandedSettlementId === b.id;
                 const transactions = isExpanded ? getTransactionHistory(b) : [];
+                
+                // Check if there is a reminder for this settlement pair
+                // We look for a reminder expense in the group targeting the 'from' user
+                const group = groups.find(g => g.id === b.groupId);
+                const reminderSent = group?.expenses.some(e => 
+                    e.type === 'reminder' && 
+                    e.sharedWith.includes(b.fromId) && 
+                    e.paidBy === b.toId // Sent by the creditor
+                );
+                // If reminder sent, find the date
+                const reminderDate = reminderSent ? group?.expenses.find(e => e.type === 'reminder' && e.sharedWith.includes(b.fromId))?.date : null;
 
                 return (
                 <Card 
@@ -1455,6 +1738,12 @@ const SettlementsView: React.FC<{ groups: SharedGroup[], onUpdateGroup: (g: Shar
                                         )}
                                     </div>
                                     <div className="text-[10px] text-slate-500">{b.group}</div>
+                                    {/* Reminder Badge */}
+                                    {reminderSent && reminderDate && (
+                                        <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 text-[9px] font-bold text-orange-600 dark:text-orange-400">
+                                            <BellRing size={10} /> Reminded {new Date(reminderDate).toLocaleDateString()}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -1606,27 +1895,6 @@ const QRScannerModal = ({ isOpen, onClose, onScanSuccess }: any) => {
         </div>
     );
 };
-
-const CommunityInsightsView = () => (
-    <div className="space-y-4 animate-in fade-in">
-        <Card className="p-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white border-none">
-            <h3 className="font-bold text-lg mb-2">Community Benchmarks</h3>
-            <p className="text-sm opacity-90">See how your spending compares to others in similar demographics.</p>
-        </Card>
-        <div className="grid grid-cols-2 gap-3">
-            <Card className="p-4">
-                <p className="text-xs text-slate-500 uppercase font-bold">Avg Grocery Spend</p>
-                <p className="text-xl font-bold text-slate-900 dark:text-white">$350</p>
-                <p className="text-[10px] text-emerald-500 font-bold">-12% vs You</p>
-            </Card>
-            <Card className="p-4">
-                <p className="text-xs text-slate-500 uppercase font-bold">Savings Rate</p>
-                <p className="text-xl font-bold text-slate-900 dark:text-white">18%</p>
-                <p className="text-[10px] text-red-500 font-bold">+2% vs You</p>
-            </Card>
-        </div>
-    </div>
-);
 
 const GroupAIView = ({ group }: any) => (
     <Card className="p-4 bg-slate-900 text-white border-none">
