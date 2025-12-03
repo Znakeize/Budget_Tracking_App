@@ -50,6 +50,13 @@ const showNavTabs = [
   'calculators', 'community-links', 'app-demo'
 ];
 
+const getNavTab = (tab: string) => {
+  if (['dashboard'].includes(tab)) return 'dashboard';
+  if (['budget'].includes(tab)) return 'budget';
+  if (['ai', 'analysis', 'investments', 'events', 'simulator', 'social'].includes(tab)) return 'ai';
+  return 'menu';
+};
+
 const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [navHistory, setNavHistory] = useState<string[]>([]); // Stack-based navigation history
@@ -338,6 +345,19 @@ const AppContent: React.FC = () => {
       return all.filter(n => !dismissedNotifIds.includes(n.id));
   }, [budgetData, history, events, groups, investmentAlerts, dismissedNotifIds]);
 
+  // Determine active badges for navigation
+  const activeBadges = useMemo(() => {
+    const tabs = [];
+    if (notifications.length > 0) tabs.push('menu');
+
+    // PRO features notifications
+    const proCategories = ['Event', 'Collaboration', 'Investment'];
+    if (notifications.some(n => proCategories.includes(n.category))) {
+        tabs.push('ai');
+    }
+    return tabs;
+  }, [notifications]);
+
   const handleDismissNotification = (id: string) => {
       setDismissedNotifIds(prev => [...prev, id]);
   };
@@ -530,6 +550,46 @@ const AppContent: React.FC = () => {
       setFeatureViewId(featureId);
   };
 
+  const handleFullReset = () => {
+      const emptyBudget: BudgetData = {
+          id: generateId(),
+          period: 'monthly',
+          month: new Date().getMonth(),
+          year: new Date().getFullYear(),
+          currency: 'USD',
+          currencySymbol: '$',
+          income: [],
+          expenses: [],
+          bills: [],
+          goals: [],
+          savings: [],
+          debts: [],
+          investments: [],
+          rollover: 0,
+          created: Date.now()
+      };
+
+      setBudgetData(emptyBudget);
+      setHistory([]);
+      setShoppingLists([]);
+      setEvents([]);
+      setGroups([]);
+      setInvestmentGoals([]);
+      setInvestmentAlerts([]);
+      
+      // Clear persistent storage but keep user session
+      const keysToRemove = [
+          'budget_current', 
+          'budget_history', 
+          'budget_shopping', 
+          'budget_events', 
+          'budget_groups', 
+          'budget_invest_goals', 
+          'budget_invest_alerts'
+      ];
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+  };
+
   // Render Logic
   const renderContent = () => {
       // Full screen views (no nav bar)
@@ -625,9 +685,13 @@ const AppContent: React.FC = () => {
               />;
           case 'tools':
               return <ToolsView 
-                  data={budgetData} 
+                  data={budgetData}
+                  history={history}
+                  events={events}
+                  groups={groups}
+                  shoppingLists={shoppingLists}
                   updateData={handleUpdateData} 
-                  resetData={() => setBudgetData(INITIAL_DATA)} 
+                  resetData={handleFullReset} 
                   isDarkMode={isDarkMode} 
                   toggleTheme={() => setIsDarkMode(!isDarkMode)}
                   notificationCount={notifications.length}
@@ -637,8 +701,12 @@ const AppContent: React.FC = () => {
           case 'settings':
               return <ToolsView 
                   data={budgetData} 
+                  history={history}
+                  events={events}
+                  groups={groups}
+                  shoppingLists={shoppingLists}
                   updateData={handleUpdateData} 
-                  resetData={() => setBudgetData(INITIAL_DATA)} 
+                  resetData={handleFullReset} 
                   isDarkMode={isDarkMode} 
                   toggleTheme={() => setIsDarkMode(!isDarkMode)}
                   notificationCount={notifications.length}
@@ -865,7 +933,7 @@ const AppContent: React.FC = () => {
                   setCalculatedRollover(totals.leftToSpend);
                   setShowNewPeriodModal(true);
               }}
-              badgeTabs={notifications.length > 0 ? ['menu'] : []}
+              badgeTabs={activeBadges}
           />
       )}
 

@@ -1,5 +1,5 @@
 
-import { BudgetData, ShoppingListData, SharedGroup, InvestmentAlert, InvestmentItem } from '../types';
+import { BudgetData, ShoppingListData, SharedGroup, InvestmentAlert, InvestmentItem, EventData } from '../types';
 
 export const calculateTotals = (data: BudgetData) => {
   const totalIncome = data.income.reduce((sum, item) => sum + item.actual, 0);
@@ -432,4 +432,126 @@ export const getInvestmentNotifications = (investments: InvestmentItem[], alerts
     }
 
     return generated;
+};
+
+export const calculateEventSettlements = (event: EventData) => {
+    const members = event.members;
+    const expenses = event.expenses;
+    
+    // 1. Calculate Net Balances
+    const balances: Record<string, number> = {};
+    members.forEach(m => balances[m.id] = 0);
+    
+    let totalExpense = 0;
+
+    expenses.forEach(e => {
+        // Logic from EventsView
+        if (e.category === 'Settlement') {
+            const payerId = e.paidBy || 'me';
+            if (balances[payerId] !== undefined) balances[payerId] += e.amount;
+            const receiverId = e.vendorId; // Convention used in EventsView
+            if (receiverId && balances[receiverId] !== undefined) balances[receiverId] -= e.amount;
+        } else if (e.category !== 'Reminder') {
+            totalExpense += e.amount;
+            const payerId = e.paidBy || 'me';
+            if (balances[payerId] !== undefined) balances[payerId] += e.amount;
+            else if (balances['me'] !== undefined) balances['me'] += e.amount;
+        }
+    });
+
+    const splitAmount = members.length > 0 ? totalExpense / members.length : 0;
+    members.forEach(m => balances[m.id] -= splitAmount);
+
+    // 2. Resolve Debts
+    const debtors = members.filter(m => balances[m.id] < -0.01).map(m => ({ ...m, balance: balances[m.id] })).sort((a,b) => a.balance - b.balance);
+    const creditors = members.filter(m => balances[m.id] > 0.01).map(m => ({ ...m, balance: balances[m.id] })).sort((a,b) => b.balance - a.balance);
+
+    const settlements = [];
+    let i = 0; 
+    let j = 0;
+
+    while (i < debtors.length && j < creditors.length) {
+        const debtor = debtors[i];
+        const creditor = creditors[j];
+        
+        const amount = Math.min(Math.abs(debtor.balance), creditor.balance);
+        
+        settlements.push({
+            from: debtor.name,
+            to: creditor.name,
+            amount: amount
+        });
+
+        debtor.balance += amount;
+        creditor.balance -= amount;
+
+        if (Math.abs(debtor.balance) < 0.01) i++;
+        if (creditor.balance < 0.01) j++;
+    }
+
+    return settlements;
+};
+
+export const calculateGroupSettlements = (group: SharedGroup) => {
+    const netBalances: Record<string, number> = {};
+    group.members.forEach(m => netBalances[m.id] = 0);
+
+    group.expenses.forEach(e => {
+        if (e.type === 'settlement') {
+            const receiverId = e.sharedWith[0];
+            if (receiverId) {
+                netBalances[e.paidBy] = (netBalances[e.paidBy] || 0) + e.amount;
+                netBalances[receiverId] = (netBalances[receiverId] || 0) - e.amount;
+            }
+        } else if (e.type === 'expense') {
+            netBalances[e.paidBy] = (netBalances[e.paidBy] || 0) + e.amount;
+            if (e.split) {
+                Object.entries(e.split).forEach(([userId, share]) => {
+                    netBalances[userId] = (netBalances[userId] || 0) - (share as number);
+                });
+            }
+        }
+    });
+
+    const debtors: {id: string, amount: number}[] = [];
+    const creditors: {id: string, amount: number}[] = [];
+
+    Object.entries(netBalances).forEach(([id, amount]) => {
+        if (amount < -0.01) debtors.push({ id, amount });
+        else if (amount > 0.01) creditors.push({ id, amount });
+    });
+
+    debtors.sort((a, b) => a.amount - b.amount);
+    creditors.sort((a, b) => b.amount - a.amount);
+
+    const settlements = [];
+    let i = 0;
+    let j = 0;
+
+    while (i < debtors.length && j < creditors.length) {
+        const debtor = debtors[i];
+        const creditor = creditors[j];
+
+        const amount = Math.min(Math.abs(debtor.amount), creditor.amount);
+        
+        const fromMember = group.members.find(m => m.id === debtor.id);
+        const toMember = group.members.find(m => m.id === creditor.id);
+
+        if (fromMember && toMember) {
+            settlements.push({
+                from: debtor.id === 'me' ? 'You' : fromMember.name,
+                to: creditor.id === 'me' ? 'You' : toMember.name,
+                amount: amount,
+                currency: group.currency
+            });
+        }
+
+        debtor.amount += amount;
+        creditor.amount -= amount;
+
+        if (Math.abs(debtor.amount) < 0.01) i++;
+        if (creditor.amount < 0.01) j++;
+    }
+
+    return settlements;
 };
