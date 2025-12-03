@@ -23,8 +23,9 @@ import { ProMembershipView } from './views/ProMembershipView';
 import { MembershipManagementView } from './views/MembershipManagementView';
 import { FeatureSubscriptionView } from './views/FeatureSubscriptionView';
 import { PersonalInfoView } from './views/settings/PersonalInfoView';
-import { EmailPreferencesView } from './views/settings/EmailPreferencesView';
+import { NotificationsView } from './views/settings/NotificationsView';
 import { SecurityView } from './views/settings/SecurityView';
+import { SettingsView } from './views/SettingsView';
 import { AdvancedCalculatorsView } from './views/AdvancedCalculatorsView';
 import { CommunityLinksView } from './views/CommunityLinksView';
 import { AppDemoView } from './views/AppDemoView';
@@ -46,7 +47,7 @@ const showNavTabs = [
   'investments', 'simulator', 'analysis', 
   'support', 'legal', 'feedback', 
   'pro-membership', 'membership-management', 
-  'personal-info', 'email-prefs', 'security', 
+  'personal-info', 'notifications', 'security', 
   'calculators', 'community-links', 'app-demo'
 ];
 
@@ -61,6 +62,8 @@ const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [navHistory, setNavHistory] = useState<string[]>([]); // Stack-based navigation history
   const [appDemoTab, setAppDemoTab] = useState('calculators'); // Persist App Demo Tab state
+  
+  const [isGuestMode, setIsGuestMode] = useState(false);
 
   // Initialize state from Local Storage or fallback to defaults
   const [budgetData, setBudgetData] = useState<BudgetData>(() => {
@@ -325,13 +328,20 @@ const AppContent: React.FC = () => {
 
   const handleLogin = (userData: any) => {
       setUser(userData);
+      setIsGuestMode(false);
       localStorage.setItem('budget_user_session', JSON.stringify(userData));
       handleTabSwitch('dashboard');
   };
 
   const handleLogout = () => {
       setUser(null);
+      setIsGuestMode(false);
       localStorage.removeItem('budget_user_session');
+      handleTabSwitch('dashboard');
+  };
+  
+  const handleGuestLogin = () => {
+      setIsGuestMode(true);
       handleTabSwitch('dashboard');
   };
 
@@ -593,7 +603,9 @@ const AppContent: React.FC = () => {
   // Render Logic
   const renderContent = () => {
       // Full screen views (no nav bar)
-      if (!user && activeTab !== 'auth') return <AuthView onLogin={handleLogin} onBack={() => {}} />;
+      if (!user && !isGuestMode && activeTab !== 'auth') {
+          return <AuthView onLogin={handleLogin} onBack={handleGuestLogin} />;
+      }
       
       if (featureViewId) {
           return <FeatureSubscriptionView 
@@ -699,20 +711,15 @@ const AppContent: React.FC = () => {
                   onBack={() => goBack('menu')}
               />;
           case 'settings':
-              return <ToolsView 
-                  data={budgetData} 
-                  history={history}
-                  events={events}
-                  groups={groups}
-                  shoppingLists={shoppingLists}
-                  updateData={handleUpdateData} 
-                  resetData={handleFullReset} 
-                  isDarkMode={isDarkMode} 
+              return <SettingsView 
+                  budgetData={budgetData}
+                  onUpdateBudget={handleUpdateData}
+                  isDarkMode={isDarkMode}
                   toggleTheme={() => setIsDarkMode(!isDarkMode)}
-                  notificationCount={notifications.length}
-                  onToggleNotifications={() => setShowNotifications(true)}
                   onBack={() => goBack('menu')}
-                  initialTab="settings"
+                  onProfileClick={handleProfileClick}
+                  onNavigate={navigate}
+                  onResetData={handleFullReset}
               />;
           case 'history':
               return <HistoryView 
@@ -871,8 +878,13 @@ const AppContent: React.FC = () => {
                   onBack={() => goBack('profile')}
                   onProfileClick={handleProfileClick}
               />;
-          case 'email-prefs':
-              return <EmailPreferencesView 
+          case 'notifications':
+              return <NotificationsView 
+                  onBack={() => goBack('profile')}
+                  onProfileClick={handleProfileClick}
+              />;
+          case 'email-prefs': // Fallback / Legacy support
+              return <NotificationsView 
                   onBack={() => goBack('profile')}
                   onProfileClick={handleProfileClick}
               />;
@@ -924,7 +936,7 @@ const AppContent: React.FC = () => {
       {renderContent()}
       
       {/* Navigation Bar (Conditional) - Hide if featureView is active (Full screen) */}
-      {user && showNavTabs.includes(activeTab) && !featureViewId && (
+      {(user || isGuestMode) && showNavTabs.includes(activeTab) && !featureViewId && (
           <Navigation 
               activeTab={getNavTab(activeTab)} 
               onTabChange={handleTabSwitch} 
