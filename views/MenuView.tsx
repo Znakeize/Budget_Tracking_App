@@ -46,8 +46,8 @@ export const MenuView: React.FC<MenuViewProps> = ({ onNavigate, notificationCoun
   ];
 
   const listItems = [
-    { id: 'app-demo', label: t('menu.app_demo'), icon: PlayCircle },
     { id: 'settings', label: t('menu.settings'), icon: Settings },
+    { id: 'app-demo', label: t('menu.app_demo'), icon: PlayCircle },
     { id: 'support', label: t('menu.support'), icon: LifeBuoy },
     { id: 'legal', label: t('menu.legal'), icon: FileText },
     { id: 'feedback', label: t('menu.feedback'), icon: MessageSquare },

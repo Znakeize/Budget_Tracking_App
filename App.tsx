@@ -23,8 +23,9 @@ import { ProMembershipView } from './views/ProMembershipView';
 import { MembershipManagementView } from './views/MembershipManagementView';
 import { FeatureSubscriptionView } from './views/FeatureSubscriptionView';
 import { PersonalInfoView } from './views/settings/PersonalInfoView';
-import { EmailPreferencesView } from './views/settings/EmailPreferencesView';
+import { NotificationsView } from './views/settings/NotificationsView';
 import { SecurityView } from './views/settings/SecurityView';
+import { SettingsView } from './views/SettingsView';
 import { AdvancedCalculatorsView } from './views/AdvancedCalculatorsView';
 import { CommunityLinksView } from './views/CommunityLinksView';
 import { AppDemoView } from './views/AppDemoView';
@@ -46,7 +47,7 @@ const showNavTabs = [
   'investments', 'simulator', 'analysis', 
   'support', 'legal', 'feedback', 
   'pro-membership', 'membership-management', 
-  'personal-info', 'email-prefs', 'security', 
+  'personal-info', 'notifications', 'security', 
   'calculators', 'community-links', 'app-demo'
 ];
 
@@ -686,8 +687,10 @@ const AppContent: React.FC = () => {
           case 'tools':
               return <ToolsView 
                   data={budgetData}
+                  history={history}
                   events={events}
                   groups={groups}
+                  shoppingLists={shoppingLists}
                   updateData={handleUpdateData} 
                   resetData={handleFullReset} 
                   isDarkMode={isDarkMode} 
@@ -697,18 +700,15 @@ const AppContent: React.FC = () => {
                   onBack={() => goBack('menu')}
               />;
           case 'settings':
-              return <ToolsView 
-                  data={budgetData} 
-                  events={events}
-                  groups={groups}
-                  updateData={handleUpdateData} 
-                  resetData={handleFullReset} 
-                  isDarkMode={isDarkMode} 
+              return <SettingsView 
+                  budgetData={budgetData}
+                  onUpdateBudget={handleUpdateData}
+                  isDarkMode={isDarkMode}
                   toggleTheme={() => setIsDarkMode(!isDarkMode)}
-                  notificationCount={notifications.length}
-                  onToggleNotifications={() => setShowNotifications(true)}
                   onBack={() => goBack('menu')}
-                  initialTab="settings"
+                  onProfileClick={handleProfileClick}
+                  onNavigate={navigate}
+                  onResetData={handleFullReset}
               />;
           case 'history':
               return <HistoryView 
@@ -867,8 +867,13 @@ const AppContent: React.FC = () => {
                   onBack={() => goBack('profile')}
                   onProfileClick={handleProfileClick}
               />;
-          case 'email-prefs':
-              return <EmailPreferencesView 
+          case 'notifications':
+              return <NotificationsView 
+                  onBack={() => goBack('profile')}
+                  onProfileClick={handleProfileClick}
+              />;
+          case 'email-prefs': // Fallback / Legacy support
+              return <NotificationsView 
                   onBack={() => goBack('profile')}
                   onProfileClick={handleProfileClick}
               />;
