@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Layout } from './components/ui/Layout';
 import { Navigation } from './components/Navigation';
@@ -684,7 +685,9 @@ const AppContent: React.FC = () => {
               />;
           case 'tools':
               return <ToolsView 
-                  data={budgetData} 
+                  data={budgetData}
+                  events={events}
+                  groups={groups}
                   updateData={handleUpdateData} 
                   resetData={handleFullReset} 
                   isDarkMode={isDarkMode} 
@@ -696,6 +699,8 @@ const AppContent: React.FC = () => {
           case 'settings':
               return <ToolsView 
                   data={budgetData} 
+                  events={events}
+                  groups={groups}
                   updateData={handleUpdateData} 
                   resetData={handleFullReset} 
                   isDarkMode={isDarkMode} 
@@ -901,6 +906,13 @@ const AppContent: React.FC = () => {
                   onProfileClick={handleProfileClick}
               />;
       }
+  };
+
+  const getNavTab = (tab: string) => {
+    if (['dashboard'].includes(tab)) return 'dashboard';
+    if (['budget'].includes(tab)) return 'budget';
+    if (['ai', 'analysis', 'investments', 'events', 'simulator', 'social'].includes(tab)) return 'ai';
+    return 'menu';
   };
 
   return (

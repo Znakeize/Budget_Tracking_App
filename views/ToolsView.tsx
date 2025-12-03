@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { BudgetData } from '../types';
+import { BudgetData, EventData, SharedGroup } from '../types';
 import { CURRENCY_SYMBOLS, MONTH_NAMES } from '../constants';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
@@ -13,12 +13,14 @@ import {
   CreditCard, Activity, RefreshCcw, Cloud, Lock, Database, RefreshCw, Server, Loader2, HardDrive,
   AlertTriangle, FileJson, FileSpreadsheet, Settings2, ChevronDown, ChevronUp
 } from 'lucide-react';
-import { calculateTotals } from '../utils/calculations';
+import { calculateTotals, formatCurrency } from '../utils/calculations';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Language } from '../utils/translations';
 
 interface ToolsViewProps {
   data: BudgetData;
+  events?: EventData[];
+  groups?: SharedGroup[];
   updateData: (d: BudgetData) => void;
   resetData: () => void;
   isDarkMode: boolean;
@@ -37,6 +39,8 @@ interface UserProfile {
 
 export const ToolsView: React.FC<ToolsViewProps> = ({ 
   data, 
+  events,
+  groups,
   updateData, 
   resetData, 
   isDarkMode, 
@@ -61,7 +65,9 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
   const [exportOptions, setExportOptions] = useState({
       includeMetadata: true,
       compactMode: false,
-      passwordProtect: false
+      passwordProtect: false,
+      includeEvents: false,
+      includeCollaboration: false
   });
 
   // Advanced Notification State
@@ -191,6 +197,49 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
     addSection('Goals', data.goals, i => `${i.name}: ${data.currencySymbol}${i.current} / ${i.target} (Monthly: ${i.monthly})`);
     addSection('Investments', data.investments, i => `${i.name}: ${data.currencySymbol}${i.amount}`);
 
+    // Optional: Events
+    if (exportOptions.includeEvents && events && events.length > 0) {
+        doc.addPage();
+        y = 20;
+        doc.setFontSize(16);
+        doc.text('Event Planner', 20, y);
+        y += 10;
+        doc.setFontSize(10);
+        events.forEach(evt => {
+            checkPageBreak(20);
+            doc.setFont(undefined, 'bold');
+            doc.text(`${evt.name} (${evt.type})`, 20, y);
+            doc.setFont(undefined, 'normal');
+            y += 6;
+            doc.text(`Date: ${new Date(evt.date).toLocaleDateString()} | Budget: ${evt.currencySymbol}${evt.totalBudget}`, 25, y);
+            y += lineHeight;
+            doc.text(`Spent: ${evt.currencySymbol}${evt.expenses.reduce((s,e)=>s+e.amount,0)} | Location: ${evt.location}`, 25, y);
+            y += 10;
+        });
+    }
+
+    // Optional: Collaboration
+    if (exportOptions.includeCollaboration && groups && groups.length > 0) {
+        doc.addPage();
+        y = 20;
+        doc.setFontSize(16);
+        doc.text('Collaboration Groups', 20, y);
+        y += 10;
+        doc.setFontSize(10);
+        groups.forEach(grp => {
+            checkPageBreak(20);
+            doc.setFont(undefined, 'bold');
+            doc.text(`${grp.name}`, 20, y);
+            doc.setFont(undefined, 'normal');
+            y += 6;
+            doc.text(`Members: ${grp.members.length} | Total Budget: ${grp.currency} ${grp.totalBudget}`, 25, y);
+            y += lineHeight;
+            const totalSpent = grp.expenses.filter(e => e.type === 'expense').reduce((s,e)=>s+e.amount,0);
+            doc.text(`Total Spent: ${grp.currency} ${totalSpent}`, 25, y);
+            y += 10;
+        });
+    }
+
     doc.save(`budget_${data.year}_${data.month}.pdf`);
   };
 
@@ -240,11 +289,40 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
     data.savings.forEach(s => savingsData.push([s.name, s.planned, s.amount]));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(savingsData), "Savings");
 
+    // Optional: Events
+    if (exportOptions.includeEvents && events) {
+        const eventData: any[][] = [['Event Name', 'Type', 'Date', 'Total Budget', 'Spent', 'Location']];
+        events.forEach(e => {
+            const spent = e.expenses.reduce((s, x) => s + x.amount, 0);
+            eventData.push([e.name, e.type, e.date, e.totalBudget, spent, e.location]);
+        });
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(eventData), "Events");
+    }
+
+    // Optional: Collaboration
+    if (exportOptions.includeCollaboration && groups) {
+        const groupData: any[][] = [['Group Name', 'Members', 'Total Budget', 'Spent', 'Currency']];
+        groups.forEach(g => {
+            const spent = g.expenses.filter(x => x.type === 'expense').reduce((s, x) => s + x.amount, 0);
+            groupData.push([g.name, g.members.length, g.totalBudget, spent, g.currency]);
+        });
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(groupData), "Collaboration");
+    }
+
     XLSX.writeFile(wb, `budget_export_${data.year}_${data.month}.xlsx`);
   };
 
   const exportJSON = () => {
-    const dataStr = JSON.stringify(data, null, 2);
+    let dataStr = JSON.stringify(data, null, 2);
+    
+    // If extra options selected, wrap in object
+    if (exportOptions.includeEvents || exportOptions.includeCollaboration) {
+        const fullExport: any = { budget: data };
+        if (exportOptions.includeEvents && events) fullExport.events = events;
+        if (exportOptions.includeCollaboration && groups) fullExport.groups = groups;
+        dataStr = JSON.stringify(fullExport, null, 2);
+    }
+
     const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -262,10 +340,14 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
       try {
         const content = e.target?.result as string;
         const parsedData = JSON.parse(content);
+        
+        // Handle both simple budget export and full export
+        const budgetToImport = parsedData.budget || parsedData;
+
         // Basic validation
-        if (parsedData.id && parsedData.period && Array.isArray(parsedData.income)) {
-             if (confirm(`Import budget "${MONTH_NAMES[parsedData.month] || 'Unknown'} ${parsedData.year || ''}"? This will overwrite the current view.`)) {
-                updateData(parsedData);
+        if (budgetToImport.id && budgetToImport.period && Array.isArray(budgetToImport.income)) {
+             if (confirm(`Import budget "${MONTH_NAMES[budgetToImport.month] || 'Unknown'} ${budgetToImport.year || ''}"? This will overwrite the current view.`)) {
+                updateData(budgetToImport);
                 alert('Data imported successfully!');
              }
         } else {
@@ -514,6 +596,16 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
                                 <span className="text-xs text-slate-600 dark:text-slate-300">Compact Layout</span>
                                 <Toggle checked={exportOptions.compactMode} onChange={() => setExportOptions({...exportOptions, compactMode: !exportOptions.compactMode})} />
                             </div>
+                            
+                             <div className="flex items-center justify-between">
+                                <span className="text-xs text-slate-600 dark:text-slate-300">Include Event Planner</span>
+                                <Toggle checked={exportOptions.includeEvents} onChange={() => setExportOptions({...exportOptions, includeEvents: !exportOptions.includeEvents})} />
+                            </div>
+                             <div className="flex items-center justify-between">
+                                <span className="text-xs text-slate-600 dark:text-slate-300">Include Collaboration</span>
+                                <Toggle checked={exportOptions.includeCollaboration} onChange={() => setExportOptions({...exportOptions, includeCollaboration: !exportOptions.includeCollaboration})} />
+                            </div>
+
                             {exportFormat === 'pdf' && (
                                 <div className="flex items-center justify-between">
                                     <span className="text-xs text-slate-600 dark:text-slate-300">Password Protect</span>
