@@ -867,6 +867,67 @@ export const TaxPlannerView: React.FC<TaxPlannerViewProps> = ({ onBack, userProf
                                 </Card>
                             ))}
                         </div>
+
+                        <Card className="p-6 mt-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                            <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-700 pb-4 mb-4">
+                                <div>
+                                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight uppercase">Invoice</h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">#{invoiceMeta.number}</p>
+                                </div>
+                                <div className="text-right">
+                                     <p className="text-sm font-bold text-slate-900 dark:text-white">{invoiceMeta.from || 'Your Business'}</p>
+                                     <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(invoiceMeta.date).toLocaleDateString()}</p>
+                                </div>
+                            </div>
+
+                            <div className="mb-6">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Bill To</p>
+                                <p className="text-sm font-bold text-slate-900 dark:text-white">{invoiceMeta.to || 'Client Name'}</p>
+                            </div>
+
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-xs mb-6">
+                                    <thead>
+                                        <tr className="border-b border-slate-100 dark:border-slate-700 text-slate-500">
+                                            <th className="text-left py-2 font-bold uppercase">Item</th>
+                                            <th className="text-center py-2 font-bold uppercase">Qty</th>
+                                            <th className="text-right py-2 font-bold uppercase">Price</th>
+                                            <th className="text-right py-2 font-bold uppercase">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                                        {vatResults.invoice.items.map((item) => (
+                                            <tr key={item.id}>
+                                                <td className="py-2 text-slate-700 dark:text-slate-300">{item.name}</td>
+                                                <td className="py-2 text-center text-slate-500">{item.quantity}</td>
+                                                <td className="py-2 text-right text-slate-500">{formatCurrency(item.amount, rules.symbol)}</td>
+                                                <td className="py-2 text-right font-bold text-slate-900 dark:text-white">{formatCurrency(item.gross, rules.symbol)}</td>
+                                            </tr>
+                                        ))}
+                                         {vatResults.invoice.items.length === 0 && (
+                                            <tr><td colSpan={4} className="py-4 text-center text-slate-400 italic">Add items to see preview</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="flex justify-end">
+                                <div className="w-1/2 sm:w-1/3 space-y-2">
+                                    <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400">
+                                        <span>Subtotal</span>
+                                        <span>{formatCurrency(vatResults.invoice.net, rules.symbol)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400">
+                                        <span>Tax ({rules.vatName} {rules.vatRate}%)</span>
+                                        <span>{formatCurrency(vatResults.invoice.tax, rules.symbol)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm font-bold text-slate-900 dark:text-white pt-2 border-t border-slate-100 dark:border-slate-700">
+                                        <span>Total</span>
+                                        <span>{formatCurrency(vatResults.invoice.gross, rules.symbol)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </Card>
                     </div>
                 )}
 

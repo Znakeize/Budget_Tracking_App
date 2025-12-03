@@ -1,8 +1,4 @@
 
-
-
-
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { BudgetData, InvestmentGoal, GoalItem, ShoppingListData } from '../types';
 import { formatCurrency, generateId } from '../utils/calculations';

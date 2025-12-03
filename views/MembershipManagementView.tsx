@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card } from '../components/ui/Card';
-import { ChevronLeft, CreditCard, Calendar, FileText, Download, AlertTriangle, CheckCircle, Crown, ChevronRight, Shield, Pause, Play, Zap, X, Loader2, Wallet, Plus, Trash2, Globe, Smartphone, LayoutGrid, Clock, ExternalLink } from 'lucide-react';
+import { ChevronLeft, CreditCard, Calendar, FileText, Download, AlertTriangle, CheckCircle, Crown, ChevronRight, Shield, Pause, Play, Zap, X, Loader2, Wallet, Plus, Trash2, Globe, Smartphone, LayoutGrid, Clock, ExternalLink, TrendingUp, ArrowUpRight } from 'lucide-react';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
 import { jsPDF } from 'jspdf';
 
@@ -39,10 +39,11 @@ export const MembershipManagementView: React.FC<MembershipManagementViewProps> =
   const [showPauseConfirm, setShowPauseConfirm] = useState(false);
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [showAddMethodModal, setShowAddMethodModal] = useState(false);
+  const [featureToRemove, setFeatureToRemove] = useState<string | null>(null);
   
   // Data States
   const [isPaused, setIsPaused] = useState(false);
-  const [currentPlan, setCurrentPlan] = useState<'monthly' | 'yearly'>('monthly');
+  const [currentPlan, setCurrentPlan] = useState<'monthly' | 'yearly'>('yearly');
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
   // Mock Payment Methods
@@ -57,6 +58,11 @@ export const MembershipManagementView: React.FC<MembershipManagementViewProps> =
     { id: 'inv-002', date: 'Dec 1, 2024', amount: '$4.99', status: 'Paid', plan: 'Pro Monthly', method: 'Visa •••• 4242' },
     { id: 'inv-003', date: 'Nov 15, 2024', amount: '$9.99', status: 'Paid', plan: 'Event Planner (Lifetime)', method: 'PayPal' },
   ];
+
+  // Derived Stats for Impact Section
+  const daysRemaining = 24;
+  const totalDays = 30;
+  const progressPercent = ((totalDays - daysRemaining) / totalDays) * 100;
 
   const handleCancel = () => {
     setLoadingAction('cancel');
@@ -142,22 +148,28 @@ export const MembershipManagementView: React.FC<MembershipManagementViewProps> =
   };
 
   const handleReactivate = () => {
-      if (onUpdateUser) {
-          onUpdateUser({...user, isPro: true});
-      }
+      // Navigate to store for upgrade
+      onNavigate('pro-membership');
   };
 
   const handleUnsubscribeFeature = (featureId: string) => {
-      if (window.confirm(`Are you sure you want to cancel the ${featureId.replace('-', ' ')} subscription? This will remove it from your owned modules.`)) {
-          setLoadingAction(`cancel-${featureId}`);
-          setTimeout(() => {
-              if (onUpdateUser) {
-                  const updatedFeatures = (user.unlockedFeatures || []).filter((f: string) => f !== featureId);
-                  onUpdateUser({ ...user, unlockedFeatures: updatedFeatures });
-              }
-              setLoadingAction(null);
-          }, 1000);
-      }
+      setFeatureToRemove(featureId);
+  };
+
+  const confirmUnsubscribeFeature = () => {
+      if (!featureToRemove) return;
+      const featureId = featureToRemove;
+      
+      setLoadingAction(`cancel-${featureId}`);
+
+      setTimeout(() => {
+          if (onUpdateUser) {
+              const updatedFeatures = (user.unlockedFeatures || []).filter((f: string) => f !== featureId);
+              onUpdateUser({ ...user, unlockedFeatures: updatedFeatures });
+          }
+          setLoadingAction(null);
+          setFeatureToRemove(null);
+      }, 1000);
   };
 
   // Map feature ID to app tab ID
@@ -218,61 +230,130 @@ export const MembershipManagementView: React.FC<MembershipManagementViewProps> =
                <div className="space-y-6 animate-in fade-in slide-in-from-right-2">
                    
                    {/* Active Subscription Card */}
-                   <div className={`relative overflow-hidden rounded-2xl p-6 shadow-xl transition-colors ${user.isPro ? 'bg-slate-900 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                   <div className={`relative overflow-hidden rounded-3xl p-6 shadow-xl transition-colors ${user.isPro ? 'bg-slate-900 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700'}`}>
                        {user.isPro && (
-                           <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-600/20 rounded-full blur-3xl transform translate-x-10 -translate-y-10"></div>
+                           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/20 rounded-full blur-3xl transform translate-x-20 -translate-y-20"></div>
                        )}
                        
                        <div className="relative z-10">
-                           <div className="flex items-center gap-2 mb-2">
-                               <Crown className={user.isPro ? "text-amber-400" : "text-slate-400"} size={20} fill={user.isPro ? "currentColor" : "none"} />
-                               <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${
-                                   !user.isPro 
-                                   ? 'bg-slate-300/50 border-slate-400 text-slate-600' 
-                                   : isPaused 
-                                        ? 'bg-orange-500/20 text-orange-300 border-orange-500/30' 
-                                        : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                               }`}>
-                                   {!user.isPro ? 'FREE PLAN' : isPaused ? 'PAUSED' : 'PRO ACTIVE'}
-                               </span>
+                           <div className="flex justify-between items-start mb-6">
+                               <div>
+                                   <div className="flex items-center gap-2 mb-2">
+                                       <Crown className={user.isPro ? "text-amber-400" : "text-slate-400"} size={20} fill={user.isPro ? "currentColor" : "none"} />
+                                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                                           !user.isPro 
+                                           ? 'bg-slate-100 dark:bg-slate-700 text-slate-500' 
+                                           : isPaused 
+                                                ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' 
+                                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                       }`}>
+                                           {!user.isPro ? 'Free Plan' : isPaused ? 'Paused' : 'Active'}
+                                       </span>
+                                   </div>
+                                   <h2 className={`text-2xl font-bold ${user.isPro ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
+                                       {user.isPro ? (currentPlan === 'monthly' ? 'Pro Monthly' : 'Pro Yearly') : 'Basic Access'}
+                                   </h2>
+                               </div>
+                               {user.isPro && (
+                                   <div className="text-right">
+                                       <div className="text-2xl font-bold">{currentPlan === 'monthly' ? '$4.99' : '$39.99'}</div>
+                                       <div className="text-xs text-slate-400">/{currentPlan === 'monthly' ? 'mo' : 'yr'}</div>
+                                   </div>
+                               )}
                            </div>
-                           <h2 className={`text-2xl font-bold mb-1 ${user.isPro ? 'text-white' : 'text-slate-700 dark:text-white'}`}>
-                               {user.isPro ? (currentPlan === 'monthly' ? 'Pro Monthly' : 'Pro Yearly') : 'Basic Access'}
-                           </h2>
-                           <p className={`text-sm ${user.isPro ? 'text-slate-400' : 'text-slate-500'}`}>
-                               {user.isPro 
-                                    ? `${currentPlan === 'monthly' ? '$4.99/month' : '$39.99/year'} • ${isPaused ? 'Paused' : 'Next bill: Feb 1, 2025'}`
-                                    : 'Upgrade to unlock AI limits'
-                               }
-                           </p>
 
-                           <div className="mt-6 pt-6 border-t border-white/10 flex gap-3">
-                               {user.isPro ? (
-                                   <>
+                           {user.isPro ? (
+                               <>
+                                   {/* Billing Cycle Progress */}
+                                   <div className="mb-6">
+                                       <div className="flex justify-between text-xs text-slate-400 mb-2">
+                                           <span>Current Cycle</span>
+                                           <span className="text-white">{daysRemaining} days left</span>
+                                       </div>
+                                       <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
+                                           <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${progressPercent}%` }}></div>
+                                       </div>
+                                       <div className="flex justify-between text-[10px] text-slate-500 mt-2 font-medium">
+                                           <span>Renews Feb 1, 2025</span>
+                                           <span className="text-indigo-300">Visa •••• 4242</span>
+                                       </div>
+                                   </div>
+
+                                   <div className="grid grid-cols-2 gap-3">
                                        <button 
                                             onClick={() => setShowPlanModal(true)}
-                                            className="flex-1 py-2 bg-white text-slate-900 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors"
+                                            className="py-3 bg-white text-slate-900 rounded-xl text-xs font-bold hover:bg-slate-100 transition-colors shadow-lg"
                                        >
                                            Switch Plan
                                        </button>
                                        <button 
                                             onClick={() => setShowPauseConfirm(true)}
-                                            className="flex-1 py-2 bg-white/10 text-white rounded-lg text-xs font-bold hover:bg-white/20 transition-colors"
+                                            className="py-3 bg-white/10 text-white rounded-xl text-xs font-bold hover:bg-white/20 transition-colors border border-white/10"
                                        >
-                                           {isPaused ? 'Resume' : 'Pause'}
+                                           {isPaused ? 'Resume Membership' : 'Pause Membership'}
                                        </button>
-                                   </>
-                               ) : (
+                                   </div>
+                               </>
+                           ) : (
+                               <div className="mt-4">
+                                   <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Upgrade to Pro to unlock unlimited AI insights, advanced charts, and cloud backup.</p>
                                    <button 
                                         onClick={handleReactivate}
-                                        className="w-full py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors shadow-lg"
+                                        className="w-full py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-600/20"
                                    >
-                                       Upgrade to Pro
+                                       Upgrade Now
                                    </button>
-                               )}
-                           </div>
+                               </div>
+                           )}
                        </div>
                    </div>
+
+                   {/* Pro Impact Stats */}
+                   {user.isPro && (
+                       <div>
+                           <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 ml-1">Your Pro Impact</h3>
+                           <div className="grid grid-cols-2 gap-3">
+                               <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                   <div className="flex items-center gap-2 mb-1">
+                                       <div className="p-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-lg">
+                                           <TrendingUp size={14} />
+                                       </div>
+                                       <span className="text-[10px] font-bold text-slate-400 uppercase">Est. Savings</span>
+                                   </div>
+                                   <div className="text-xl font-bold text-slate-900 dark:text-white">$1,240</div>
+                               </div>
+                               <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                   <div className="flex items-center gap-2 mb-1">
+                                       <div className="p-1.5 bg-violet-100 dark:bg-violet-900/30 text-violet-600 rounded-lg">
+                                           <Zap size={14} />
+                                       </div>
+                                       <span className="text-[10px] font-bold text-slate-400 uppercase">AI Insights</span>
+                                   </div>
+                                   <div className="text-xl font-bold text-slate-900 dark:text-white">48</div>
+                               </div>
+                           </div>
+                       </div>
+                   )}
+
+                   {/* Next Invoice Preview */}
+                   {user.isPro && (
+                       <Card className="p-0 overflow-hidden">
+                           <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                               <h3 className="text-sm font-bold text-slate-700 dark:text-white">Upcoming Invoice</h3>
+                               <span className="text-[10px] bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-600 dark:text-slate-300 font-medium">Auto-Pay On</span>
+                           </div>
+                           <div className="p-4 flex justify-between items-center">
+                               <div>
+                                   <div className="text-sm font-bold text-slate-900 dark:text-white">Feb 1, 2025</div>
+                                   <div className="text-xs text-slate-500">{currentPlan === 'monthly' ? 'Pro Monthly' : 'Pro Yearly'} Renewal</div>
+                               </div>
+                               <div className="text-right">
+                                   <div className="text-sm font-bold text-slate-900 dark:text-white">{currentPlan === 'monthly' ? '$4.99' : '$39.99'}</div>
+                                   <div className="text-[10px] text-slate-400">Visa •••• 4242</div>
+                               </div>
+                           </div>
+                       </Card>
+                   )}
 
                    {/* Unlocked Single Features */}
                    {user.unlockedFeatures && user.unlockedFeatures.length > 0 && (
@@ -303,7 +384,7 @@ export const MembershipManagementView: React.FC<MembershipManagementViewProps> =
                                                     onClick={() => onNavigate(featureMap[feat] || 'dashboard')}
                                                     className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-indigo-600 hover:text-white text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold transition-all"
                                             >
-                                                Open <ExternalLink size={12} />
+                                                Open <ArrowUpRight size={12} />
                                             </button>
                                        </div>
                                    </div>
@@ -314,10 +395,10 @@ export const MembershipManagementView: React.FC<MembershipManagementViewProps> =
 
                    {/* Danger Zone */}
                    {user.isPro && (
-                       <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+                       <div className="pt-6 border-t border-slate-200 dark:border-slate-800 text-center">
                            <button 
                                onClick={() => setShowCancelConfirm(true)}
-                               className="text-red-500 hover:text-red-600 text-xs font-bold flex items-center gap-2"
+                               className="text-red-500 hover:text-red-600 text-xs font-bold flex items-center justify-center gap-2 mx-auto transition-colors"
                            >
                                <AlertTriangle size={14} /> Cancel Subscription
                            </button>
@@ -354,7 +435,7 @@ export const MembershipManagementView: React.FC<MembershipManagementViewProps> =
                                    
                                    <div className="flex justify-between items-start mb-4 relative z-10">
                                        {pm.type === 'card' ? (
-                                           <div className="w-10 h-6 bg-yellow-500/20 rounded border border-yellow-500/40"></div>
+                                           <div className="w-10 h-6 bg-yellow-500/20 rounded-md border border-yellow-500/40"></div>
                                        ) : pm.type === 'paypal' ? (
                                            <Wallet size={24} className="opacity-80" />
                                        ) : (
@@ -444,6 +525,36 @@ export const MembershipManagementView: React.FC<MembershipManagementViewProps> =
                onClose={() => setShowAddMethodModal(false)} 
                onAdd={handleAddPaymentMethod} 
            />
+       )}
+
+       {/* Feature Unsubscribe Confirmation Modal */}
+       {featureToRemove && (
+           <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6">
+               <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95">
+                   <div className="w-16 h-16 bg-red-100 dark:bg-red-900/20 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                       <AlertTriangle size={32} />
+                   </div>
+                   <h3 className="text-xl font-bold text-slate-900 dark:text-white text-center mb-2">Unsubscribe Module?</h3>
+                   <p className="text-sm text-slate-500 dark:text-slate-400 text-center mb-6">
+                       Are you sure you want to cancel the <strong>{featureToRemove.replace('-', ' ')}</strong> subscription? You will lose access to this feature.
+                   </p>
+                   <div className="space-y-3">
+                       <button 
+                           onClick={() => setFeatureToRemove(null)}
+                           className="w-full py-3 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-bold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                       >
+                           Keep Subscription
+                       </button>
+                       <button 
+                           onClick={confirmUnsubscribeFeature}
+                           disabled={loadingAction === `cancel-${featureToRemove}`}
+                           className="w-full py-3 text-red-600 dark:text-red-400 font-bold rounded-xl hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors flex justify-center items-center"
+                       >
+                           {loadingAction === `cancel-${featureToRemove}` ? <Loader2 size={18} className="animate-spin" /> : 'Confirm Unsubscribe'}
+                       </button>
+                   </div>
+               </div>
+           </div>
        )}
 
        {/* Cancel Modal */}

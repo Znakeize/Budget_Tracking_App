@@ -6,7 +6,7 @@ import {
   ArrowRight, Download, Table as TableIcon, Activity, Zap, Crown,
   Settings, Info, Globe, ArrowLeftRight, Coins, Receipt, Briefcase,
   Home, Car, CreditCard, Plane, Smile, Coffee, Gem, Calendar, Clock, Lock,
-  ShieldCheck, Gauge
+  ShieldCheck, Gauge, TrendingDown
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
@@ -489,7 +489,7 @@ const ModuleDescription = ({ title, description }: { title: string, description:
 const InvestmentModule = ({ results, inputs, setInputs, currencySymbol }: any) => {
     const [showRealValue, setShowRealValue] = useState(false);
     const [activeTab, setActiveTab] = useState<'forecast' | 'roi'>('forecast');
-    const [roiParams, setRoiParams] = useState({ initial: 10000, final: 18000, years: 5 });
+    const [roiParams, setRoiParams] = useState({ initial: 10000, final: 18000, years: 5, inflation: 2.5, tax: 15 });
 
     const roiResults = useMemo(() => {
         const gain = roiParams.final - roiParams.initial;
@@ -497,7 +497,27 @@ const InvestmentModule = ({ results, inputs, setInputs, currencySymbol }: any) =
         const cagr = (roiParams.initial > 0 && roiParams.final > 0 && roiParams.years > 0)
             ? (Math.pow(roiParams.final / roiParams.initial, 1 / roiParams.years) - 1) * 100
             : 0;
-        return { gain, totalRoi, cagr };
+            
+        // Tax Logic (on Nominal Gain)
+        const taxAmount = Math.max(0, gain * ((roiParams.tax || 0) / 100));
+        const postTaxFinal = roiParams.final - taxAmount;
+        
+        // Inflation Logic (Real Value)
+        const inflationFactor = Math.pow(1 + (roiParams.inflation || 0) / 100, roiParams.years);
+        const realPostTaxFinal = postTaxFinal / inflationFactor;
+        
+        // Value lost to inflation (Difference between nominal post-tax and real post-tax)
+        const inflationLoss = postTaxFinal - realPostTaxFinal;
+
+        // Real CAGR
+        const realPostTaxCagr = (roiParams.initial > 0 && realPostTaxFinal > 0 && roiParams.years > 0)
+            ? (Math.pow(realPostTaxFinal / roiParams.initial, 1 / roiParams.years) - 1) * 100
+            : 0;
+            
+        // Net Real Gain (Real Final - Initial)
+        const realNetGain = realPostTaxFinal - roiParams.initial;
+
+        return { gain, totalRoi, cagr, taxAmount, postTaxFinal, realPostTaxFinal, inflationLoss, realPostTaxCagr, realNetGain };
     }, [roiParams]);
 
     const breakdownData = {
@@ -660,35 +680,108 @@ const InvestmentModule = ({ results, inputs, setInputs, currencySymbol }: any) =
         ) : (
             <>
                 <ModuleDescription 
-                    title="ROI & CAGR Calculator" 
-                    description="Calculate the efficiency of an investment. Determine the Annualized Return (CAGR) and Total Return based on initial and final values." 
+                    title="Advanced ROI Analyzer" 
+                    description="Determine the true efficiency of your investment by factoring in taxes and inflation. See if you are truly building wealth or just keeping up." 
                 />
 
-                <Card className="p-5 bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white border-none shadow-xl">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <p className="text-xs text-fuchsia-200 font-bold uppercase mb-1">Annualized Return (CAGR)</p>
-                            <h2 className="text-3xl font-bold">{roiResults.cagr.toFixed(2)}%</h2>
-                        </div>
-                        <div className="text-right">
-                            <p className="text-xs text-fuchsia-200 font-bold uppercase mb-1">Total ROI</p>
-                            <h2 className="text-3xl font-bold">{roiResults.totalRoi.toFixed(1)}%</h2>
-                        </div>
+                {/* Verdict Banner */}
+                <div className={`p-4 rounded-2xl mb-6 flex items-center gap-4 ${roiResults.realPostTaxCagr > 0 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200' : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'}`}>
+                    <div className={`p-2 rounded-full ${roiResults.realPostTaxCagr > 0 ? 'bg-emerald-200 dark:bg-emerald-800' : 'bg-red-200 dark:bg-red-800'}`}>
+                        {roiResults.realPostTaxCagr > 0 ? <TrendingUp size={24} /> : <TrendingDown size={24} />}
                     </div>
-                    <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center">
-                        <span className="text-xs font-bold text-fuchsia-100 uppercase">Total Profit</span>
-                        <span className="text-xl font-bold">{currencySymbol}{roiResults.gain.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+                    <div>
+                        <h3 className="font-bold text-lg">{roiResults.realPostTaxCagr > 0 ? 'Wealth Generated' : 'Purchasing Power Lost'}</h3>
+                        <p className="text-xs opacity-80">
+                            {roiResults.realPostTaxCagr > 0 
+                                ? `Your investment is beating inflation and taxes by ${roiResults.realPostTaxCagr.toFixed(2)}% annually.`
+                                : `After taxes and inflation, you are effectively losing ${Math.abs(roiResults.realPostTaxCagr).toFixed(2)}% annually.`
+                            }
+                        </p>
                     </div>
+                </div>
+
+                {/* Main Comparison Card */}
+                <Card className="p-5 mb-6">
+                     <h4 className="text-xs font-bold text-slate-500 uppercase mb-4">Return Comparison (Annualized)</h4>
+                     
+                     {/* Bar Chart for CAGR */}
+                     <div className="h-32 mb-6">
+                         <Bar 
+                            data={{
+                                labels: ['Nominal', 'Real (Post-Tax)'],
+                                datasets: [{
+                                    label: 'CAGR %',
+                                    data: [roiResults.cagr, roiResults.realPostTaxCagr],
+                                    backgroundColor: [roiResults.cagr >= 0 ? '#6366f1' : '#ef4444', roiResults.realPostTaxCagr >= 0 ? '#10b981' : '#f97316'],
+                                    borderRadius: 4,
+                                    barThickness: 40
+                                }]
+                            }}
+                            options={{
+                                indexAxis: 'y',
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { display: false } },
+                                scales: { x: { grid: { display: false } }, y: { grid: { display: false } } }
+                            }}
+                         />
+                     </div>
+
+                     <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                         <div>
+                             <p className="text-[10px] text-slate-400 uppercase font-bold">Nominal CAGR</p>
+                             <p className="text-xl font-bold text-slate-900 dark:text-white">{roiResults.cagr.toFixed(2)}%</p>
+                         </div>
+                         <div className="text-right">
+                             <p className="text-[10px] text-slate-400 uppercase font-bold">Real Post-Tax CAGR</p>
+                             <p className={`text-xl font-bold ${roiResults.realPostTaxCagr >= 0 ? 'text-emerald-500' : 'text-orange-500'}`}>{roiResults.realPostTaxCagr.toFixed(2)}%</p>
+                         </div>
+                     </div>
                 </Card>
 
-                <Card className="p-4 bg-white dark:bg-slate-800">
-                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-4 flex items-center gap-2"><Calculator size={14}/> Investment Details</h4>
-                    
-                    <div className="space-y-4">
-                        <InputGroup label="Initial Amount" value={roiParams.initial} onChange={v => setRoiParams({...roiParams, initial: v})} prefix={currencySymbol} />
-                        <InputGroup label="Final Value" value={roiParams.final} onChange={v => setRoiParams({...roiParams, final: v})} prefix={currencySymbol} />
+                {/* Detailed Waterfall */}
+                <Card className="p-0 overflow-hidden mb-6">
+                     <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-700">
+                         <h4 className="text-sm font-bold text-slate-700 dark:text-white">Value Breakdown</h4>
+                     </div>
+                     <div className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+                         <div className="p-3 flex justify-between items-center">
+                             <span className="text-slate-500">Initial Investment</span>
+                             <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(roiParams.initial, currencySymbol)}</span>
+                         </div>
+                         <div className="p-3 flex justify-between items-center">
+                             <span className="text-slate-500 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-indigo-500"></div> Nominal Gain</span>
+                             <span className="font-bold text-indigo-600">+{formatCurrency(roiResults.gain, currencySymbol)}</span>
+                         </div>
+                         <div className="p-3 flex justify-between items-center bg-red-50/30 dark:bg-red-900/10">
+                             <span className="text-slate-500 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500"></div> Tax Impact ({roiParams.tax}%)</span>
+                             <span className="font-bold text-red-500">-{formatCurrency(roiResults.taxAmount, currencySymbol)}</span>
+                         </div>
+                         <div className="p-3 flex justify-between items-center bg-orange-50/30 dark:bg-orange-900/10">
+                             <span className="text-slate-500 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-orange-500"></div> Inflation Loss</span>
+                             <span className="font-bold text-orange-500">-{formatCurrency(roiResults.inflationLoss, currencySymbol)}</span>
+                         </div>
+                         <div className="p-4 bg-slate-100 dark:bg-slate-800 flex justify-between items-center border-t border-slate-200 dark:border-slate-700">
+                             <span className="font-bold text-slate-900 dark:text-white uppercase text-xs">Real Final Value</span>
+                             <span className="font-bold text-xl text-slate-900 dark:text-white">{formatCurrency(roiResults.realPostTaxFinal, currencySymbol)}</span>
+                         </div>
+                     </div>
+                </Card>
+
+                {/* Input Section */}
+                <Card className="p-4">
+                     <h4 className="text-xs font-bold text-slate-500 uppercase mb-4 flex items-center gap-2"><Settings size={14}/> Configuration</h4>
+                     <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-3">
+                            <InputGroup label="Initial Amount" value={roiParams.initial} onChange={v => setRoiParams({...roiParams, initial: v})} prefix={currencySymbol} />
+                            <InputGroup label="Final Amount" value={roiParams.final} onChange={v => setRoiParams({...roiParams, final: v})} prefix={currencySymbol} />
+                        </div>
                         <InputGroup label="Time Period (Years)" value={roiParams.years} onChange={v => setRoiParams({...roiParams, years: v})} />
-                    </div>
+                        <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+                            <InputGroup label="Inflation Rate (%)" value={roiParams.inflation} onChange={v => setRoiParams({...roiParams, inflation: v})} />
+                            <InputGroup label="Tax on Gains (%)" value={roiParams.tax} onChange={v => setRoiParams({...roiParams, tax: v})} />
+                        </div>
+                     </div>
                 </Card>
             </>
         )}

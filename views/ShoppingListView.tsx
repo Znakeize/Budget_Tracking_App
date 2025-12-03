@@ -7,12 +7,13 @@ import {
   Wallet, ArrowLeft, Edit2, List, Bell, Download, Users, Pencil,
   User, ShoppingBag, Tag, DollarSign, Copy, Calendar, Zap, Settings, BrainCircuit,
   ArrowRight as ArrowRightIcon, AlertTriangle, Sparkles, Clock, UserPlus, Package,
-  AlertCircle, ChevronDown, Lock, Link
+  AlertCircle, ChevronDown, Lock, Link, Calculator
 } from 'lucide-react';
 import { ShoppingListData, Shop, ShopItem, ShopMember } from '../types';
 import { generateId, formatCurrency, getShoppingNotifications, NotificationItem } from '../utils/calculations';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
 import { NotificationPopup } from '../components/ui/NotificationPopup';
+import { SimpleCalculator } from '../components/ui/SimpleCalculator';
 
 interface ShoppingListViewProps {
   onBack: () => void;
@@ -49,6 +50,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
   
   const [isCreateListModalOpen, setIsCreateListModalOpen] = useState(false);
   const [isNotificationSettingsOpen, setIsNotificationSettingsOpen] = useState(false);
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   
   // Action States
   const [editingList, setEditingList] = useState<ShoppingListData | null>(null);
@@ -293,6 +295,12 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
                 </div>
                 <div className="flex items-center gap-1 pb-1">
                     <button 
+                        onClick={() => setIsCalculatorOpen(true)}
+                        className="relative p-1.5 focus:outline-none active:scale-95 transition-transform text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400"
+                    >
+                        <Calculator size={22} />
+                    </button>
+                    <button 
                         onClick={() => setShowNotifications(!showNotifications)}
                         className="relative p-1.5 focus:outline-none active:scale-95 transition-transform"
                     >
@@ -527,6 +535,11 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
             settings={notifSettings}
             onUpdate={setNotifSettings}
        />
+
+       <SimpleCalculator 
+            isOpen={isCalculatorOpen}
+            onClose={() => setIsCalculatorOpen(false)}
+       />
     </div>
   );
 };
@@ -546,6 +559,7 @@ const ListDetailView: React.FC<{
     const [isAddShopOpen, setIsAddShopOpen] = useState(false);
     const [editingShop, setEditingShop] = useState<Shop | null>(null);
     const [isShareOpen, setIsShareOpen] = useState(false);
+    const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
 
     const handleAddShop = (shop: Shop) => {
         // Inherit links from list if they exist (for "Linked Shopping Lists" created from Event/Group)
@@ -630,6 +644,7 @@ const ListDetailView: React.FC<{
                         </div>
                     </div>
                     <div className="flex items-center gap-1">
+                        <button onClick={() => setIsCalculatorOpen(true)} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"><Calculator size={20} /></button>
                         <button onClick={() => setIsShareOpen(true)} className="p-2 text-slate-400 hover:text-indigo-500 transition-colors">
                             <Share2 size={20} />
                         </button>
@@ -755,6 +770,11 @@ const ListDetailView: React.FC<{
                 onRemoveMember={handleRemoveMemberFromList}
                 onUpdateRole={handleUpdateMemberRole}
             />
+
+            <SimpleCalculator 
+                isOpen={isCalculatorOpen}
+                onClose={() => setIsCalculatorOpen(false)}
+            />
         </div>
     );
 };
@@ -772,6 +792,7 @@ const ShopItemsView: React.FC<{
     const [search, setSearch] = useState('');
     const [isAddItemOpen, setIsAddItemOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<ShopItem | null>(null);
+    const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
 
     const handleUpdateShop = (updatedShop: Shop) => {
         const updatedShops = list.shops.map(s => s.id === updatedShop.id ? updatedShop : s);
@@ -930,6 +951,9 @@ const ShopItemsView: React.FC<{
                             <p className="text-xs text-slate-500 truncate">in {list.name} {shop.budgetCategory ? `• ${shop.budgetCategory}` : ''} {shop.eventId ? `• Event Linked` : ''} {shop.groupId ? `• Group Linked` : ''}</p>
                         </div>
                     </div>
+                    <div className="flex items-center gap-1">
+                        <button onClick={() => setIsCalculatorOpen(true)} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"><Calculator size={20} /></button>
+                    </div>
                 </div>
 
                 {/* Shop Budget Bar */}
@@ -1084,6 +1108,11 @@ const ShopItemsView: React.FC<{
                 onDelete={editingItem ? () => handleDeleteItem(editingItem.id) : undefined}
                 initialData={editingItem}
                 currencySymbol={list.currencySymbol}
+            />
+
+            <SimpleCalculator 
+                isOpen={isCalculatorOpen}
+                onClose={() => setIsCalculatorOpen(false)}
             />
         </div>
     );

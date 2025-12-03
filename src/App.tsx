@@ -50,13 +50,6 @@ const showNavTabs = [
   'calculators', 'community-links', 'app-demo'
 ];
 
-const getNavTab = (tab: string) => {
-  if (['dashboard'].includes(tab)) return 'dashboard';
-  if (['budget'].includes(tab)) return 'budget';
-  if (['ai', 'analysis', 'investments', 'events', 'simulator', 'social'].includes(tab)) return 'ai';
-  return 'menu';
-};
-
 const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [navHistory, setNavHistory] = useState<string[]>([]); // Stack-based navigation history
