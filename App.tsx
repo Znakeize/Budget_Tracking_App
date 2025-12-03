@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Layout } from './components/ui/Layout';
 import { Navigation } from './components/Navigation';
@@ -206,6 +205,35 @@ const AppContent: React.FC = () => {
       setBudgetData(newData);
   };
 
+  // Sync expense category updates (name or budget) to linked shopping lists
+  const handleExpenseCategoryChange = (oldName: string, newName: string, newBudget: number) => {
+      setShoppingLists(prevLists => prevLists.map(list => {
+          let changed = false;
+          let updatedList = { ...list };
+
+          // Update List-level link
+          if (updatedList.budgetCategory === oldName) {
+              updatedList.budgetCategory = newName;
+              updatedList.budget = newBudget;
+              changed = true;
+          }
+
+          // Update Shop-level links
+          const updatedShops = updatedList.shops.map(shop => {
+              if (shop.budgetCategory === oldName) {
+                  changed = true;
+                  return { ...shop, budgetCategory: newName, budget: newBudget };
+              }
+              return shop;
+          });
+
+          if (changed) {
+              return { ...updatedList, shops: updatedShops, lastModified: Date.now() };
+          }
+          return list;
+      }));
+  };
+
   const handleUpdateGroups = (newGroups: SharedGroup[]) => {
       setGroups(newGroups);
 
@@ -315,6 +343,19 @@ const AppContent: React.FC = () => {
       const all = [...core, ...eventsNotif, ...socialNotif, ...investmentsNotif];
       return all.filter(n => !dismissedNotifIds.includes(n.id));
   }, [budgetData, history, events, groups, investmentAlerts, dismissedNotifIds]);
+
+  // Determine active badges for navigation
+  const activeBadges = useMemo(() => {
+    const tabs = [];
+    if (notifications.length > 0) tabs.push('menu');
+
+    // PRO features notifications
+    const proCategories = ['Event', 'Collaboration', 'Investment'];
+    if (notifications.some(n => proCategories.includes(n.category))) {
+        tabs.push('ai');
+    }
+    return tabs;
+  }, [notifications]);
 
   const handleDismissNotification = (id: string) => {
       setDismissedNotifIds(prev => [...prev, id]);
@@ -508,6 +549,46 @@ const AppContent: React.FC = () => {
       setFeatureViewId(featureId);
   };
 
+  const handleFullReset = () => {
+      const emptyBudget: BudgetData = {
+          id: generateId(),
+          period: 'monthly',
+          month: new Date().getMonth(),
+          year: new Date().getFullYear(),
+          currency: 'USD',
+          currencySymbol: '$',
+          income: [],
+          expenses: [],
+          bills: [],
+          goals: [],
+          savings: [],
+          debts: [],
+          investments: [],
+          rollover: 0,
+          created: Date.now()
+      };
+
+      setBudgetData(emptyBudget);
+      setHistory([]);
+      setShoppingLists([]);
+      setEvents([]);
+      setGroups([]);
+      setInvestmentGoals([]);
+      setInvestmentAlerts([]);
+      
+      // Clear persistent storage but keep user session
+      const keysToRemove = [
+          'budget_current', 
+          'budget_history', 
+          'budget_shopping', 
+          'budget_events', 
+          'budget_groups', 
+          'budget_invest_goals', 
+          'budget_invest_alerts'
+      ];
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+  };
+
   // Render Logic
   const renderContent = () => {
       // Full screen views (no nav bar)
@@ -570,6 +651,7 @@ const AppContent: React.FC = () => {
                       setShoppingFocus({ listId, shopId });
                       navigate('shopping-list');
                   }}
+                  onExpenseCategoryChange={handleExpenseCategoryChange}
               />;
           case 'add':
               // Handled by useEffect redirect
@@ -604,7 +686,7 @@ const AppContent: React.FC = () => {
               return <ToolsView 
                   data={budgetData} 
                   updateData={handleUpdateData} 
-                  resetData={() => setBudgetData(INITIAL_DATA)} 
+                  resetData={handleFullReset} 
                   isDarkMode={isDarkMode} 
                   toggleTheme={() => setIsDarkMode(!isDarkMode)}
                   notificationCount={notifications.length}
@@ -615,7 +697,7 @@ const AppContent: React.FC = () => {
               return <ToolsView 
                   data={budgetData} 
                   updateData={handleUpdateData} 
-                  resetData={() => setBudgetData(INITIAL_DATA)} 
+                  resetData={handleFullReset} 
                   isDarkMode={isDarkMode} 
                   toggleTheme={() => setIsDarkMode(!isDarkMode)}
                   notificationCount={notifications.length}
@@ -821,13 +903,6 @@ const AppContent: React.FC = () => {
       }
   };
 
-  const getNavTab = (tab: string) => {
-    if (['dashboard'].includes(tab)) return 'dashboard';
-    if (['budget'].includes(tab)) return 'budget';
-    if (['ai', 'analysis', 'investments', 'events', 'simulator', 'social'].includes(tab)) return 'ai';
-    return 'menu';
-  };
-
   return (
     <Layout>
       {renderContent()}
@@ -842,7 +917,7 @@ const AppContent: React.FC = () => {
                   setCalculatedRollover(totals.leftToSpend);
                   setShowNewPeriodModal(true);
               }}
-              badgeTabs={notifications.length > 0 ? ['menu'] : []}
+              badgeTabs={activeBadges}
           />
       )}
 

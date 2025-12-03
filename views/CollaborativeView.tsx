@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Card } from '../components/ui/Card';
 import { 
@@ -59,6 +58,14 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, on
 
   const handleUpdateGroup = (updatedGroup: SharedGroup) => {
     onUpdateGroups(groups.map(g => g.id === updatedGroup.id ? updatedGroup : g));
+  };
+
+  const handleDeleteGroup = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (confirm('Delete this shared budget? This cannot be undone.')) {
+      onUpdateGroups(groups.filter(g => g.id !== id));
+      if (activeGroupId === id) setActiveGroupId(null);
+    }
   };
 
   const handleJoinViaQR = () => {
@@ -246,6 +253,19 @@ export const CollaborativeView: React.FC<CollaborativeViewProps> = ({ onBack, on
                               style={{ width: `${Math.min(progress, 100)}%` }}
                             ></div>
                           </div>
+                        </div>
+
+                        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                            <span className="text-[10px] text-slate-400">
+                                Last active: {group.activityLog[0]?.date || 'Never'}
+                            </span>
+                            <button 
+                                onClick={(e) => handleDeleteGroup(e, group.id)}
+                                className="p-2 -mr-2 text-slate-400 hover:text-red-500 transition-colors"
+                                title="Delete Group"
+                            >
+                                <Trash2 size={16} />
+                            </button>
                         </div>
                       </Card>
                     );
