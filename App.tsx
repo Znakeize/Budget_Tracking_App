@@ -26,6 +26,7 @@ import { PersonalInfoView } from './views/settings/PersonalInfoView';
 import { NotificationsView } from './views/settings/NotificationsView';
 import { SecurityView } from './views/settings/SecurityView';
 import { SettingsView } from './views/SettingsView';
+import { AppearanceView } from './views/settings/AppearanceView';
 import { AdvancedCalculatorsView } from './views/AdvancedCalculatorsView';
 import { CommunityLinksView } from './views/CommunityLinksView';
 import { AppDemoView } from './views/AppDemoView';
@@ -47,16 +48,9 @@ const showNavTabs = [
   'investments', 'simulator', 'analysis', 
   'support', 'legal', 'feedback', 
   'pro-membership', 'membership-management', 
-  'personal-info', 'notifications', 'security', 
+  'personal-info', 'notifications', 'security', 'appearance',
   'calculators', 'community-links', 'app-demo'
 ];
-
-const getNavTab = (tab: string) => {
-  if (['dashboard'].includes(tab)) return 'dashboard';
-  if (['budget'].includes(tab)) return 'budget';
-  if (['ai', 'analysis', 'investments', 'events', 'simulator', 'social'].includes(tab)) return 'ai';
-  return 'menu';
-};
 
 const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -100,7 +94,52 @@ const AppContent: React.FC = () => {
   });
   
   const [user, setUser] = useState<any>(null);
+  
+  // Appearance State
+  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => {
+      const saved = localStorage.getItem('budget_theme_mode');
+      return (saved as 'light' | 'dark' | 'system') || 'system';
+  });
   const [isDarkMode, setIsDarkMode] = useState(false);
+  
+  // Added: Accent Color and Compact Mode Persistence
+  const [accentColor, setAccentColor] = useState<string>(() => localStorage.getItem('budget_accent_color') || 'indigo');
+  const [compactMode, setCompactMode] = useState<boolean>(() => localStorage.getItem('budget_compact_mode') === 'true');
+
+  useEffect(() => {
+      localStorage.setItem('budget_theme_mode', themeMode);
+      localStorage.setItem('budget_accent_color', accentColor);
+      localStorage.setItem('budget_compact_mode', String(compactMode));
+      
+      const applyTheme = () => {
+          const isSystemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const shouldBeDark = themeMode === 'dark' || (themeMode === 'system' && isSystemDark);
+          
+          setIsDarkMode(shouldBeDark);
+          if (shouldBeDark) {
+              document.documentElement.classList.add('dark');
+          } else {
+              document.documentElement.classList.remove('dark');
+          }
+      };
+
+      // Apply Compact Mode Class
+      if (compactMode) {
+          document.documentElement.classList.add('compact-mode');
+      } else {
+          document.documentElement.classList.remove('compact-mode');
+      }
+
+      applyTheme();
+
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const listener = () => {
+          if (themeMode === 'system') applyTheme();
+      };
+      mediaQuery.addEventListener('change', listener);
+      return () => mediaQuery.removeEventListener('change', listener);
+  }, [themeMode, compactMode, accentColor]);
+
   const [showNotifications, setShowNotifications] = useState(false);
   const [dismissedNotifIds, setDismissedNotifIds] = useState<string[]>([]);
   
@@ -119,22 +158,11 @@ const AppContent: React.FC = () => {
   const [undoStack, setUndoStack] = useState<BudgetData[]>([]);
   const [redoStack, setRedoStack] = useState<BudgetData[]>([]);
 
-  // Init
+  // Init User
   useEffect(() => {
-    // Load user session
     const savedUser = localStorage.getItem('budget_user_session');
     if (savedUser) setUser(JSON.parse(savedUser));
-
-    // Load theme
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        setIsDarkMode(true);
-    }
   }, []);
-
-  useEffect(() => {
-      if (isDarkMode) document.documentElement.classList.add('dark');
-      else document.documentElement.classList.remove('dark');
-  }, [isDarkMode]);
 
   // --- Persistence Effects ---
   useEffect(() => {
@@ -349,8 +377,6 @@ const AppContent: React.FC = () => {
   // Determine active badges for navigation
   const activeBadges = useMemo(() => {
     const tabs = [];
-    if (notifications.length > 0) tabs.push('menu');
-
     // PRO features notifications
     const proCategories = ['Event', 'Collaboration', 'Investment'];
     if (notifications.some(n => proCategories.includes(n.category))) {
@@ -586,9 +612,15 @@ const AppContent: React.FC = () => {
           'budget_events', 
           'budget_groups', 
           'budget_invest_goals', 
-          'budget_invest_alerts'
+          'budget_invest_alerts',
+          'budget_accent_color',
+          'budget_compact_mode'
       ];
       keysToRemove.forEach(k => localStorage.removeItem(k));
+      
+      // Reset theme prefs
+      setAccentColor('indigo');
+      setCompactMode(false);
   };
 
   // Render Logic
@@ -694,7 +726,7 @@ const AppContent: React.FC = () => {
                   updateData={handleUpdateData} 
                   resetData={handleFullReset} 
                   isDarkMode={isDarkMode} 
-                  toggleTheme={() => setIsDarkMode(!isDarkMode)}
+                  toggleTheme={() => setThemeMode(prev => prev === 'dark' ? 'light' : 'dark')}
                   notificationCount={notifications.length}
                   onToggleNotifications={() => setShowNotifications(true)}
                   onBack={() => goBack('menu')}
@@ -704,11 +736,17 @@ const AppContent: React.FC = () => {
                   budgetData={budgetData}
                   onUpdateBudget={handleUpdateData}
                   isDarkMode={isDarkMode}
-                  toggleTheme={() => setIsDarkMode(!isDarkMode)}
+                  toggleTheme={() => setThemeMode(prev => prev === 'dark' ? 'light' : 'dark')}
                   onBack={() => goBack('menu')}
                   onProfileClick={handleProfileClick}
                   onNavigate={navigate}
                   onResetData={handleFullReset}
+              />;
+          case 'appearance':
+              return <AppearanceView
+                  onBack={() => goBack('settings')}
+                  themeMode={themeMode}
+                  onSetThemeMode={setThemeMode}
               />;
           case 'history':
               return <HistoryView 
@@ -733,7 +771,7 @@ const AppContent: React.FC = () => {
                   updateData={handleUpdateData}
                   resetData={() => setBudgetData(INITIAL_DATA)}
                   isDarkMode={isDarkMode}
-                  toggleTheme={() => setIsDarkMode(!isDarkMode)}
+                  toggleTheme={() => setThemeMode(prev => prev === 'dark' ? 'light' : 'dark')}
                   onBack={() => goBack('menu')}
               />;
           case 'events':

@@ -1,7 +1,11 @@
 
 import React, { useState } from 'react';
 import { Card } from '../components/ui/Card';
-import { ChevronLeft, Moon, Sun, Globe, DollarSign, Bell, Shield, User, ChevronRight, Trash2, LogOut, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { 
+  ChevronLeft, Moon, Sun, Globe, DollarSign, Bell, Shield, User, 
+  ChevronRight, Trash2, LogOut, AlertTriangle, CheckCircle2, 
+  Palette, Layout, Check, Smartphone 
+} from 'lucide-react';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
 import { useLanguage } from '../contexts/LanguageContext';
 import { CURRENCY_SYMBOLS } from '../constants';
@@ -70,29 +74,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
        <div className="flex-1 overflow-y-auto hide-scrollbar p-4 space-y-6 pb-28">
            
-           {/* Appearance & Localization */}
+           {/* Appearance Section */}
            <section>
-               <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 ml-1">General</h3>
+               <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 ml-1">Look & Feel</h3>
                <Card className="divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
-                   {/* Theme Toggle */}
-                   <div className="p-4 flex items-center justify-between">
+                   <button onClick={() => onNavigate('appearance')} className="w-full p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                        <div className="flex items-center gap-3">
-                           <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-indigo-900/30 text-indigo-400' : 'bg-amber-100 text-amber-600'}`}>
-                               {isDarkMode ? <Moon size={20} /> : <Sun size={20} />}
+                           <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg">
+                               <Palette size={20} />
                            </div>
-                           <div>
+                           <div className="text-left">
                                <h4 className="text-sm font-bold text-slate-900 dark:text-white">Appearance</h4>
-                               <p className="text-xs text-slate-500">{isDarkMode ? 'Dark Mode' : 'Light Mode'}</p>
+                               <p className="text-xs text-slate-500">Theme, Color & Icons</p>
                            </div>
                        </div>
-                       <button 
-                            onClick={toggleTheme}
-                            className={`w-12 h-6 rounded-full relative transition-colors ${isDarkMode ? 'bg-indigo-600' : 'bg-slate-300'}`}
-                       >
-                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${isDarkMode ? 'left-7' : 'left-1'}`}></div>
-                       </button>
-                   </div>
+                       <ChevronRight size={16} className="text-slate-400" />
+                   </button>
+               </Card>
+           </section>
 
+           {/* Regional Preferences */}
+           <section>
+               <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 ml-1">Regional</h3>
+               <Card className="divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
                    {/* Language Selector */}
                    <div className="p-4 flex items-center justify-between">
                        <div className="flex items-center gap-3">
@@ -107,7 +111,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                        <select 
                             value={language}
                             onChange={(e) => setLanguage(e.target.value as any)}
-                            className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold py-1.5 px-2 rounded-lg outline-none"
+                            className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold py-2 px-3 rounded-lg outline-none"
                        >
                            {languages.map(l => (
                                <option key={l.code} value={l.code}>{l.flag} {l.label}</option>
@@ -129,7 +133,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                        <select 
                             value={budgetData.currency}
                             onChange={(e) => handleCurrencyChange(e.target.value)}
-                            className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold py-1.5 px-2 rounded-lg outline-none"
+                            className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold py-2 px-3 rounded-lg outline-none"
                        >
                            {currencies.map(c => (
                                <option key={c} value={c}>{c}</option>
@@ -139,7 +143,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                </Card>
            </section>
 
-           {/* Account & Security */}
+           {/* Account Settings */}
            <section>
                <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 ml-1">Account</h3>
                <Card className="divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
@@ -199,7 +203,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </div>
                     <button 
                         onClick={() => setShowResetConfirm(true)}
-                        className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2 text-xs"
+                        className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2 text-xs active:scale-95"
                     >
                         <Trash2 size={14} /> Reset All Data
                     </button>

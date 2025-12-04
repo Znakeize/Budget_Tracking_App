@@ -32,6 +32,16 @@
         background-color: #0f172a; /* slate-900 */
       }
       
+      /* Compact Mode Styles */
+      html.compact-mode {
+        font-size: 14px;
+      }
+      html.compact-mode .p-4 { padding: 0.75rem !important; }
+      html.compact-mode .py-4 { padding-top: 0.75rem !important; padding-bottom: 0.75rem !important; }
+      html.compact-mode .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem !important; }
+      html.compact-mode .text-2xl { font-size: 1.25rem !important; }
+      html.compact-mode .h-14 { height: 3rem !important; } /* Smaller inputs/buttons */
+
       /* Dynamic Viewport Height for Mobile Browsers */
       .h-dvh {
         height: 100vh;
