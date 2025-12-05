@@ -3,8 +3,8 @@ import React, { useState, useMemo } from 'react';
 import { BudgetData, GoalItem } from '../types';
 import { calculateTotals, formatCurrency } from '../utils/calculations';
 import { Card } from '../components/ui/Card';
-import { Target, TrendingUp, Calendar, ArrowRight, DollarSign, Sliders, Sparkles, AlertCircle, RefreshCw, CheckCircle2 } from 'lucide-react';
-import { Line, Doughnut } from 'react-chartjs-2';
+import { Target, TrendingUp, Calendar, ArrowRight, DollarSign, Sliders, Sparkles, AlertCircle, RefreshCw, CheckCircle2, ChevronRight, Zap, FastForward, Trophy } from 'lucide-react';
+import { Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, Filler } from 'chart.js';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, Filler);
@@ -18,11 +18,16 @@ interface AnalysisPlannerProps {
 export const AnalysisPlanner: React.FC<AnalysisPlannerProps> = ({ history, currentPeriod, currencySymbol }) => {
   const [expenseAdj, setExpenseAdj] = useState(0); // Percentage adjustment
   const [incomeAdj, setIncomeAdj] = useState(0);   // Percentage adjustment
+  const [selectedGoalIndex, setSelectedGoalIndex] = useState<number | null>(null);
+  // State to track which goals get priority allocation in the simulation
+  const [priorityGoals, setPriorityGoals] = useState<Set<string>>(new Set());
 
   // --- Base Metrics ---
   const currentTotals = useMemo(() => calculateTotals(currentPeriod), [currentPeriod]);
-  const activeGoals = currentPeriod.goals.filter(g => !g.checked);
-
+  
+  // FIX: Use all goals, not just unchecked ones, so the chart doesn't disappear
+  const allGoals = currentPeriod.goals; 
+  
   // --- Projected Metrics ---
   const projected = useMemo(() => {
       const baseIncome = currentTotals.totalIncome;
@@ -31,137 +36,173 @@ export const AnalysisPlanner: React.FC<AnalysisPlannerProps> = ({ history, curre
       const newIncome = baseIncome * (1 + incomeAdj / 100);
       const newExpenses = baseExpenses * (1 + expenseAdj / 100);
       
-      const netSavings = newIncome - newExpenses;
-      const currentSavings = baseIncome - baseExpenses;
+      // This is the simulated monthly surplus available for goals
+      const netSavings = Math.max(0, newIncome - newExpenses);
+      const currentSavings = Math.max(0, baseIncome - baseExpenses);
       
       return { newIncome, newExpenses, netSavings, currentSavings };
   }, [currentTotals, expenseAdj, incomeAdj]);
 
-  // --- Goal Forecasting ---
+  // --- Advanced Allocation Logic ---
   const goalForecasts = useMemo(() => {
-      if (projected.netSavings <= 0) return [];
+      const activeGoalsList = allGoals.filter(g => !g.checked);
+      if (activeGoalsList.length === 0) return [];
 
-      // Distribute net savings across goals equally for simplified projection
-      const monthlyPerGoal = activeGoals.length > 0 ? projected.netSavings / activeGoals.length : 0;
+      // 1. Determine Allocation Strategy
+      const highPriorityIds = Array.from(priorityGoals);
+      const highPriorityCount = highPriorityIds.filter(id => activeGoalsList.some(g => g.id === id)).length;
       
-      return activeGoals.map(g => {
-          const remaining = g.target - g.current;
-          const monthsToComplete = monthlyPerGoal > 0 ? Math.ceil(remaining / monthlyPerGoal) : 999;
+      // 2. Distribute Surplus
+      let monthlyPerNormal = 0;
+      let monthlyPerHigh = 0;
+
+      if (projected.netSavings > 0) {
+          if (highPriorityCount > 0) {
+              // Strategy: Give 70% of surplus to High Priority, 30% to Normal
+              // Or if only high priority exists, give 100%
+              const highPool = highPriorityCount === activeGoalsList.length ? projected.netSavings : projected.netSavings * 0.7;
+              const normalPool = projected.netSavings - highPool;
+
+              monthlyPerHigh = highPool / highPriorityCount;
+              monthlyPerNormal = (activeGoalsList.length - highPriorityCount) > 0 ? normalPool / (activeGoalsList.length - highPriorityCount) : 0;
+          } else {
+              // Equal distribution
+              monthlyPerNormal = projected.netSavings / activeGoalsList.length;
+          }
+      }
+
+      return allGoals.map(g => {
+          if (g.checked) return { ...g, monthsToComplete: 0, completionDate: new Date(), isAccelerated: false, timeSaved: 0, simulatedMonthly: 0 };
+
+          const isHigh = priorityGoals.has(g.id);
+          const simulatedMonthly = isHigh ? monthlyPerHigh : monthlyPerNormal;
           
+          // Base Case (Current Actual Budget)
+          const currentMonthly = g.monthly || 1; // Avoid div by zero
+          const remaining = Math.max(0, g.target - g.current);
+          
+          const currentMonths = Math.ceil(remaining / currentMonthly);
+          const simulatedMonths = simulatedMonthly > 0 ? Math.ceil(remaining / simulatedMonthly) : 999;
+
           const today = new Date();
-          const completionDate = new Date(today.getFullYear(), today.getMonth() + monthsToComplete, 1);
-          
+          const completionDate = new Date(today.getFullYear(), today.getMonth() + simulatedMonths, 1);
+          const timeSaved = Math.max(0, currentMonths - simulatedMonths);
+
           return {
               ...g,
-              monthsToComplete,
-              completionDate
+              monthsToComplete: simulatedMonths,
+              completionDate,
+              isAccelerated: timeSaved > 0,
+              timeSaved,
+              simulatedMonthly
           };
       });
-  }, [activeGoals, projected.netSavings]);
+  }, [allGoals, projected.netSavings, priorityGoals]);
+
+  const togglePriority = (id: string) => {
+      const newSet = new Set(priorityGoals);
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
+      setPriorityGoals(newSet);
+  };
 
   // --- Goal Progress Rings Data ---
   const ringsData = useMemo(() => {
-      // Take top 3 active goals for the rings to keep it readable
-      const topGoals = activeGoals.slice(0, 3);
-      const colors = ['#6366f1', '#10b981', '#f59e0b']; // Indigo, Emerald, Amber
+      // Take top 3 relevant goals (prioritizing active ones)
+      const sortedForChart = [...allGoals].sort((a, b) => {
+          if (a.checked === b.checked) return 0;
+          return a.checked ? 1 : -1; // Active first
+      }).slice(0, 3);
+
+      const gradients = [
+          ['#818cf8', '#4f46e5'], // Indigo
+          ['#34d399', '#059669'], // Emerald
+          ['#f472b6', '#db2777']  // Pink
+      ];
+      const goldGradient = ['#fcd34d', '#d97706']; // Gold for completed
 
       return {
-          labels: topGoals.map(g => g.name),
-          datasets: topGoals.map((g, i) => {
+          labels: sortedForChart.map(g => g.name),
+          datasets: sortedForChart.map((g, i) => {
+              const isCompleted = g.checked || g.current >= g.target;
               const progress = g.target > 0 ? Math.min((g.current / g.target) * 100, 100) : 0;
               const remaining = 100 - progress;
               
               return {
                   label: g.name,
                   data: [progress, remaining],
-                  backgroundColor: [colors[i], 'rgba(255, 255, 255, 0.1)'], // Color vs Track
+                  backgroundColor: (context: any) => {
+                      const chart = context.chart;
+                      const { ctx, chartArea } = chart;
+                      if (!chartArea) return null;
+                      
+                      if (context.dataIndex === 0) {
+                          const gradient = ctx.createLinearGradient(chartArea.left, 0, chartArea.right, 0);
+                          if (isCompleted) {
+                              gradient.addColorStop(0, goldGradient[0]);
+                              gradient.addColorStop(1, goldGradient[1]);
+                          } else {
+                              gradient.addColorStop(0, gradients[i % 3][0]);
+                              gradient.addColorStop(1, gradients[i % 3][1]);
+                          }
+                          return gradient;
+                      }
+                      return 'rgba(255, 255, 255, 0.05)';
+                  },
                   borderWidth: 0,
                   borderRadius: 20,
-                  cutout: `${40 + (i * 12)}%`, // Creates the concentric effect by varying cutout if we weren't relying on stacking. 
-                  // ChartJS Stacking: Dataset 0 is outermost.
-                  // To make them concentric rings, we simply provide multiple datasets.
-                  weight: 1
+                  cutout: '75%',
+                  circumference: 360,
+                  weight: selectedGoalIndex === i ? 1.5 : 1
               };
-          }).reverse() // Reverse so first goal is outer ring
+          })
       };
-  }, [activeGoals]);
+  }, [allGoals, selectedGoalIndex]);
+
+  const centerInfo = useMemo(() => {
+      // Sort same as chart to match index
+      const sortedForChart = [...allGoals].sort((a, b) => (a.checked === b.checked ? 0 : a.checked ? 1 : -1)).slice(0, 3);
+      
+      if (selectedGoalIndex !== null && sortedForChart[selectedGoalIndex]) {
+          const g = sortedForChart[selectedGoalIndex];
+          const isCompleted = g.checked || g.current >= g.target;
+          const progress = g.target > 0 ? (g.current / g.target) * 100 : 0;
+          
+          return {
+              label: g.name,
+              value: isCompleted ? 'DONE' : `${Math.round(progress)}%`,
+              sub: isCompleted ? 'Goal Reached!' : `${formatCurrency(g.current, currencySymbol)} saved`,
+              color: isCompleted ? 'text-amber-400' : (selectedGoalIndex === 0 ? 'text-indigo-400' : selectedGoalIndex === 1 ? 'text-emerald-400' : 'text-pink-400')
+          };
+      }
+      
+      const totalActive = allGoals.filter(g => !g.checked).length;
+      const totalDone = allGoals.filter(g => g.checked).length;
+
+      return {
+          label: 'Total Goals',
+          value: allGoals.length.toString(),
+          sub: `${totalDone} Completed`,
+          color: 'text-white'
+      };
+  }, [selectedGoalIndex, allGoals, currencySymbol]);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 pb-6">
         
-        {/* Goal Progress Rings Card */}
-        <Card className="p-6 bg-slate-900 text-white border-none shadow-xl relative overflow-hidden">
-            {/* Ambient Background */}
-            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
-            
-            <div className="flex items-center gap-3 mb-6 relative z-10">
-                <div className="p-2 bg-white/10 rounded-full backdrop-blur-sm">
-                    <Target size={20} className="text-indigo-400" />
-                </div>
-                <h3 className="text-lg font-bold">Goal Progress Rings</h3>
-            </div>
-
-            <div className="flex flex-col md:flex-row items-center gap-8 relative z-10">
-                {/* Rings Chart */}
-                <div className="relative w-48 h-48 flex-shrink-0">
-                    {activeGoals.length > 0 ? (
-                        <Doughnut 
-                            data={ringsData}
-                            options={{
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: { 
-                                    legend: { display: false },
-                                    tooltip: { enabled: false } 
-                                },
-                                animation: { animateScale: true, animateRotate: true },
-                                cutout: '40%'
-                            }}
-                        />
-                    ) : (
-                         <div className="w-full h-full rounded-full border-4 border-slate-800 border-dashed flex items-center justify-center text-slate-600 text-xs">No Goals</div>
-                    )}
-                    {/* Center Text */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        <span className="text-3xl font-black text-white">{activeGoals.length}</span>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active</span>
-                    </div>
-                </div>
-
-                {/* Legend / List */}
-                <div className="flex-1 w-full space-y-4">
-                    {activeGoals.slice(0, 3).map((goal, i) => {
-                         const progress = goal.target > 0 ? (goal.current / goal.target) * 100 : 0;
-                         const colors = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-500'];
-                         const textColors = ['text-indigo-400', 'text-emerald-400', 'text-amber-400'];
-
-                         return (
-                             <div key={goal.id} className="flex justify-between items-center group cursor-default">
-                                 <div className="flex items-center gap-3">
-                                     <div className={`w-3 h-3 rounded-full ${colors[i]} shadow-[0_0_10px_rgba(0,0,0,0.5)] group-hover:scale-125 transition-transform`}></div>
-                                     <div>
-                                         <div className="text-sm font-bold text-slate-200">{goal.name}</div>
-                                         <div className="text-[10px] text-slate-500">
-                                             {formatCurrency(goal.current, currencySymbol)} / {formatCurrency(goal.target, currencySymbol)}
-                                         </div>
-                                     </div>
-                                 </div>
-                                 <div className="text-right">
-                                     <div className={`text-sm font-bold ${textColors[i]}`}>{Math.round(progress)}%</div>
-                                 </div>
-                             </div>
-                         );
-                    })}
-                    {activeGoals.length === 0 && <p className="text-sm text-slate-500 italic">Set goals in the Budget tab to see them here.</p>}
-                </div>
-            </div>
-        </Card>
-
         {/* Interactive Control Panel */}
         <Card className="p-5 bg-white dark:bg-slate-800 border-l-4 border-l-indigo-500">
-            <div className="flex items-center gap-2 mb-6">
-                <Sliders size={20} className="text-indigo-500" />
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Budget Simulator</h3>
+            <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2">
+                    <Sliders size={20} className="text-indigo-500" />
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Budget Simulator</h3>
+                </div>
+                <div className="text-right">
+                    <p className="text-[10px] text-slate-500 uppercase font-bold">Monthly Surplus</p>
+                    <p className={`text-xl font-black ${projected.netSavings > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                        {formatCurrency(projected.netSavings, currencySymbol)}
+                    </p>
+                </div>
             </div>
 
             <div className="space-y-6">
@@ -179,10 +220,6 @@ export const AnalysisPlanner: React.FC<AnalysisPlannerProps> = ({ history, curre
                         onChange={(e) => setExpenseAdj(parseInt(e.target.value))}
                         className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                     />
-                    <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-                        <span>Frugal (-50%)</span>
-                        <span>Lavish (+50%)</span>
-                    </div>
                 </div>
 
                 {/* Income Slider */}
@@ -203,98 +240,145 @@ export const AnalysisPlanner: React.FC<AnalysisPlannerProps> = ({ history, curre
             </div>
         </Card>
 
-        {/* Results Overview */}
-        <div className="grid grid-cols-2 gap-3">
-            <Card className="p-4 bg-slate-100 dark:bg-slate-800/50 flex flex-col justify-between">
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Projected Savings</span>
-                <div className={`text-xl font-bold mt-1 ${projected.netSavings >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
-                    {formatCurrency(projected.netSavings, currencySymbol)}
+        {/* Goal Progress Rings Card */}
+        <Card className="p-0 bg-slate-900 text-white border-none shadow-xl relative overflow-hidden">
+            <div className="p-6 pb-0 relative z-10 flex justify-between items-start">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-white/10 rounded-full backdrop-blur-sm shadow-inner">
+                        <Target size={20} className="text-indigo-400" />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold">Goal Trajectory</h3>
+                        <p className="text-xs text-slate-400">
+                           {projected.netSavings > projected.currentSavings ? 
+                             <span className="text-emerald-400 flex items-center gap-1"><TrendingUp size={10} /> Accelerating by {formatCurrency(projected.netSavings - projected.currentSavings, currencySymbol)}/mo</span> : 
+                             "Standard Projection"
+                           }
+                        </p>
+                    </div>
                 </div>
-                <div className="text-[10px] text-slate-400 mt-1">
-                    vs {formatCurrency(projected.currentSavings, currencySymbol)} (Base)
-                </div>
-            </Card>
-            <Card className="p-4 bg-slate-100 dark:bg-slate-800/50 flex flex-col justify-between">
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Impact</span>
-                <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400 mt-1">
-                    {projected.netSavings - projected.currentSavings > 0 ? '+' : ''}
-                    {formatCurrency(projected.netSavings - projected.currentSavings, currencySymbol)}
-                </div>
-                <div className="text-[10px] text-slate-400 mt-1">
-                    Monthly Difference
-                </div>
-            </Card>
-        </div>
+            </div>
 
-        {/* AI Insight Card */}
-        <Card className="p-4 bg-gradient-to-r from-violet-600 to-indigo-600 text-white border-none shadow-lg">
-            <div className="flex gap-3">
-                <Sparkles className="text-yellow-300 shrink-0 mt-1" size={20} />
-                <div>
-                    <h4 className="text-sm font-bold mb-1">AI Recommendation</h4>
-                    <p className="text-xs text-violet-100 leading-relaxed">
-                        {projected.netSavings > projected.currentSavings 
-                            ? "Great moves! Reducing expenses by just 10% can accelerate your 'New Home' goal by 4 months."
-                            : "Increasing income has a higher impact on your long-term wealth than cutting small expenses. Consider a side hustle."}
-                    </p>
+            <div className="flex flex-col md:flex-row items-center gap-8 p-6 pt-4 relative z-10">
+                {/* Rings Chart */}
+                <div className="relative w-56 h-56 flex-shrink-0">
+                    {allGoals.length > 0 ? (
+                        <Doughnut 
+                            data={ringsData}
+                            options={{
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                                animation: { animateScale: true, animateRotate: true },
+                                cutout: '60%',
+                            }}
+                        />
+                    ) : (
+                         <div className="w-full h-full rounded-full border-4 border-slate-800 border-dashed flex items-center justify-center text-slate-600 text-xs">No Goals</div>
+                    )}
+                    {/* Center Text */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none transition-all duration-300">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{centerInfo.label}</span>
+                        <span className={`text-3xl font-black ${centerInfo.color} drop-shadow-md`}>{centerInfo.value}</span>
+                        <span className="text-[10px] font-medium text-slate-500 mt-1 bg-slate-800/50 px-2 py-0.5 rounded-full">{centerInfo.sub}</span>
+                    </div>
+                </div>
+
+                {/* Interactive Legend List */}
+                <div className="flex-1 w-full space-y-2">
+                    {allGoals.slice(0, 3).map((goal, i) => {
+                         const isCompleted = goal.checked || goal.current >= goal.target;
+                         const isActive = selectedGoalIndex === i;
+                         // Match colors to chart
+                         const colorClass = isCompleted ? 'bg-amber-500' : (i%3 === 0 ? 'bg-indigo-500' : i%3 === 1 ? 'bg-emerald-500' : 'bg-pink-500');
+
+                         return (
+                             <div 
+                                key={goal.id} 
+                                onClick={() => setSelectedGoalIndex(isActive ? null : i)}
+                                className={`flex justify-between items-center p-3 rounded-xl cursor-pointer transition-all border border-transparent ${isActive ? 'bg-white/10 border-white/10 shadow-lg scale-[1.02]' : 'hover:bg-white/5'}`}
+                             >
+                                 <div className="flex items-center gap-3">
+                                     <div className={`w-2 h-8 rounded-full ${colorClass} shadow-[0_0_10px_rgba(0,0,0,0.5)]`}></div>
+                                     <div>
+                                         <div className={`text-sm font-bold flex items-center gap-2 ${isActive ? 'text-white' : 'text-slate-300'}`}>
+                                             {goal.name}
+                                             {isCompleted && <Trophy size={12} className="text-amber-400" />}
+                                         </div>
+                                         <div className="text-[10px] text-slate-500">
+                                             {isCompleted ? 'Completed' : `${formatCurrency(goal.current, currencySymbol)} / ${formatCurrency(goal.target, currencySymbol)}`}
+                                         </div>
+                                     </div>
+                                 </div>
+                                 {isActive && !isCompleted && (
+                                    <div className="text-[9px] text-indigo-300 font-medium animate-in fade-in">
+                                        Click below to boost priority
+                                    </div>
+                                 )}
+                             </div>
+                         );
+                    })}
+                    {allGoals.length === 0 && <p className="text-sm text-slate-500 italic text-center py-4">Create goals to track progress.</p>}
                 </div>
             </div>
         </Card>
 
-        {/* Goal Impact Timeline */}
+        {/* Goal Impact Timeline & Priority */}
         <div>
             <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
-                <Target size={14} /> Goal Acceleration
+                <FastForward size={14} /> Smart Allocation
             </h3>
             <div className="space-y-3">
-                {activeGoals.map((goal, idx) => {
-                    const forecast = goalForecasts.find(g => g.id === goal.id);
-                    const isFaster = projected.netSavings > projected.currentSavings;
+                {goalForecasts.map((goal) => {
+                    const isCompleted = goal.checked || goal.current >= goal.target;
+                    const isHighPriority = priorityGoals.has(goal.id);
                     
+                    if (isCompleted) return null; // Don't show already completed goals in planner list
+
                     return (
-                        <Card key={goal.id} className="p-4 flex flex-col gap-3">
+                        <Card key={goal.id} className={`p-4 flex flex-col gap-3 transition-all ${isHighPriority ? 'border-l-4 border-l-amber-400 bg-amber-50/50 dark:bg-amber-900/10' : ''}`}>
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <h4 className="font-bold text-slate-900 dark:text-white text-sm">{goal.name}</h4>
-                                    <p className="text-xs text-slate-500">Target: {formatCurrency(goal.target, currencySymbol)}</p>
+                                    <h4 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+                                        {goal.name}
+                                        {goal.isAccelerated && <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold flex items-center gap-1"><TrendingUp size={8} /> {goal.timeSaved} mo sooner</span>}
+                                    </h4>
+                                    <p className="text-xs text-slate-500 mt-0.5">Target: {formatCurrency(goal.target, currencySymbol)}</p>
                                 </div>
-                                <div className="text-right">
-                                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${isFaster ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
-                                        {forecast ? forecast.completionDate.toLocaleDateString(undefined, {month: 'short', year: 'numeric'}) : 'N/A'}
-                                    </span>
-                                </div>
+                                
+                                {/* Priority Toggle */}
+                                <button 
+                                    onClick={() => togglePriority(goal.id)}
+                                    className={`p-1.5 rounded-lg transition-all ${isHighPriority ? 'bg-amber-100 text-amber-600 shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-amber-500'}`}
+                                    title="Boost Priority"
+                                >
+                                    <Zap size={16} fill={isHighPriority ? "currentColor" : "none"} />
+                                </button>
                             </div>
                             
                             {/* Visual Timeline Bar */}
                             <div className="relative pt-4 pb-2">
-                                <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full">
+                                <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                                     <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${Math.min((goal.current / goal.target) * 100, 100)}%` }}></div>
                                 </div>
-                                {/* Markers */}
-                                <div className="absolute top-0 left-0 w-full flex justify-between text-[9px] text-slate-400 font-medium">
+                                <div className="flex justify-between text-[9px] text-slate-400 font-medium mt-1">
                                     <span>Now</span>
-                                    <span>Goal</span>
+                                    <span>{goal.monthsToComplete < 999 ? `${goal.monthsToComplete} months left` : 'Paused'}</span>
                                 </div>
                             </div>
 
-                            {forecast && forecast.monthsToComplete < 60 && (
-                                <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg">
+                            <div className="flex items-center justify-between text-xs bg-white/50 dark:bg-black/20 p-2 rounded-lg border border-slate-100 dark:border-white/5">
+                                <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                                     <Calendar size={12} className="text-indigo-500" />
-                                    <span>
-                                        {projected.netSavings > 0 
-                                            ? `On track to finish in ${forecast.monthsToComplete} months` 
-                                            : "Budget deficit - Goal paused"}
-                                    </span>
+                                    <span>Finish: <strong>{goal.completionDate.toLocaleDateString(undefined, {month: 'short', year: 'numeric'})}</strong></span>
                                 </div>
-                            )}
+                                <div className="font-mono font-bold text-slate-500">
+                                    +{formatCurrency(goal.simulatedMonthly, currencySymbol)}/mo
+                                </div>
+                            </div>
                         </Card>
                     );
                 })}
-                {activeGoals.length === 0 && (
-                    <div className="text-center py-8 text-slate-400 text-xs italic border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
-                        No active goals to forecast.
-                    </div>
-                )}
             </div>
         </div>
 
