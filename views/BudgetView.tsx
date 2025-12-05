@@ -1,41 +1,21 @@
-
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BudgetData, InvestmentGoal, GoalItem, ShoppingListData } from '../types';
 import { formatCurrency, generateId } from '../utils/calculations';
 import { 
-  Plus, Trash2, ChevronDown, ChevronRight, Calendar, Bell, BellRing, 
-  ArrowRight, Wallet, Target, Receipt, 
-  CreditCard, PiggyBank, Landmark, TrendingUp, ChevronLeft, ShoppingBag, ShoppingCart, Edit2 
+  Plus, ChevronLeft, Bell, BellRing, ArrowRight, Wallet, Target, Receipt, 
+  CreditCard, PiggyBank, Landmark, TrendingUp 
 } from 'lucide-react';
-import { Card } from '../components/ui/Card';
-import { Checkbox } from '../components/ui/Checkbox';
 import { GoalActionModal } from '../components/ui/GoalActionModal';
 import { AddItemModal } from '../components/ui/AddItemModal';
 import { HeaderProfile } from '../components/ui/HeaderProfile';
 import { useLanguage } from '../contexts/LanguageContext';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-} from 'chart.js';
-import { Line } from 'react-chartjs-2';
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-);
+import { IncomeSection } from '../components/budget/IncomeSection';
+import { GoalsSection } from '../components/budget/GoalsSection';
+import { BillsSection } from '../components/budget/BillsSection';
+import { ExpensesSection } from '../components/budget/ExpensesSection';
+import { SavingsSection } from '../components/budget/SavingsSection';
+import { DebtsSection } from '../components/budget/DebtsSection';
+import { InvestmentsSection } from '../components/budget/InvestmentsSection';
 
 interface BudgetViewProps {
   data: BudgetData;
@@ -516,442 +496,85 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
 
                 {/* Specific Section Content Renderers */}
                 {activeSection === 'income' && (
-                    <div className="space-y-3">
-                        {data.income.map((item, idx) => (
-                            <div key={item.id} id={item.id} className="bg-white dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm transition-all duration-300">
-                                <input 
-                                    className="bg-transparent font-bold text-lg text-slate-900 dark:text-white outline-none w-full mb-3" 
-                                    value={item.name} 
-                                    onChange={(e) => updateItem('income', idx, 'name', e.target.value)} 
-                                    placeholder={t('budget.placeholder.source')}
-                                />
-                                <div className="flex gap-3">
-                                    <div className="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-800">
-                                        <span className="text-xs text-slate-400 uppercase font-bold block mb-1">{t('budget.label.planned')}</span>
-                                        <div className="flex items-center">
-                                            <span className="text-slate-400 text-sm mr-1">{data.currencySymbol}</span>
-                                            <input type="number" className="bg-transparent w-full font-semibold outline-none text-slate-700 dark:text-slate-300 min-w-0" 
-                                                value={item.planned || ''} onChange={(e) => updateItem('income', idx, 'planned', parseFloat(e.target.value) || 0)} />
-                                        </div>
-                                    </div>
-                                    <div className="flex-1 bg-emerald-50 dark:bg-emerald-900/10 rounded-lg px-3 py-2 border border-emerald-100 dark:border-emerald-500/20">
-                                        <span className="text-xs text-emerald-600 dark:text-emerald-400 uppercase font-bold block mb-1">{t('budget.label.actual')}</span>
-                                        <div className="flex items-center">
-                                            <span className="text-emerald-600/70 text-sm mr-1">{data.currencySymbol}</span>
-                                            <input type="number" className="bg-transparent w-full font-bold outline-none text-emerald-600 dark:text-emerald-400 min-w-0" 
-                                                value={item.actual || ''} onChange={(e) => updateItem('income', idx, 'actual', parseFloat(e.target.value) || 0)} />
-                                        </div>
-                                    </div>
-                                    <button onClick={() => deleteItem('income', idx)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 p-2 rounded-lg transition-all self-center"><Trash2 size={20} /></button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+                    <IncomeSection 
+                        data={data.income} 
+                        currencySymbol={data.currencySymbol}
+                        onUpdate={(idx, field, val) => updateItem('income', idx, field, val)}
+                        onDelete={(idx) => deleteItem('income', idx)}
+                        t={t}
+                    />
                 )}
 
                 {activeSection === 'goals' && (
-                    <div className="space-y-3">
-                        {data.goals.map((item, idx) => {
-                            const progress = item.target > 0 ? (item.current / item.target) * 100 : 0;
-                            return (
-                                <div key={item.id} id={item.id} className={`bg-white dark:bg-slate-800/50 rounded-xl p-4 border shadow-sm transition-all duration-300 ${item.checked ? 'border-blue-500/30' : 'border-slate-200 dark:border-slate-700'}`}>
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <Checkbox 
-                                            checked={item.checked} 
-                                            onChange={(val) => handleGoalChange(idx, val)} 
-                                        />
-                                        <input 
-                                            className={`bg-transparent font-bold text-lg outline-none flex-1 min-w-0 ${item.checked ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-white'}`}
-                                            value={item.name} 
-                                            onChange={(e) => updateItem('goals', idx, 'name', e.target.value)} 
-                                            placeholder={t('budget.placeholder.goal')}
-                                        />
-                                        <button onClick={() => deleteItem('goals', idx)} className="text-slate-300 hover:text-red-500 p-2 transition-colors"><Trash2 size={20} /></button>
-                                    </div>
-                                    
-                                    <div className="grid grid-cols-2 gap-3 mb-3">
-                                        <div className="bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-800">
-                                            <span className="text-[10px] text-slate-400 uppercase font-bold block mb-1">{t('budget.label.current_saved')}</span>
-                                            <div className="flex items-center text-blue-500 dark:text-blue-400">
-                                                <span className="text-sm mr-1">{data.currencySymbol}</span>
-                                                <input type="number" className="bg-transparent w-full font-bold outline-none min-w-0" 
-                                                    value={item.current || ''} onChange={(e) => updateItem('goals', idx, 'current', parseFloat(e.target.value) || 0)} />
-                                            </div>
-                                        </div>
-                                        <div className="bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-800">
-                                            <span className="text-[10px] text-slate-400 uppercase font-bold block mb-1">{t('budget.label.target')}</span>
-                                            <div className="flex items-center text-slate-700 dark:text-slate-300">
-                                                <span className="text-sm mr-1">{data.currencySymbol}</span>
-                                                <input type="number" className="bg-transparent w-full font-bold outline-none min-w-0" 
-                                                    value={item.target || ''} onChange={(e) => updateItem('goals', idx, 'target', parseFloat(e.target.value) || 0)} />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <div className="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                                            <span className="text-xs text-slate-500 font-medium">{t('budget.label.monthly_contribution')}</span>
-                                            <div className="flex items-center text-slate-900 dark:text-white w-20">
-                                                <span className="text-xs mr-1">{data.currencySymbol}</span>
-                                                <input type="number" className="bg-transparent w-full text-sm font-bold outline-none text-right" 
-                                                    value={item.monthly || ''} onChange={(e) => updateItem('goals', idx, 'monthly', parseFloat(e.target.value) || 0)} />
-                                            </div>
-                                        </div>
-                                         <div className="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-800">
-                                            <input type="text" className="bg-transparent w-full text-xs font-medium text-center outline-none text-slate-500" 
-                                                value={item.timeframe} placeholder={t('budget.placeholder.timeframe')} onChange={(e) => updateItem('goals', idx, 'timeframe', e.target.value)} />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1.5">
-                                            <span>{t('budget.label.progress')}</span>
-                                            <span>{progress.toFixed(1)}%</span>
-                                        </div>
-                                        <div className="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                                            <div className="h-full bg-blue-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(progress, 100)}%` }}></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                    <GoalsSection 
+                        data={data.goals}
+                        currencySymbol={data.currencySymbol}
+                        onUpdate={(idx, field, val) => updateItem('goals', idx, field, val)}
+                        onDelete={(idx) => deleteItem('goals', idx)}
+                        onToggleCheck={(idx, checked) => handleGoalChange(idx, checked)}
+                        t={t}
+                    />
                 )}
 
                 {activeSection === 'bills' && (
-                    <div className="space-y-3">
-                        {data.bills.map((item, idx) => {
-                            const today = new Date().toISOString().split('T')[0];
-                            const isOverdue = !item.paid && item.dueDate < today;
-                            return (
-                                <div key={item.id} id={item.id} className={`bg-white dark:bg-slate-800/50 rounded-xl p-4 border shadow-sm transition-all duration-300 ${item.paid ? 'border-emerald-500/30 opacity-70' : 'border-slate-200 dark:border-slate-700'} ${isOverdue ? 'border-red-500/50 bg-red-500/5' : ''}`}>
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <Checkbox checked={item.paid} onChange={(val) => updateItem('bills', idx, 'paid', val)} />
-                                        <input 
-                                            className={`flex-1 min-w-0 bg-transparent font-bold text-lg outline-none ${item.paid ? 'line-through text-slate-500' : 'text-slate-900 dark:text-white'}`}
-                                            value={item.name} 
-                                            onChange={(e) => updateItem('bills', idx, 'name', e.target.value)} 
-                                            placeholder={t('budget.placeholder.bill')}
-                                        />
-                                        <button onClick={() => deleteItem('bills', idx)} className="text-slate-300 hover:text-red-500 p-2 transition-colors"><Trash2 size={20} /></button>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3 pl-9">
-                                        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${isOverdue ? 'bg-red-500/10 border-red-500/20 text-red-500' : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>
-                                            <Calendar size={14} />
-                                            <input type="date" className="bg-transparent outline-none w-full text-xs font-bold uppercase" style={{ colorScheme: 'dark' }} value={item.dueDate} onChange={(e) => updateItem('bills', idx, 'dueDate', e.target.value)} />
-                                        </div>
-                                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
-                                            <span className="text-xs font-bold text-slate-400">{t('budget.label.amt')}</span>
-                                            <div className="flex items-center flex-1 text-slate-900 dark:text-white">
-                                                <span className="text-xs mr-1">{data.currencySymbol}</span>
-                                                <input type="number" className="bg-transparent w-full text-sm font-bold outline-none text-right" value={item.amount || ''} onChange={(e) => updateItem('bills', idx, 'amount', parseFloat(e.target.value) || 0)} />
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {isOverdue && <div className="pl-9 mt-2 text-xs font-bold text-red-500 animate-pulse">⚠️ {t('budget.warn.overdue')}</div>}
-                                </div>
-                            );
-                        })}
-                    </div>
+                    <BillsSection 
+                        data={data.bills}
+                        currencySymbol={data.currencySymbol}
+                        onUpdate={(idx, field, val) => updateItem('bills', idx, field, val)}
+                        onDelete={(idx) => deleteItem('bills', idx)}
+                        t={t}
+                    />
                 )}
 
                 {activeSection === 'expenses' && (
-                    <div className="space-y-3">
-                        {data.expenses.map((item, idx) => {
-                            const linkedShops = shoppingLists.flatMap(l => l.shops.filter(s => s.budgetCategory === item.name).map(s => ({ ...s, listId: l.id })));
-                            
-                            // Calculate total from linked shops for visualization
-                            const shopTotal = linkedShops.reduce((sum, s) => {
-                                return sum + s.items.filter(i => i.checked).reduce((acc, i) => acc + (i.actualPrice ?? i.price ?? 0), 0);
-                            }, 0);
-                            const manualSpent = item.spent - shopTotal;
-
-                            return (
-                            <div key={item.id} id={item.id} className="bg-white dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm transition-all duration-300">
-                                <input 
-                                    className="bg-transparent font-bold text-lg text-slate-900 dark:text-white outline-none w-full mb-3" 
-                                    value={item.name} 
-                                    onChange={(e) => updateItem('expenses', idx, 'name', e.target.value)} 
-                                    placeholder={t('budget.placeholder.category')}
-                                />
-                                <div className="flex gap-3 mb-3">
-                                    <div className="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-800">
-                                        <span className="text-xs text-slate-400 uppercase font-bold block mb-1">{t('budget.label.budget')}</span>
-                                        <div className="flex items-center">
-                                            <span className="text-slate-400 text-sm mr-1">{data.currencySymbol}</span>
-                                            <input type="number" className="bg-transparent w-full font-semibold outline-none text-slate-700 dark:text-slate-300 min-w-0" 
-                                                value={item.budgeted || ''} onChange={(e) => updateItem('expenses', idx, 'budgeted', parseFloat(e.target.value) || 0)} />
-                                        </div>
-                                    </div>
-                                    <div className="flex-1 bg-pink-50 dark:bg-pink-900/10 rounded-lg px-3 py-2 border border-pink-100 dark:border-pink-500/20">
-                                        <span className="text-xs text-pink-500 uppercase font-bold block mb-1">{t('budget.label.spent')}</span>
-                                        <div className="flex items-center">
-                                            <span className="text-pink-600/70 text-sm mr-1">{data.currencySymbol}</span>
-                                            <input type="number" className="bg-transparent w-full font-bold outline-none text-pink-600 dark:text-pink-400 min-w-0" 
-                                                value={item.spent || ''} onChange={(e) => updateItem('expenses', idx, 'spent', parseFloat(e.target.value) || 0)} />
-                                        </div>
-                                        {linkedShops.length > 0 && (
-                                            <div className="mt-1 pt-1 border-t border-pink-200/50 dark:border-pink-500/30 flex flex-col gap-0.5">
-                                                <div className="flex justify-between items-center text-[9px] text-pink-600/80 dark:text-pink-300">
-                                                    <span className="flex items-center gap-1"><ShoppingCart size={8}/> Lists</span>
-                                                    <span>{formatCurrency(shopTotal, data.currencySymbol)}</span>
-                                                </div>
-                                                {Math.abs(manualSpent) > 0.01 && (
-                                                    <div className="flex justify-between items-center text-[9px] text-slate-500/80 dark:text-slate-400">
-                                                        <span className="flex items-center gap-1"><Wallet size={8}/> Manual</span>
-                                                        <span>{formatCurrency(manualSpent, data.currencySymbol)}</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="flex gap-1 self-center">
-                                        <button onClick={() => setEditingItem({ collection: 'expenses', index: idx, data: item })} className="text-slate-300 hover:text-indigo-500 p-2 transition-colors"><Edit2 size={20} /></button>
-                                        <button onClick={() => deleteItem('expenses', idx)} className="text-slate-300 hover:text-red-500 p-2 transition-colors"><Trash2 size={20} /></button>
-                                    </div>
-                                </div>
-                                <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                                    <div className={`h-full ${item.spent > item.budgeted ? 'bg-red-500' : 'bg-pink-500'}`} style={{width: `${Math.min((item.spent/item.budgeted)*100, 100)}%`}}></div>
-                                </div>
-                                
-                                {linkedShops.length > 0 && (
-                                    <div className="mt-2 flex flex-wrap gap-2">
-                                        {linkedShops.map(shop => (
-                                            <button 
-                                                key={shop.id}
-                                                onClick={() => onViewShoppingList && onViewShoppingList(shop.listId, shop.id)}
-                                                className="text-[10px] bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded-md font-bold flex items-center gap-1 hover:bg-indigo-100 transition-colors"
-                                            >
-                                                <ShoppingBag size={10} /> Linked: {shop.name}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )})}
-                    </div>
+                    <ExpensesSection 
+                        data={data.expenses}
+                        currencySymbol={data.currencySymbol}
+                        onUpdate={(idx, field, val) => updateItem('expenses', idx, field, val)}
+                        onDelete={(idx) => deleteItem('expenses', idx)}
+                        onEdit={(item, idx) => setEditingItem({ collection: 'expenses', index: idx, data: item })}
+                        shoppingLists={shoppingLists}
+                        onViewShoppingList={onViewShoppingList}
+                        t={t}
+                    />
                 )}
 
                 {activeSection === 'savings' && (
-                    <div className="space-y-3">
-                        {data.savings.map((item, idx) => {
-                             return (
-                                <div key={item.id} id={item.id} className={`bg-white dark:bg-slate-800/50 rounded-xl p-4 border shadow-sm transition-all duration-300 ${item.paid ? 'border-teal-500/30 opacity-80' : 'border-slate-200 dark:border-slate-700'}`}>
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <Checkbox checked={!!item.paid} onChange={(val) => toggleSavingsPaid(idx, val)} />
-                                        <input 
-                                            className={`flex-1 min-w-0 bg-transparent font-bold text-lg outline-none ${item.paid ? 'line-through text-slate-500' : 'text-slate-900 dark:text-white'}`}
-                                            value={item.name} 
-                                            onChange={(e) => updateItem('savings', idx, 'name', e.target.value)} 
-                                            placeholder={t('budget.placeholder.fund')}
-                                        />
-                                        <button onClick={() => deleteItem('savings', idx)} className="text-slate-300 hover:text-red-500 p-2 transition-colors"><Trash2 size={20} /></button>
-                                    </div>
-                                    
-                                    <div className="grid grid-cols-2 gap-3 pl-9">
-                                        <div className="bg-teal-50 dark:bg-teal-900/10 rounded-lg px-3 py-2 border border-teal-100 dark:border-teal-500/20">
-                                            <span className="text-[10px] text-teal-600 dark:text-teal-400 uppercase font-bold block mb-1">{t('budget.label.total_fund')}</span>
-                                            <div className="flex items-center text-teal-700 dark:text-teal-300">
-                                                <span className="text-xs mr-1">{data.currencySymbol}</span>
-                                                <input type="number" className="bg-transparent w-full text-sm font-bold outline-none" 
-                                                    value={item.balance || 0} 
-                                                    // Manual update of balance logic could conflict with checkbox logic, but we allow editing total
-                                                    onChange={(e) => updateItem('savings', idx, 'balance', parseFloat(e.target.value) || 0)} 
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-200 dark:border-slate-700">
-                                            <span className="text-[10px] text-slate-500 uppercase font-bold block mb-1">{t('budget.label.monthly_plan')}</span>
-                                            <div className="flex items-center text-slate-900 dark:text-white">
-                                                <span className="text-xs mr-1">{data.currencySymbol}</span>
-                                                <input type="number" className="bg-transparent w-full text-sm font-bold outline-none" 
-                                                    value={item.planned || ''} onChange={(e) => updateItem('savings', idx, 'planned', parseFloat(e.target.value) || 0)} />
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {item.paid && (
-                                        <div className="pl-9 mt-2 text-[10px] font-bold text-teal-500 flex items-center gap-1">
-                                            <Target size={12} /> {formatCurrency(item.amount, data.currencySymbol)} {t('budget.label.saved_this_month')}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
+                    <SavingsSection 
+                        data={data.savings}
+                        currencySymbol={data.currencySymbol}
+                        onUpdate={(idx, field, val) => updateItem('savings', idx, field, val)}
+                        onDelete={(idx) => deleteItem('savings', idx)}
+                        onTogglePaid={toggleSavingsPaid}
+                        t={t}
+                    />
                 )}
 
                 {activeSection === 'debts' && (
-                    <div className="space-y-3">
-                        {data.debts.map((item, idx) => {
-                            const today = new Date().toISOString().split('T')[0];
-                            const isOverdue = !item.paid && item.dueDate && item.dueDate < today;
-                            return (
-                                <div key={item.id} id={item.id} className={`bg-white dark:bg-slate-800/50 rounded-xl p-4 border shadow-sm transition-all duration-300 ${item.paid ? 'border-emerald-500/30 opacity-70' : 'border-slate-200 dark:border-slate-700'} ${isOverdue ? 'border-red-500/50 bg-red-500/5' : ''}`}>
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <Checkbox checked={item.paid} onChange={(val) => toggleDebtPaid(idx, val)} />
-                                        <input 
-                                            className={`flex-1 min-w-0 bg-transparent font-bold text-lg outline-none ${item.paid ? 'line-through text-slate-500' : 'text-slate-900 dark:text-white'}`}
-                                            value={item.name} 
-                                            onChange={(e) => updateItem('debts', idx, 'name', e.target.value)} 
-                                            placeholder={t('budget.placeholder.debt')}
-                                        />
-                                        <button onClick={() => deleteItem('debts', idx)} className="text-slate-300 hover:text-red-500 p-2 transition-colors"><Trash2 size={20} /></button>
-                                    </div>
-                                    
-                                    <div className="grid grid-cols-2 gap-3 pl-9">
-                                        <div className="bg-orange-50 dark:bg-orange-900/10 rounded-lg px-3 py-2 border border-orange-100 dark:border-orange-500/20">
-                                            <span className="text-[10px] text-orange-600 dark:text-orange-400 uppercase font-bold block mb-1">{t('budget.label.monthly_pay')}</span>
-                                            <div className="flex items-center text-orange-700 dark:text-orange-300">
-                                                <span className="text-xs mr-1">{data.currencySymbol}</span>
-                                                <input type="number" className="bg-transparent w-full text-sm font-bold outline-none" 
-                                                    value={item.payment || ''} onChange={(e) => updateItem('debts', idx, 'payment', parseFloat(e.target.value) || 0)} />
-                                            </div>
-                                        </div>
-                                        <div className={`rounded-lg px-3 py-2 border flex flex-col justify-center ${isOverdue ? 'bg-red-500/10 border-red-500/20 text-red-500' : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700'}`}>
-                                            <span className="text-[10px] uppercase font-bold opacity-70 mb-1">{t('budget.section.bills')} {t('budget.warn.overdue')}?</span>
-                                            <input type="date" className="bg-transparent outline-none w-full text-xs font-bold uppercase p-0" style={{ colorScheme: 'dark' }} value={item.dueDate || ''} onChange={(e) => updateItem('debts', idx, 'dueDate', e.target.value)} />
-                                        </div>
-                                        <div className="col-span-2 bg-slate-50 dark:bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                                            <span className="text-xs font-bold text-slate-500">{t('budget.label.remaining_balance')}</span>
-                                            <div className="flex items-center text-slate-900 dark:text-white">
-                                                <span className="text-xs mr-1">{data.currencySymbol}</span>
-                                                <input type="number" className="bg-transparent w-full text-sm font-bold outline-none text-right" 
-                                                    value={item.balance || ''} onChange={(e) => updateItem('debts', idx, 'balance', parseFloat(e.target.value) || 0)} />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                    <DebtsSection 
+                        data={data.debts}
+                        currencySymbol={data.currencySymbol}
+                        onUpdate={(idx, field, val) => updateItem('debts', idx, field, val)}
+                        onDelete={(idx) => deleteItem('debts', idx)}
+                        onTogglePaid={toggleDebtPaid}
+                        t={t}
+                    />
                 )}
 
                 {activeSection === 'investments' && (
-                     <div className="space-y-4">
-                        <div className="bg-violet-100 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-500/20 rounded-xl p-4 text-center">
-                            <span className="text-xs font-bold text-violet-600 dark:text-violet-300 uppercase tracking-wider block mb-1">{t('budget.summary.value')}</span>
-                            {/* Calculate investment total here or accept from props, using local calc for now to match structure */}
-                            <span className="text-3xl font-extrabold text-violet-900 dark:text-white">
-                                {formatCurrency(data.investments.filter(i => i.type === 'personal' || !i.type).reduce((s, i) => s + i.amount, 0), data.currencySymbol)}
-                            </span>
-                        </div>
-
-                        {data.investments.map((item, idx) => {
-                            if (item.type === 'business') return null; // Don't show business assets in Budget Tracker
-                            const progress = item.target && item.target > 0 ? (item.amount / item.target) * 100 : 0;
-                            return (
-                                <div key={item.id} id={item.id} className={`bg-white dark:bg-slate-800/50 rounded-xl p-4 border shadow-sm transition-all duration-300 ${item.contributed ? 'border-violet-500/30' : 'border-slate-200 dark:border-slate-700'}`}>
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <Checkbox 
-                                            checked={!!item.contributed} 
-                                            onChange={(val) => toggleInvestmentContribution(idx, val)} 
-                                        />
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <input 
-                                                    className={`bg-transparent font-bold text-lg outline-none flex-1 min-w-0 ${item.contributed ? 'text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-white'}`} 
-                                                    value={item.name} 
-                                                    onChange={(e) => updateItem('investments', idx, 'name', e.target.value)} 
-                                                    placeholder={t('budget.placeholder.asset')}
-                                                />
-                                                <button 
-                                                    onClick={() => setExpandedInvestmentId(expandedInvestmentId === item.id ? null : item.id)}
-                                                    className={`p-1.5 rounded-lg transition-colors ${expandedInvestmentId === item.id ? 'bg-violet-100 text-violet-600 dark:bg-violet-900/50 dark:text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400'}`}
-                                                >
-                                                    {expandedInvestmentId === item.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <button onClick={() => deleteItem('investments', idx)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={20} /></button>
-                                    </div>
-                                    
-                                    <div className="grid grid-cols-2 gap-3 mb-3 pl-9">
-                                        <div className="bg-violet-50 dark:bg-violet-900/10 rounded-lg px-3 py-2 border border-violet-100 dark:border-violet-500/20">
-                                            <span className="text-[10px] text-violet-600 dark:text-violet-400 uppercase font-bold block mb-1">{t('budget.label.current_value')}</span>
-                                            <div className="flex items-center text-violet-700 dark:text-violet-300">
-                                                <span className="text-xs mr-1">{data.currencySymbol}</span>
-                                                <input type="number" className="bg-transparent w-full text-sm font-bold outline-none" 
-                                                    value={item.amount || 0} onChange={(e) => updateItem('investments', idx, 'amount', parseFloat(e.target.value) || 0)} />
-                                            </div>
-                                        </div>
-                                        <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-200 dark:border-slate-700">
-                                            <span className="text-[10px] text-slate-500 uppercase font-bold block mb-1">{t('budget.label.target_value')}</span>
-                                            <div className="flex items-center text-slate-900 dark:text-white">
-                                                <span className="text-xs mr-1">{data.currencySymbol}</span>
-                                                <input type="number" className="bg-transparent w-full text-sm font-bold outline-none" 
-                                                    value={item.target || ''} onChange={(e) => updateItem('investments', idx, 'target', parseFloat(e.target.value) || 0)} />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="pl-9 mb-3">
-                                        <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                                            <span className="text-xs text-slate-500 font-medium">{t('budget.label.monthly_contribution')}</span>
-                                            <div className="flex items-center text-slate-900 dark:text-white w-24">
-                                                <span className="text-xs mr-1">{data.currencySymbol}</span>
-                                                <input type="number" className="bg-transparent w-full text-sm font-bold outline-none text-right" 
-                                                    value={item.monthly || ''} onChange={(e) => updateItem('investments', idx, 'monthly', parseFloat(e.target.value) || 0)} />
-                                            </div>
-                                        </div>
-                                        {item.contributed && (
-                                            <div className="mt-1 text-[10px] font-bold text-violet-500 flex items-center gap-1 justify-end">
-                                                <TrendingUp size={10} /> {t('budget.label.contributed_month')}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="pl-9">
-                                        <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1.5">
-                                            <span>{t('budget.label.progress')}</span>
-                                            <span>{progress.toFixed(1)}%</span>
-                                        </div>
-                                        <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mb-3">
-                                            <div className="h-full bg-violet-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(progress, 100)}%` }}></div>
-                                        </div>
-                                        
-                                        {/* Mini Sparkline always visible */}
-                                        <InvestmentSparkline amount={item.amount} history={item.history} />
-                                    </div>
-
-                                    {expandedInvestmentId === item.id && (
-                                        <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 animate-in slide-in-from-top-2 pl-9">
-                                            <div className="flex justify-between items-center mb-3">
-                                                <h4 className="text-[10px] font-bold text-slate-500 uppercase">{t('budget.label.history')}</h4>
-                                                <button onClick={() => addInvestmentHistory(idx)} className="text-[10px] font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-md hover:bg-slate-50 shadow-sm flex items-center gap-1">
-                                                    <Plus size={10} /> {t('budget.label.add_entry')}
-                                                </button>
-                                            </div>
-                                            <div className="space-y-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
-                                                {(!item.history || item.history.length === 0) && (
-                                                    <p className="text-xs text-slate-400 italic text-center py-2">No history records found.</p>
-                                                )}
-                                                {item.history?.map((hist, hIdx) => (
-                                                    <div key={hIdx} className="flex gap-2 items-center">
-                                                        <input 
-                                                            type="date" 
-                                                            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 outline-none w-28"
-                                                            value={hist.date}
-                                                            onChange={(e) => updateInvestmentHistory(idx, hIdx, 'date', e.target.value)}
-                                                        />
-                                                        <div className="flex-1 flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1.5">
-                                                            <span className="text-xs text-slate-400 mr-1">$</span>
-                                                            <input 
-                                                                type="number" 
-                                                                className="bg-transparent w-full text-xs font-bold outline-none text-slate-700 dark:text-slate-200"
-                                                                value={hist.amount}
-                                                                onChange={(e) => updateInvestmentHistory(idx, hIdx, 'amount', parseFloat(e.target.value) || 0)}
-                                                            />
-                                                        </div>
-                                                        <button onClick={() => removeInvestmentHistory(idx, hIdx)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14} /></button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                     </div>
+                    <InvestmentsSection 
+                        data={data.investments}
+                        currencySymbol={data.currencySymbol}
+                        onUpdate={(idx, field, val) => updateItem('investments', idx, field, val)}
+                        onDelete={(idx) => deleteItem('investments', idx)}
+                        onToggleContributed={toggleInvestmentContribution}
+                        expandedId={expandedInvestmentId}
+                        setExpandedId={setExpandedInvestmentId}
+                        onAddHistory={addInvestmentHistory}
+                        onUpdateHistory={updateInvestmentHistory}
+                        onRemoveHistory={removeInvestmentHistory}
+                        t={t}
+                    />
                 )}
             </div>
         )}
@@ -1023,71 +646,6 @@ const BudgetSectionCard = ({ title, summary, icon: Icon, color, onClick }: any) 
             <div className={`absolute -bottom-5 left-1/2 -translate-x-1/2 flex items-center justify-center h-10 px-8 rounded-full border bg-white dark:bg-slate-800 shadow-md transition-all duration-500 transform group-hover:scale-105 ${borderClass} ${iconTextClass} group-hover:border-white ${groupHoverTextClass}`}>
                 <ArrowRight size={20} strokeWidth={2} />
             </div>
-        </div>
-    );
-};
-
-const InvestmentSparkline = ({ amount, history }: { amount: number, history?: { date: string, amount: number }[] }) => {
-    const chartData = useMemo(() => {
-        let points = [];
-        let labels = [];
-
-        if (history && history.length > 0) {
-            points = history.map(h => h.amount);
-            labels = history.map(h => h.date);
-            // Ensure the very current amount is represented as the last point if it differs from history
-            // or just always append current state for real-time feel
-            if (history[history.length - 1].amount !== amount) {
-                points.push(amount);
-                labels.push('Now');
-            }
-        } else {
-             const steps = 6;
-             let current = amount * 0.8;
-             if (amount <= 0) {
-                 points = Array(steps + 1).fill(0);
-             } else {
-                for (let i = 0; i < steps; i++) {
-                    const noise = (Math.random() - 0.5) * (amount * 0.1); 
-                    const trend = (amount - current) / (steps - i);
-                    current += trend + noise;
-                    points.push(current);
-                }
-                points.push(amount);
-             }
-             labels = Array(steps + 1).fill('');
-        }
-
-        return {
-            labels: labels,
-            datasets: [{
-                data: points,
-                borderColor: '#a78bfa',
-                borderWidth: 2,
-                tension: 0.4,
-                pointRadius: history && history.length > 0 ? 2 : 0,
-                fill: false,
-            }]
-        };
-    }, [amount, history]);
-
-    const options = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { display: false },
-            tooltip: { enabled: false }
-        },
-        scales: {
-            x: { display: false },
-            y: { display: false, min: Math.min(...chartData.datasets[0].data) * 0.95, max: Math.max(...chartData.datasets[0].data) * 1.05 }
-        },
-        animation: { duration: 0 } as any
-    };
-
-    return (
-        <div className="w-full h-10 opacity-70">
-            <Line data={chartData} options={options} />
         </div>
     );
 };
